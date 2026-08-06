@@ -1,0 +1,434 @@
+{
+  "tables": [
+    {
+      "id": 1,
+      "number": 1,
+      "seats": 2,
+      "area": "Main Hall",
+      "status": "available",
+      "guestName": "",
+      "bookingTime": "",
+      "orderId": null
+    },
+    {
+      "id": 2,
+      "number": 2,
+      "seats": 4,
+      "area": "Main Hall",
+      "status": "available",
+      "guestName": "",
+      "bookingTime": "",
+      "orderId": null
+    },
+    {
+      "id": 3,
+      "number": 3,
+      "seats": 4,
+      "area": "Main Hall",
+      "status": "reserved",
+      "guestName": "Ananya Rao",
+      "bookingTime": "20:00",
+      "orderId": null
+    },
+    {
+      "id": 4,
+      "number": 4,
+      "seats": 6,
+      "area": "Main Hall",
+      "status": "occupied",
+      "guestName": "Walk-in Guest",
+      "bookingTime": "",
+      "orderId": 1001
+    },
+    {
+      "id": 5,
+      "number": 5,
+      "seats": 2,
+      "area": "Main Hall",
+      "status": "available",
+      "guestName": "",
+      "bookingTime": "",
+      "orderId": null
+    },
+    {
+      "id": 6,
+      "number": 6,
+      "seats": 4,
+      "area": "Main Hall",
+      "status": "available",
+      "guestName": "",
+      "bookingTime": "",
+      "orderId": null
+    },
+    {
+      "id": 7,
+      "number": 7,
+      "seats": 2,
+      "area": "Main Hall",
+      "status": "available",
+      "guestName": "",
+      "bookingTime": "",
+      "orderId": null
+    },
+    {
+      "id": 8,
+      "number": 8,
+      "seats": 4,
+      "area": "Main Hall",
+      "status": "reserved",
+      "guestName": "Karan Shah",
+      "bookingTime": "20:30",
+      "orderId": null
+    },
+    {
+      "id": 9,
+      "number": 9,
+      "seats": 4,
+      "area": "Main Hall",
+      "status": "occupied",
+      "guestName": "Meera Nair",
+      "bookingTime": "",
+      "orderId": 1002
+    },
+    {
+      "id": 10,
+      "number": 10,
+      "seats": 6,
+      "area": "Main Hall",
+      "status": "available",
+      "guestName": "",
+      "bookingTime": "",
+      "orderId": null
+    },
+    {
+      "id": 11,
+      "number": 11,
+      "seats": 2,
+      "area": "Main Hall",
+      "status": "available",
+      "guestName": "",
+      "bookingTime": "",
+      "orderId": null
+    },
+    {
+      "id": 12,
+      "number": 12,
+      "seats": 4,
+      "area": "Main Hall",
+      "status": "occupied",
+      "guestName": "Rahul Jain",
+      "bookingTime": "",
+      "orderId": 1003
+    },
+    {
+      "id": 13,
+      "number": 13,
+      "seats": 2,
+      "area": "Terrace",
+      "status": "available",
+      "guestName": "",
+      "bookingTime": "",
+      "orderId": null
+    },
+    {
+      "id": 14,
+      "number": 14,
+      "seats": 4,
+      "area": "Terrace",
+      "status": "available",
+      "guestName": "",
+      "bookingTime": "",
+      "orderId": null
+    },
+    {
+      "id": 15,
+      "number": 15,
+      "seats": 4,
+      "area": "Terrace",
+      "status": "available",
+      "guestName": "",
+      "bookingTime": "",
+      "orderId": null
+    },
+    {
+      "id": 16,
+      "number": 16,
+      "seats": 6,
+      "area": "Terrace",
+      "status": "available",
+      "guestName": "",
+      "bookingTime": "",
+      "orderId": null
+    },
+    {
+      "id": 17,
+      "number": 17,
+      "seats": 2,
+      "area": "Terrace",
+      "status": "available",
+      "guestName": "",
+      "bookingTime": "",
+      "orderId": null
+    },
+    {
+      "id": 18,
+      "number": 18,
+      "seats": 4,
+      "area": "Terrace",
+      "status": "available",
+      "guestName": "",
+      "bookingTime": "",
+      "orderId": null
+    }
+  ],
+  "menu": [
+    {
+      "id": 1,
+      "name": "Truffle Mushroom Soup",
+      "category": "Starters",
+      "price": 320,
+      "icon": "🍲",
+      "available": true
+    },
+    {
+      "id": 2,
+      "name": "Burrata Garden Salad",
+      "category": "Starters",
+      "price": 440,
+      "icon": "🥗",
+      "available": true
+    },
+    {
+      "id": 3,
+      "name": "Tandoori Paneer",
+      "category": "Starters",
+      "price": 390,
+      "icon": "🍢",
+      "available": true
+    },
+    {
+      "id": 4,
+      "name": "Herb Roasted Chicken",
+      "category": "Mains",
+      "price": 680,
+      "icon": "🍗",
+      "available": true
+    },
+    {
+      "id": 5,
+      "name": "Forest Mushroom Risotto",
+      "category": "Mains",
+      "price": 570,
+      "icon": "🍚",
+      "available": true
+    },
+    {
+      "id": 6,
+      "name": "Coastal Fish Curry",
+      "category": "Mains",
+      "price": 720,
+      "icon": "🍛",
+      "available": true
+    },
+    {
+      "id": 7,
+      "name": "Paneer Butter Masala",
+      "category": "Mains",
+      "price": 520,
+      "icon": "🥘",
+      "available": true
+    },
+    {
+      "id": 8,
+      "name": "Classic Tiramisu",
+      "category": "Desserts",
+      "price": 350,
+      "icon": "🍰",
+      "available": true
+    },
+    {
+      "id": 9,
+      "name": "Chocolate Fondant",
+      "category": "Desserts",
+      "price": 390,
+      "icon": "🍫",
+      "available": true
+    },
+    {
+      "id": 10,
+      "name": "Virgin Mojito",
+      "category": "Beverages",
+      "price": 220,
+      "icon": "🍹",
+      "available": true
+    },
+    {
+      "id": 11,
+      "name": "Cold Brew Tonic",
+      "category": "Beverages",
+      "price": 260,
+      "icon": "☕",
+      "available": true
+    },
+    {
+      "id": 12,
+      "name": "Butter Naan",
+      "category": "Sides",
+      "price": 95,
+      "icon": "🫓",
+      "available": true
+    }
+  ],
+  "orders": [
+    {
+      "id": 1001,
+      "tableId": 4,
+      "guestName": "Walk-in Guest",
+      "waiter": "Ravi",
+      "status": "preparing",
+      "createdAt": "2026-08-03T02:20:44.498Z",
+      "items": [
+        {
+          "menuId": 3,
+          "qty": 2,
+          "note": "Medium spicy"
+        },
+        {
+          "menuId": 7,
+          "qty": 1,
+          "note": ""
+        },
+        {
+          "menuId": 12,
+          "qty": 4,
+          "note": ""
+        }
+      ],
+      "paymentStatus": "unpaid"
+    },
+    {
+      "id": 1002,
+      "tableId": 9,
+      "guestName": "Meera Nair",
+      "waiter": "Priya",
+      "status": "ready",
+      "createdAt": "2026-08-03T02:11:44.499Z",
+      "items": [
+        {
+          "menuId": 2,
+          "qty": 1,
+          "note": ""
+        },
+        {
+          "menuId": 5,
+          "qty": 2,
+          "note": "No garlic"
+        }
+      ],
+      "paymentStatus": "unpaid"
+    },
+    {
+      "id": 1003,
+      "tableId": 12,
+      "guestName": "Rahul Jain",
+      "waiter": "Ravi",
+      "status": "new",
+      "createdAt": "2026-08-03T02:34:44.499Z",
+      "items": [
+        {
+          "menuId": 1,
+          "qty": 2,
+          "note": ""
+        },
+        {
+          "menuId": 4,
+          "qty": 2,
+          "note": ""
+        }
+      ],
+      "paymentStatus": "unpaid"
+    }
+  ],
+  "inventory": [
+    {
+      "id": 1,
+      "name": "Basmati Rice",
+      "category": "Grains",
+      "quantity": 42,
+      "unit": "kg",
+      "min": 15,
+      "cost": 110
+    },
+    {
+      "id": 2,
+      "name": "Chicken Breast",
+      "category": "Meat",
+      "quantity": 8,
+      "unit": "kg",
+      "min": 12,
+      "cost": 310
+    },
+    {
+      "id": 3,
+      "name": "Wild Mushrooms",
+      "category": "Vegetables",
+      "quantity": 5,
+      "unit": "kg",
+      "min": 6,
+      "cost": 620
+    },
+    {
+      "id": 4,
+      "name": "Cooking Cream",
+      "category": "Dairy",
+      "quantity": 18,
+      "unit": "L",
+      "min": 8,
+      "cost": 180
+    },
+    {
+      "id": 5,
+      "name": "Arabica Coffee",
+      "category": "Beverages",
+      "quantity": 14,
+      "unit": "kg",
+      "min": 5,
+      "cost": 840
+    },
+    {
+      "id": 6,
+      "name": "Paneer",
+      "category": "Dairy",
+      "quantity": 7,
+      "unit": "kg",
+      "min": 8,
+      "cost": 360
+    }
+  ],
+  "users": [
+    {
+      "id": 1,
+      "name": "Arjun Kumar",
+      "role": "admin",
+      "pin": "1234"
+    },
+    {
+      "id": 2,
+      "name": "Ravi Sharma",
+      "role": "waiter",
+      "pin": "1111"
+    },
+    {
+      "id": 3,
+      "name": "Chef Kabir",
+      "role": "chef",
+      "pin": "2222"
+    }
+  ],
+  "settings": {
+    "hotelName": "Olive & Oak",
+    "taxRate": 5,
+    "serviceCharge": 5,
+    "currency": "INR"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "knockout-hotel-management",
+  "private": true,
+  "version": "2.0.0",
+  "scripts": {
+    "dev": "concurrently -n API,WEB -c green,cyan \"npm run dev --workspace backend\" \"npm run dev --workspace frontend\"",
+    "build": "npm run build --workspace frontend",
+    "start": "npm run start --workspace backend"
+  },
+  "workspaces": ["frontend", "backend"],
+  "devDependencies": {"concurrently": "^9.2.1"}
+}

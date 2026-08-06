@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#17251e" />
+  <title>Olive & Oak — Hotel Management</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand"><span class="brand-mark">O</span><div><strong>Olive & Oak</strong><small>Hotel Management</small></div></div>
+      <nav id="nav">
+        <button class="nav-item active" data-view="dashboard"><span>⌂</span>Overview</button>
+        <button class="nav-item" data-view="tables"><span>▦</span>Tables</button>
+        <button class="nav-item" data-view="billing"><span>⌑</span>Billing & POS</button>
+        <button class="nav-item" data-view="inventory"><span>□</span>Stock Management</button>
+        <button class="nav-item" data-view="orders"><span>☷</span>Orders</button>
+        <button class="nav-item" data-view="reports"><span>↗</span>Reports</button>
+        <div class="nav-label">MANAGEMENT</div>
+        <button class="nav-item" data-view="admin"><span>⚙</span>Admin Panel</button>
+      </nav>
+      <div class="sidebar-card"><span>PRO PLAN</span><strong>Grow your business</strong><small>All systems operating normally</small><div class="progress"><i></i></div></div>
+      <div class="profile"><div class="avatar">AK</div><div><strong>Arjun Kumar</strong><small>Administrator</small></div><button>⋮</button></div>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn">☰</button>
+        <div class="search"><span>⌕</span><input id="globalSearch" placeholder="Search tables, orders, items..." /><kbd>⌘ K</kbd></div>
+        <div class="top-actions"><span class="open-pill"><i></i> Restaurant Open</span><button class="icon-btn">◷</button><button class="icon-btn notification">♢<b></b></button><div class="date" id="today"></div></div>
+      </header>
+      <section class="content" id="app"></section>
+    </main>
+  </div>
+  <div class="toast" id="toast"></div>
+  <div class="modal-layer" id="modal"></div>
+  <script src="app.js"></script>
+</body>
+</html>
