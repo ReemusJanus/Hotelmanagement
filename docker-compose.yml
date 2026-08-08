@@ -58,7 +58,7 @@ services:
     container_name: knockout-admin-backend
     restart: unless-stopped
     environment:
-      PORT: 6000
+      PORT: 6001
       PORTAL_ROLE: admin
       DB_HOST: mariadb
       DB_PORT: 3306
@@ -71,15 +71,15 @@ services:
       MINIO_SECRET_KEY: knockout_secret
       MINIO_BUCKET: food-images
       MINIO_PUBLIC_URL: http://localhost:9100
-    ports:
-      - "6000:6000"
+    expose:
+      - "6001"
     depends_on:
       mariadb:
         condition: service_healthy
       minio:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:6000/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:6001/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
       interval: 5s
       timeout: 4s
       retries: 20
@@ -131,8 +131,8 @@ services:
       MINIO_SECRET_KEY: knockout_secret
       MINIO_BUCKET: food-images
       MINIO_PUBLIC_URL: http://localhost:9100
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     depends_on:
       admin-backend:
         condition: service_healthy
@@ -155,7 +155,7 @@ services:
       DB_ROOT_PASSWORD: knockout_root
       MASTER_DB_NAME: knockout_master
     ports:
-      - "5200:5000"
+      - "5100:5000"
     depends_on:
       admin-backend:
         condition: service_healthy
@@ -172,10 +172,10 @@ services:
     environment:
       VITE_PORTAL_ROLE: admin
       VITE_API_URL: /api
-      VITE_PROXY_TARGET: http://admin-backend:6000
+      VITE_PROXY_TARGET: http://admin-backend:6001
     command: npm run dev -- --host 0.0.0.0 --port 6100
-    ports:
-      - "6100:6100"
+    expose:
+      - "6100"
     depends_on:
       admin-backend:
         condition: service_healthy
@@ -189,8 +189,8 @@ services:
       VITE_API_URL: /api
       VITE_PROXY_TARGET: http://waiter-backend:7000
     command: npm run dev -- --host 0.0.0.0 --port 7100
-    ports:
-      - "7100:7100"
+    expose:
+      - "7100"
     depends_on:
       waiter-backend:
         condition: service_healthy
@@ -204,8 +204,8 @@ services:
       VITE_API_URL: /api
       VITE_PROXY_TARGET: http://chef-backend:8000
     command: npm run dev -- --host 0.0.0.0 --port 8100
-    ports:
-      - "8100:8100"
+    expose:
+      - "8100"
     depends_on:
       chef-backend:
         condition: service_healthy
@@ -215,12 +215,12 @@ services:
     container_name: knockout-master-frontend
     restart: unless-stopped
     environment:
-      VITE_PORTAL_ROLE: superadmin
+      VITE_PORTAL_ROLE: unified
       VITE_API_URL: /api
       VITE_PROXY_TARGET: http://superadmin-backend:5000
-    command: npm run dev -- --host 0.0.0.0 --port 5100
+    command: npm run dev -- --host 0.0.0.0 --port 5000
     ports:
-      - "5100:5100"
+      - "5200:5000"
     depends_on:
       superadmin-backend:
         condition: service_healthy

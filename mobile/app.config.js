@@ -3,9 +3,15 @@ export default {
     name: 'KnockOUT',
     slug: 'knockout-hospitality',
     version: '2.0.0',
+    icon: './assets/knockout-logo.png',
     orientation: 'portrait',
     platforms: ['ios', 'android'],
     userInterfaceStyle: 'dark',
+    splash: {
+      image: './assets/knockout-logo.png',
+      resizeMode: 'contain',
+      backgroundColor: '#090a08'
+    },
     scheme: 'knockout',
     ios: {
       supportsTablet: true,
@@ -14,7 +20,10 @@ export default {
     },
     android: {
       package: 'com.knockout.hospitality',
-      adaptiveIcon: {backgroundColor: '#11120f'},
+      adaptiveIcon: {
+        foregroundImage: './assets/knockout-logo.png',
+        backgroundColor: '#090a08'
+      },
       edgeToEdgeEnabled: true
     },
     extra: {roles: ['admin', 'waiter', 'chef']},
