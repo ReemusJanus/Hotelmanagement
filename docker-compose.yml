@@ -4,6 +4,7 @@ services:
     container_name: knockout-mariadb
     restart: unless-stopped
     environment:
+      TZ: Asia/Kolkata
       MARIADB_ROOT_PASSWORD: knockout_root
       MARIADB_ROOT_HOST: "%"
       MARIADB_DATABASE: knockout
@@ -58,6 +59,7 @@ services:
     container_name: knockout-admin-backend
     restart: unless-stopped
     environment:
+      TZ: Asia/Kolkata
       PORT: 6001
       PORTAL_ROLE: admin
       DB_HOST: mariadb
@@ -71,6 +73,8 @@ services:
       MINIO_SECRET_KEY: knockout_secret
       MINIO_BUCKET: food-images
       MINIO_PUBLIC_URL: http://localhost:9100
+      SMS_WEBHOOK_URL: ${SMS_WEBHOOK_URL:-}
+      SMS_WEBHOOK_TOKEN: ${SMS_WEBHOOK_TOKEN:-}
     expose:
       - "6001"
     depends_on:
@@ -89,6 +93,7 @@ services:
     container_name: knockout-waiter-backend
     restart: unless-stopped
     environment:
+      TZ: Asia/Kolkata
       PORT: 7000
       PORTAL_ROLE: waiter
       DB_HOST: mariadb
@@ -118,6 +123,7 @@ services:
     container_name: knockout-chef-backend
     restart: unless-stopped
     environment:
+      TZ: Asia/Kolkata
       PORT: 8000
       PORTAL_ROLE: chef
       DB_HOST: mariadb

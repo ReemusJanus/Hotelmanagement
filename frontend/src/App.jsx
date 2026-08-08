@@ -31,6 +31,9 @@ import {
   ShoppingCart,
   ChevronLeft,
   ChevronRight,
+  FileDown,
+  Gauge,
+  PieChart,
 } from "lucide-react";
 import { api, API_BASE, portalHeaders, resolvePortalLogin } from "./api";
 import AttendancePanel from "./AttendancePanel";
@@ -41,6 +44,16 @@ const money = (n) =>
     currency: "INR",
     maximumFractionDigits: 0,
   }).format(n || 0);
+const exportCsv = (name, rows) => {
+  const escape = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`,
+    csv = rows.map((row) => row.map(escape).join(",")).join("\n"),
+    blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }),
+    link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = name;
+  link.click();
+  URL.revokeObjectURL(link.href);
+};
 const elapsed = (iso) =>
   `${Math.max(1, Math.floor((Date.now() - new Date(iso)) / 60000))} min`;
 const loginRoles = [
@@ -55,7 +68,7 @@ const loginRoles = [
   {
     id: "waiter",
     title: "Waiter",
-    desc: "Tables, bookings and service",
+    desc: "Tables, orders and service",
     icon: UtensilsCrossed,
     pin: "1111",
     port: "7100",
@@ -1029,6 +1042,7 @@ const portalNav = {
   admin: [
     ["overview", "Overview", LayoutDashboard],
     ["tables", "Tables", Armchair],
+    ["bookings", "Table Bookings", CalendarDays],
     ["orders", "Orders & Billing", ReceiptText],
     ["parcels", "Parcel Orders", Package],
     ["menu", "Food & Photos", UtensilsCrossed],
@@ -1040,7 +1054,6 @@ const portalNav = {
   waiter: [
     ["attendance", "Check In / Out", Clock3],
     ["floor", "Tables", Armchair],
-    ["bookings", "Bookings", CalendarDays],
     ["orders", "My Orders", ReceiptText],
   ],
   chef: [
@@ -1156,9 +1169,21 @@ function Stat({ icon: Icon, label, value, note, tone = "" }) {
     </div>
   );
 }
+function ThemeSelect({ value, onChange, options, placeholder = "Choose an option", disabled = false, className = "" }) {
+  const [open, setOpen] = useState(false), root = useRef(null), normalized = options.map((option) => typeof option === "string" ? { value: option, label: option } : option), selected = normalized.find((option) => String(option.value) === String(value));
+  useEffect(() => {
+    const close = (event) => !root.current?.contains(event.target) && setOpen(false);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
+  return <div ref={root} className={`theme-select ${open ? "open" : ""} ${disabled ? "disabled" : ""} ${className}`}>
+    <button type="button" disabled={disabled} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((current) => !current)}><span className={selected ? "" : "placeholder"}>{selected?.label || placeholder}</span><ChevronRight size={15}/></button>
+    {open ? <div className="theme-select-menu" role="listbox">{normalized.map((option) => <button type="button" role="option" aria-selected={String(option.value) === String(value)} className={String(option.value) === String(value) ? "selected" : ""} disabled={option.disabled} key={String(option.value)} onClick={() => { onChange(option.value); setOpen(false); }}><span>{option.label}</span>{option.note ? <small>{option.note}</small> : null}{String(option.value) === String(value) ? <CheckCircle2 size={14}/> : null}</button>)}</div> : null}
+  </div>;
+}
 
 function Admin({ data, refresh, user, logout, toast }) {
-  const [page, setPage] = useState("overview");
+  const [page, setPage] = useState("overview"), [booking, setBooking] = useState(false);
   return (
     <>
       <Shell
@@ -1170,8 +1195,9 @@ function Admin({ data, refresh, user, logout, toast }) {
       >
         {page === "overview" && <AdminOverview data={data} setPage={setPage} />}{" "}
         {page === "tables" && (
-          <AdminTables data={data} refresh={refresh} toast={toast} />
+          <AdminTables data={data} refresh={refresh} toast={toast} user={user} />
         )}{" "}
+        {page === "bookings" && <Bookings data={data} refresh={refresh} toast={toast} open={(date) => setBooking(date || true)} />}{" "}
         {page === "orders" && <AdminOrders data={data} />}{" "}
         {page === "parcels" && (
           <ParcelPanel
@@ -1201,6 +1227,7 @@ function Admin({ data, refresh, user, logout, toast }) {
         {page === "settings" && (
           <SettingsPanel data={data} refresh={refresh} toast={toast} />
         )}
+        {booking ? <BookingModal data={data} initialDate={typeof booking === "string" ? booking : undefined} close={() => setBooking(false)} refresh={refresh} toast={toast} /> : null}
       </Shell>
     </>
   );
@@ -1329,7 +1356,7 @@ function Ring({ value }) {
     </div>
   );
 }
-function AdminTables({ data, refresh, toast }) {
+function AdminTables({ data, refresh, toast, user }) {
   const [selected, setSelected] = useState(null),
     [creating, setCreating] = useState(false),
     [billOrder, setBillOrder] = useState(null),
@@ -1368,6 +1395,7 @@ function AdminTables({ data, refresh, toast }) {
           close={() => setSelected(null)}
           refresh={refresh}
           toast={toast}
+          user={user}
         />
       ) : null}
       {creating ? (
@@ -1497,8 +1525,10 @@ function TableCard({ table, order, onClick, onBill, onPay }) {
           </div>
         ) : null}
         <h3>
-          {table.guestName ||
-            (table.status === "cleaning" ? "Being cleaned" : "Ready for guests")}
+          {table.status === "reserved"
+            ? "Reserved table"
+            : table.guestName ||
+              (table.status === "cleaning" ? "Being cleaned" : "Ready for guests")}
         </h3>
         <p>
           <Users size={13} />
@@ -1540,9 +1570,10 @@ function TableCard({ table, order, onClick, onBill, onPay }) {
     </article>
   );
 }
-function AdminTableDetails({ table, order, data, close, refresh, toast }) {
+function AdminTableDetails({ table, order, data, close, refresh, toast, user }) {
   const [billing, setBilling] = useState(false),
-    [paying, setPaying] = useState(false);
+    [paying, setPaying] = useState(false),
+    [ordering, setOrdering] = useState(false);
   const lines =
       order?.items.map((i) => ({
         ...i,
@@ -1578,8 +1609,8 @@ function AdminTableDetails({ table, order, data, close, refresh, toast }) {
           <b>{table.status === "cleaning" ? "Under cleaning" : table.status}</b>
         </div>
         <div>
-          <small>Guest</small>
-          <b>{table.guestName || "No guest assigned"}</b>
+          <small>{table.status === "reserved" ? "Reservation" : "Guest"}</small>
+          <b>{table.status === "reserved" ? "Reserved table" : table.guestName || "No guest assigned"}</b>
         </div>
         <div>
           <small>Reservation time</small>
@@ -1614,6 +1645,11 @@ function AdminTableDetails({ table, order, data, close, refresh, toast }) {
             <b>{money(subtotal)}</b>
           </div>
           <div className="table-detail-bill-actions">
+            {!['billing_requested', 'completed'].includes(order.status) ? (
+              <button className="primary" onClick={() => setOrdering(true)}>
+                <Plus size={14} /> Add more food
+              </button>
+            ) : null}
             <button className="secondary" onClick={() => setBilling(true)}>
               <Printer size={14} /> Bill / Print
             </button>
@@ -1633,6 +1669,11 @@ function AdminTableDetails({ table, order, data, close, refresh, toast }) {
               : "No active order"}
           </h3>
           <p>This status is updated live from the Waiter portal.</p>
+          {table.status !== "cleaning" ? (
+            <button className="primary" onClick={() => setOrdering(true)}>
+              <Plus size={15} /> Take order
+            </button>
+          ) : null}
         </div>
       )}
       <button className="delete-table-btn" disabled={!!order} onClick={remove}>
@@ -1655,6 +1696,22 @@ function AdminTableDetails({ table, order, data, close, refresh, toast }) {
             close();
           }}
         />
+      ) : null}
+      {ordering ? (
+        <Modal close={() => setOrdering(false)} wide>
+          <OrderBuilder
+            table={table}
+            data={data}
+            user={user}
+            existing={order}
+            refresh={refresh}
+            toast={toast}
+            close={() => {
+              setOrdering(false);
+              close();
+            }}
+          />
+        </Modal>
       ) : null}
     </Modal>
   );
@@ -1970,18 +2027,11 @@ function DishEditor({ item, close, refresh, toast }) {
         <div className="form-grid">
           <label>
             Category
-            <select
+            <ThemeSelect
               value={form.category}
-              onChange={(e) => setForm({ ...form, category: e.target.value })}
-            >
-              <option>Starters</option>
-              <option>Mains</option>
-              <option>Desserts</option>
-              <option>Beverages</option>
-              <option>Juices</option>
-              <option>Sides</option>
-              <option>Specials</option>
-            </select>
+              onChange={(category) => setForm({ ...form, category })}
+              options={["Starters", "Mains", "Desserts", "Beverages", "Juices", "Sides", "Specials"]}
+            />
           </label>
           <label>
             Icon
@@ -2471,9 +2521,7 @@ function ParcelBuilder({ data, user, close, refresh, toast }) {
   function add(id) {
     setCart((c) => {
       const found = c.find((i) => i.menuId === id);
-      return found
-        ? c.map((i) => (i.menuId === id ? { ...i, qty: i.qty + 1 } : i))
-        : [...c, { menuId: id, qty: 1, note: "" }];
+      return found ? c : [...c, { menuId: id, qty: 1, note: "" }];
     });
   }
   function change(id, delta) {
@@ -2525,7 +2573,7 @@ function ParcelBuilder({ data, user, close, refresh, toast }) {
       <div className="order-builder">
         <div className="menu-list">
           {data.menu.map((m) => (
-            <button key={m.id} onClick={() => add(m.id)}>
+            <button key={m.id} className={cart.some((item) => item.menuId === m.id) ? "selected-food" : ""} onClick={() => add(m.id)}>
               <span>
                 {m.imageUrl ? <img src={m.imageUrl} alt="" /> : m.icon}
               </span>
@@ -2533,7 +2581,7 @@ function ParcelBuilder({ data, user, close, refresh, toast }) {
                 <b>{m.name}</b>
                 <small>{m.category}</small>
               </div>
-              <strong>{money(m.price)}</strong>
+              <strong>{cart.some((item) => item.menuId === m.id) ? <><CheckCircle2 size={14}/> Selected</> : money(m.price)}</strong>
             </button>
           ))}
         </div>
@@ -2661,12 +2709,56 @@ function Status({ status }) {
 function Stock({ data, refresh, toast, user }) {
   const [editing, setEditing] = useState(null),
     [moving, setMoving] = useState(null),
-    [tab, setTab] = useState("inventory");
+    [tab, setTab] = useState("inventory"),
+    [query, setQuery] = useState(""),
+    [category, setCategory] = useState("all"),
+    [health, setHealth] = useState("all"),
+    [movementFilter, setMovementFilter] = useState("all");
   const low = data.inventory.filter((i) => i.quantity <= i.min),
     value = data.inventory.reduce((s, i) => s + i.quantity * i.cost, 0),
-    purchases = (data.inventoryTransactions || [])
+    transactions = data.inventoryTransactions || [],
+    purchases = transactions
       .filter((x) => x.movementType === "purchase")
-      .reduce((s, x) => s + Math.abs(x.quantity) * (x.unitCost || 0), 0);
+      .reduce((s, x) => s + Math.abs(x.quantity) * (x.unitCost || 0), 0),
+    cutoff = Date.now() - 30 * 86400000,
+    recent = transactions.filter((x) => new Date(x.createdAt).getTime() >= cutoff),
+    usageCost = recent
+      .filter((x) => x.movementType === "usage")
+      .reduce((s, x) => s + Math.abs(x.quantity) * (x.unitCost || 0), 0),
+    wasteCost = recent
+      .filter((x) => x.movementType === "waste")
+      .reduce((s, x) => s + Math.abs(x.quantity) * (x.unitCost || 0), 0),
+    categories = [...new Set(data.inventory.map((i) => i.category).filter(Boolean))].sort(),
+    visibleInventory = data.inventory.filter((item) => {
+      const matchesText = `${item.name} ${item.category}`.toLowerCase().includes(query.toLowerCase()),
+        matchesCategory = category === "all" || item.category === category,
+        state = item.quantity === 0 ? "out" : item.quantity <= item.min ? "low" : "healthy";
+      return matchesText && matchesCategory && (health === "all" || health === state);
+    }),
+    filteredTransactions = transactions.filter((x) =>
+      movementFilter === "all" ? true : x.movementType === movementFilter,
+    ),
+    planning = data.inventory
+      .map((item) => {
+        const consumed = recent
+            .filter((x) => x.inventoryId === item.id && ["usage", "waste"].includes(x.movementType))
+            .reduce((s, x) => s + Math.abs(x.quantity), 0),
+          dailyUse = consumed / 30,
+          daysCover = dailyUse > 0 ? item.quantity / dailyUse : null,
+          reorderQty = Math.max(0, item.min * 2 - item.quantity);
+        return { ...item, consumed, dailyUse, daysCover, reorderQty, reorderCost: reorderQty * item.cost };
+      })
+      .sort((a, b) => (a.daysCover ?? 9999) - (b.daysCover ?? 9999)),
+    reorderItems = planning.filter((x) => x.quantity <= x.min || (x.daysCover !== null && x.daysCover <= 7)),
+    reorderCost = reorderItems.reduce((s, x) => s + x.reorderCost, 0);
+  const exportMovements = () =>
+    exportCsv(`knockout-stock-${new Date().toISOString().slice(0, 10)}.csv`, [
+      ["Date", "Item", "Category", "Movement", "Quantity", "Unit", "Unit cost", "Value", "Note", "Recorded by"],
+      ...filteredTransactions.map((entry) => {
+        const item = data.inventory.find((x) => x.id === entry.inventoryId);
+        return [entry.createdAt, item?.name, item?.category, entry.movementType, entry.quantity, item?.unit, entry.unitCost, Math.abs(entry.quantity) * (entry.unitCost || 0), entry.note, entry.createdBy];
+      }),
+    ]);
   return (
     <>
       <PageHead
@@ -2705,6 +2797,26 @@ function Stock({ data, refresh, toast, user }) {
           value={money(purchases)}
           note="From stock movement history"
         />
+        <Stat
+          icon={ArrowDownUp}
+          label="30-day Consumption"
+          value={money(usageCost)}
+          note="Kitchen usage at recorded cost"
+        />
+        <Stat
+          icon={AlertTriangle}
+          label="30-day Waste"
+          value={money(wasteCost)}
+          note="Spoilage and wastage cost"
+          tone="warning"
+        />
+        <Stat
+          icon={Gauge}
+          label="Reorder Estimate"
+          value={money(reorderCost)}
+          note={`${reorderItems.length} items need attention`}
+          tone={reorderItems.length ? "warning" : undefined}
+        />
       </div>
       <div className="inventory-tabs">
         <button
@@ -2719,10 +2831,23 @@ function Stock({ data, refresh, toast, user }) {
         >
           Movement history
         </button>
+        <button
+          className={tab === "planning" ? "active" : ""}
+          onClick={() => setTab("planning")}
+        >
+          Reorder & forecasting
+        </button>
       </div>
       {tab === "inventory" ? (
-        <div className="stock-grid">
-          {data.inventory.map((item) => {
+        <>
+          <div className="stock-toolbar">
+            <label><Search size={15}/><input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="Search item or category…"/></label>
+            <ThemeSelect value={category} onChange={setCategory} options={[{value:"all",label:"All categories"},...categories.map((x)=>({value:x,label:x}))]}/>
+            <ThemeSelect value={health} onChange={setHealth} options={[{value:"all",label:"All stock levels"},{value:"healthy",label:"Healthy"},{value:"low",label:"Low stock"},{value:"out",label:"Out of stock"}]}/>
+            <span>{visibleInventory.length} items shown</span>
+          </div>
+          <div className="stock-grid">
+          {visibleInventory.map((item) => {
             const ratio = item.min ? item.quantity / item.min : 2,
               status =
                 item.quantity === 0
@@ -2769,9 +2894,15 @@ function Stock({ data, refresh, toast, user }) {
               </article>
             );
           })}
-        </div>
-      ) : (
+          </div>
+          {!visibleInventory.length?<div className="empty-state"><Search/><h3>No matching stock items</h3><p>Try changing the search or stock-level filter.</p></div>:null}
+        </>
+      ) : tab === "activity" ? (
         <section className="panel">
+          <div className="stock-history-tools">
+            <div>{["all","purchase","usage","waste","adjustment"].map((x)=><button key={x} className={movementFilter===x?"active":""} onClick={()=>setMovementFilter(x)}>{x}</button>)}</div>
+            <button className="secondary" onClick={exportMovements}><FileDown size={14}/> Export CSV</button>
+          </div>
           <div className="table-scroll">
             <table>
               <thead>
@@ -2785,7 +2916,7 @@ function Stock({ data, refresh, toast, user }) {
                 </tr>
               </thead>
               <tbody>
-                {(data.inventoryTransactions || []).map((entry) => {
+                {filteredTransactions.map((entry) => {
                   const item = data.inventory.find(
                     (x) => x.id === entry.inventoryId,
                   );
@@ -2819,13 +2950,22 @@ function Stock({ data, refresh, toast, user }) {
               </tbody>
             </table>
           </div>
-          {!data.inventoryTransactions?.length ? (
+          {!filteredTransactions.length ? (
             <div className="empty-state">
               <ArrowDownUp />
               <h3>No stock movements yet</h3>
             </div>
           ) : null}
         </section>
+      ) : (
+        <div className="stock-planning-grid">
+          <section className="panel">
+            <PanelHead title="Smart reorder plan" sub="Items below minimum level or with seven days of estimated cover" />
+            <div className="table-scroll"><table><thead><tr><th>Item</th><th>On hand</th><th>30-day usage</th><th>Days cover</th><th>Suggested order</th><th>Estimated cost</th><th></th></tr></thead><tbody>{reorderItems.map((item)=><tr key={item.id}><td><b>{item.name}</b><small>{item.category}</small></td><td className={item.quantity<=item.min?"amount-out":""}>{item.quantity} {item.unit}</td><td>{item.consumed.toFixed(2)} {item.unit}</td><td>{item.daysCover===null?"No usage data":`${Math.max(0,item.daysCover).toFixed(1)} days`}</td><td><b>{item.reorderQty.toFixed(2)} {item.unit}</b></td><td>{money(item.reorderCost)}</td><td><button className="mini-action" onClick={()=>setMoving(item)}>Add stock</button></td></tr>)}</tbody></table></div>
+            {!reorderItems.length?<div className="empty-state"><CheckCircle2/><h3>Stock levels are healthy</h3><p>No item currently needs a suggested reorder.</p></div>:null}
+          </section>
+          <aside className="panel stock-risk-summary"><PanelHead title="Inventory health" sub="Operational signals from the last 30 days"/><div><span>Current stock value <b>{money(value)}</b></span><span>Suggested reorder <b>{money(reorderCost)}</b></span><span>Kitchen consumption <b>{money(usageCost)}</b></span><span>Waste cost <b className="amount-out">{money(wasteCost)}</b></span><span>Waste / consumption <b>{usageCost?`${((wasteCost/usageCost)*100).toFixed(1)}%`:"—"}</b></span></div></aside>
+        </div>
       )}
       {editing ? (
         <StockEditor
@@ -2905,14 +3045,11 @@ function StockEditor({ item, close, refresh, toast, user }) {
           </label>
           <label>
             Unit
-            <select
+            <ThemeSelect
               value={form.unit}
-              onChange={(e) => setForm({ ...form, unit: e.target.value })}
-            >
-              {["kg", "g", "L", "ml", "pcs", "pack"].map((x) => (
-                <option key={x}>{x}</option>
-              ))}
-            </select>
+              onChange={(unit) => setForm({ ...form, unit })}
+              options={["kg", "g", "L", "ml", "pcs", "pack"]}
+            />
           </label>
         </div>
         {!item ? (
@@ -2995,31 +3132,20 @@ function StockMovement({ item, close, refresh, toast, user }) {
       <form className="modal-form" onSubmit={save}>
         <label>
           Movement type
-          <select
+          <ThemeSelect
             value={form.movementType}
-            onChange={(e) => setForm({ ...form, movementType: e.target.value })}
-          >
-            <option value="purchase">Purchase / stock in</option>
-            <option value="usage">Kitchen usage</option>
-            <option value="waste">Waste / spoilage</option>
-            <option value="adjustment">Manual adjustment</option>
-          </select>
+            onChange={(movementType) => setForm({ ...form, movementType })}
+            options={[{value:"purchase",label:"Purchase / stock in"},{value:"usage",label:"Kitchen usage"},{value:"waste",label:"Waste / spoilage"},{value:"adjustment",label:"Manual adjustment"}]}
+          />
         </label>
         {form.movementType === "adjustment" ? (
           <label>
             Adjustment direction
-            <select
+            <ThemeSelect
               value={form.adjustmentDirection}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  adjustmentDirection: Number(e.target.value),
-                })
-              }
-            >
-              <option value="1">Increase stock</option>
-              <option value="-1">Decrease stock</option>
-            </select>
+              onChange={(adjustmentDirection) => setForm({ ...form, adjustmentDirection: Number(adjustmentDirection) })}
+              options={[{value:1,label:"Increase stock"},{value:-1,label:"Decrease stock"}]}
+            />
           </label>
         ) : null}
         <div className="form-grid">
@@ -3259,13 +3385,11 @@ function FinanceEntry({ close, refresh, toast, user }) {
         <div className="form-grid">
           <label>
             Entry type
-            <select
+            <ThemeSelect
               value={form.entryType}
-              onChange={(e) => setForm({ ...form, entryType: e.target.value })}
-            >
-              <option value="expense">Expense</option>
-              <option value="income">Income</option>
-            </select>
+              onChange={(entryType) => setForm({ ...form, entryType })}
+              options={[{value:"expense",label:"Expense"},{value:"income",label:"Income"}]}
+            />
           </label>
           <label>
             Category
@@ -3298,16 +3422,11 @@ function FinanceEntry({ close, refresh, toast, user }) {
           </label>
           <label>
             Payment method
-            <select
+            <ThemeSelect
               value={form.paymentMethod}
-              onChange={(e) =>
-                setForm({ ...form, paymentMethod: e.target.value })
-              }
-            >
-              <option>Cash</option>
-              <option>Card / UPI</option>
-              <option>Bank Transfer</option>
-            </select>
+              onChange={(paymentMethod) => setForm({ ...form, paymentMethod })}
+              options={["Cash", "Card / UPI", "Bank Transfer"]}
+            />
           </label>
         </div>
         <div className="form-grid">
@@ -3398,7 +3517,12 @@ function FinanceCalendar({ data, selectDate }) {
         bought,
         activity: bills.length || expense || dealerPaid || bought,
       };
-    };
+    },
+    monthMetrics = Array.from({ length: days }, (_, i) => metrics(i + 1)),
+    monthSales = monthMetrics.reduce((s, x) => s + x.sales, 0),
+    monthSpent = monthMetrics.reduce((s, x) => s + x.spent, 0),
+    monthPurchases = monthMetrics.reduce((s, x) => s + x.bought, 0),
+    monthBills = monthMetrics.reduce((s, x) => s + x.bills, 0);
   return (
     <>
       <PageHead
@@ -3406,6 +3530,12 @@ function FinanceCalendar({ data, selectDate }) {
         title="Choose a finance date"
         sub="Select a day to open its bills, spending, purchases, dealer payments, and daily calculation."
       />
+      <div className="finance-month-summary">
+        <DailyKpi icon={ReceiptText} label="Monthly bills" value={monthBills} amount={monthSales} tone="income" />
+        <DailyKpi icon={Wallet} label="Cash paid out" value={money(monthSpent)} note="Expenses and dealer payments" tone="expense" />
+        <DailyKpi icon={ShoppingCart} label="Purchase invoices" value={money(monthPurchases)} note="Products bought this month" />
+        <DailyKpi icon={TrendingUp} label="Monthly net cash" value={money(monthSales-monthSpent)} note="Paid bills minus cash outflow" tone={monthSales-monthSpent>=0?"income":"expense"} />
+      </div>
       <section className="finance-calendar">
         <header>
           <div>
@@ -3539,6 +3669,24 @@ function DailyFinanceDetails({
       0,
     ),
     netCash = billTotal + otherIncome - dailyOutflow;
+  const reportEnd = new Date(`${date}T23:59:59`),
+    reportStart = new Date(reportEnd.getTime() - 29 * 86400000),
+    inReportRange = (value) => {
+      const d = new Date(value);
+      return d >= reportStart && d <= reportEnd;
+    },
+    reportOrders = data.orders.filter((o) => o.paymentStatus === "paid" && inReportRange(o.completedAt)),
+    reportEntries = entries.filter((x) => inReportRange(`${dateKey(x.entryDate)}T12:00:00`) && dateKey(x.entryDate) >= dateKey(reportStart)),
+    reportPayments = payments.filter((x) => inReportRange(`${dateKey(x.paymentDate)}T12:00:00`) && dateKey(x.paymentDate) >= dateKey(reportStart)),
+    reportSales = reportOrders.reduce((s,o)=>s+Number(o.total||0),0),
+    reportIncome = reportEntries.filter((x)=>x.entryType==="income").reduce((s,x)=>s+x.amount,0),
+    reportExpense = reportEntries.filter((x)=>x.entryType==="expense").reduce((s,x)=>s+x.amount,0),
+    reportDealerPaid = reportPayments.reduce((s,x)=>s+x.amount,0),
+    reportNet = reportSales+reportIncome-reportExpense-reportDealerPaid,
+    paymentMix = Object.entries(reportOrders.reduce((acc,o)=>{const key=o.paymentMethod||"Unspecified";acc[key]=(acc[key]||0)+Number(o.total||0);return acc},{})).sort((a,b)=>b[1]-a[1]),
+    expenseMix = Object.entries(reportEntries.filter((x)=>x.entryType==="expense").reduce((acc,x)=>{acc[x.category]=(acc[x.category]||0)+x.amount;return acc},{})).sort((a,b)=>b[1]-a[1]),
+    dailyTrend = Array.from({length:30},(_,index)=>{const d=new Date(reportStart.getTime()+index*86400000),key=dateKey(d),sales=reportOrders.filter((o)=>dateKey(o.completedAt)===key).reduce((s,o)=>s+Number(o.total||0),0),expense=reportEntries.filter((x)=>dateKey(x.entryDate)===key&&x.entryType==="expense").reduce((s,x)=>s+x.amount,0)+reportPayments.filter((x)=>dateKey(x.paymentDate)===key).reduce((s,x)=>s+x.amount,0);return{key,sales,expense,net:sales-expense}}),
+    maxTrend=Math.max(1,...dailyTrend.map((x)=>Math.max(x.sales,x.expense)));
   const purchaseRows = purchases.map((p) => {
     const paid = payments
       .filter((x) => x.purchaseId === p.id)
@@ -3554,6 +3702,11 @@ function DailyFinanceDetails({
     } catch (e) {
       toast(e.message);
     }
+  }
+  function exportDailyReport(){
+    exportCsv(`knockout-finance-${date}.csv`,[
+      ["KnockOUT finance report",date],["Metric","Amount"],["Bill revenue",billTotal],["Other income",otherIncome],["General expenses",generalExpense],["Dealer payments",dealerPaid],["Net cash",netCash],[],["Bills"],["Bill","Type","Customer","Payment","Total","Completed"],...dailyBills.map((o)=>[o.id,o.orderType,o.guestName,o.paymentMethod,o.total,o.completedAt]),[],["Income and expenses"],["Date","Type","Category","Description","Payment","Reference","Amount"],...dailyEntries.map((x)=>[dateKey(x.entryDate),x.entryType,x.category,x.description,x.paymentMethod,x.reference,x.amount])
+    ]);
   }
   return (
     <>
@@ -3577,6 +3730,7 @@ function DailyFinanceDetails({
               })}
             </strong>
           </label>
+          <button onClick={exportDailyReport}><FileDown size={15}/> Export report</button>
         </div>
       </div>
       <div className="daily-finance-tabs">
@@ -3597,6 +3751,9 @@ function DailyFinanceDetails({
           onClick={() => setTab("ledger")}
         >
           Income & expenses
+        </button>
+        <button className={tab === "analytics" ? "active" : ""} onClick={() => setTab("analytics")}>
+          30-day analytics
         </button>
       </div>
       {tab === "daily" ? (
@@ -3811,7 +3968,7 @@ function DailyFinanceDetails({
             ) : null}
           </section>
         </>
-      ) : (
+      ) : tab === "ledger" ? (
         <>
           <div className="finance-actions">
             <button className="primary" onClick={() => setCreatingEntry(true)}>
@@ -3860,6 +4017,25 @@ function DailyFinanceDetails({
               </table>
             </div>
           </section>
+        </>
+      ) : (
+        <>
+          <div className="daily-kpis">
+            <DailyKpi icon={ReceiptText} label="30-day revenue" value={money(reportSales)} note={`${reportOrders.length} paid bills`} tone="income"/>
+            <DailyKpi icon={Banknote} label="Other income" value={money(reportIncome)} note="Non-order income" tone="income"/>
+            <DailyKpi icon={Wallet} label="Operating expense" value={money(reportExpense)} note="Manual expenses" tone="expense"/>
+            <DailyKpi icon={Building2} label="Dealer payments" value={money(reportDealerPaid)} note="Supplier cash outflow" tone="expense"/>
+            <DailyKpi icon={TrendingUp} label="Net cash generated" value={money(reportNet)} note="All inflow minus cash outflow" tone={reportNet>=0?"income":"expense"}/>
+            <DailyKpi icon={Gauge} label="Average bill value" value={money(reportOrders.length?reportSales/reportOrders.length:0)} note="Revenue per completed order"/>
+          </div>
+          <div className="finance-analytics-grid">
+            <section className="panel"><PanelHead title="30-day cashflow trend" sub={`Ending ${new Date(date+'T12:00:00').toLocaleDateString('en-IN',{dateStyle:'long'})}`}/><div className="cashflow-chart">{dailyTrend.map((day)=><div className="cashflow-day" key={day.key} title={`${day.key}: revenue ${money(day.sales)}, outflow ${money(day.expense)}`}><div><i className="income-bar" style={{height:`${Math.max(2,(day.sales/maxTrend)*100)}%`}}/><i className="expense-bar" style={{height:`${Math.max(2,(day.expense/maxTrend)*100)}%`}}/></div><span>{new Date(day.key+'T12:00:00').getDate()}</span></div>)}</div><div className="chart-legend"><span><i className="income"/>Revenue</span><span><i className="expense"/>Cash outflow</span></div></section>
+            <aside className="panel analytics-breakdown"><PanelHead title="Payment mix" sub="Collected bill revenue by method"/><div>{paymentMix.map(([label,amount])=><span key={label}><b>{label}</b><em>{reportSales?`${((amount/reportSales)*100).toFixed(1)}%`:"0%"}</em><strong>{money(amount)}</strong></span>)}{!paymentMix.length?<p>No paid bills in this period.</p>:null}</div></aside>
+          </div>
+          <div className="finance-analytics-grid secondary-row">
+            <section className="panel analytics-breakdown"><PanelHead title="Expense categories" sub="Where operating money was spent"/><div>{expenseMix.map(([label,amount])=><span key={label}><b>{label}</b><em>{reportExpense?`${((amount/reportExpense)*100).toFixed(1)}%`:"0%"}</em><strong className="amount-out">{money(amount)}</strong></span>)}{!expenseMix.length?<p>No operating expenses in this period.</p>:null}</div></section>
+            <aside className="panel stock-risk-summary"><PanelHead title="Business health" sub="Decision indicators for this period"/><div><span>Net cash margin <b>{reportSales?`${((reportNet/reportSales)*100).toFixed(1)}%`:"—"}</b></span><span>Average daily revenue <b>{money(reportSales/30)}</b></span><span>Average daily outflow <b>{money((reportExpense+reportDealerPaid)/30)}</b></span><span>Outstanding dealers <b className="amount-out">{money(totalDue)}</b></span><span>Cashflow status <b className={reportNet>=0?"amount-in":"amount-out"}>{reportNet>=0?"Positive":"Negative"}</b></span></div></aside>
+          </div>
         </>
       )}
       {creatingEntry ? (
@@ -4019,17 +4195,11 @@ function SupplierPurchaseForm({ date, close, refresh, toast, user }) {
         <div className="form-grid">
           <label>
             Payment method
-            <select
+            <ThemeSelect
               value={form.paymentMethod}
-              onChange={(e) =>
-                setForm({ ...form, paymentMethod: e.target.value })
-              }
-            >
-              <option>Cash</option>
-              <option>Card / UPI</option>
-              <option>Bank Transfer</option>
-              <option>Credit</option>
-            </select>
+              onChange={(paymentMethod) => setForm({ ...form, paymentMethod })}
+              options={["Cash", "Card / UPI", "Bank Transfer", "Credit"]}
+            />
           </label>
           <label>
             Payment reference
@@ -4117,16 +4287,11 @@ function DealerPaymentForm({ purchase, date, close, refresh, toast, user }) {
           </label>
           <label>
             Payment method
-            <select
+            <ThemeSelect
               value={form.paymentMethod}
-              onChange={(e) =>
-                setForm({ ...form, paymentMethod: e.target.value })
-              }
-            >
-              <option>Cash</option>
-              <option>Card / UPI</option>
-              <option>Bank Transfer</option>
-            </select>
+              onChange={(paymentMethod) => setForm({ ...form, paymentMethod })}
+              options={["Cash", "Card / UPI", "Bank Transfer"]}
+            />
           </label>
         </div>
         <label>
@@ -4378,6 +4543,7 @@ function StaffManagement({ data, refresh, toast }) {
       {editor && (
         <StaffEditor
           staff={editor.id ? editor : null}
+          users={data.users}
           close={() => setEditor(null)}
           refresh={refresh}
           toast={toast}
@@ -4432,7 +4598,7 @@ function AdminKitchenTeam({ staff, refresh, toast }) {
     </section>
   );
 }
-function StaffEditor({ staff, close, refresh, toast }) {
+function StaffEditor({ staff, users, close, refresh, toast }) {
   const [form, setForm] = useState({
       name: staff?.name || "",
       role: staff?.role || "waiter",
@@ -4443,6 +4609,8 @@ function StaffEditor({ staff, close, refresh, toast }) {
       active: staff?.active ?? true,
     }),
     [error, setError] = useState("");
+  const roleExists = (role) =>
+    users.some((user) => user.role === role && user.id !== staff?.id);
   async function save(e) {
     e.preventDefault();
     setError("");
@@ -4473,16 +4641,18 @@ function StaffEditor({ staff, close, refresh, toast }) {
           />
         </label>
         <div className="form-grid">
-          <label>
+          <label className="choice-field">
             Designation
-            <select
-              value={form.role}
-              onChange={(e) => setForm({ ...form, role: e.target.value })}
-            >
-              <option value="waiter">Waiter</option>
-              <option value="chef">Head Chef (single login)</option>
-              <option value="admin">Admin</option>
-            </select>
+            <div className="theme-choice-grid role-choices">
+              {[
+                ["waiter", "Waiter", "Multiple accounts"],
+                ["chef", "Head Chef", "Single company login"],
+                ["admin", "Admin", "Single company login"],
+              ].map(([value, label, note]) => {
+                const disabled = value !== "waiter" && roleExists(value);
+                return <button type="button" key={value} disabled={disabled} className={form.role === value ? "selected" : ""} onClick={() => setForm({ ...form, role: value })}><span>{label}</span><small>{disabled ? "Already created · unavailable" : note}</small>{disabled ? <CheckCircle2 size={14}/> : null}</button>;
+              })}
+            </div>
           </label>
           <label>
             6-digit login PIN
@@ -4508,19 +4678,15 @@ function StaffEditor({ staff, close, refresh, toast }) {
               onChange={(e) => setForm({ ...form, phone: e.target.value })}
             />
           </label>
-          <label>
+          <label className="choice-field">
             Pay type
-            <select
-              value={form.payType}
-              onChange={(e) => setForm({ ...form, payType: e.target.value })}
-            >
-              <option value="monthly">Monthly</option>
-              <option value="hourly">Hourly</option>
-            </select>
+            <div className="theme-choice-grid pay-choices">
+              {[['daily','Daily'],['monthly','Monthly']].map(([value,label])=><button type="button" key={value} className={form.payType===value?'selected':''} onClick={()=>setForm({...form,payType:value})}>{label}</button>)}
+            </div>
           </label>
         </div>
         <label>
-          Pay amount
+          {form.payType === "daily" ? "Daily salary amount" : "Monthly salary amount"}
           <input
             type="number"
             min="0"
@@ -4603,8 +4769,7 @@ function SettingsPanel({ data, refresh, toast }) {
 
 function Waiter({ data, refresh, user, logout, toast }) {
   const [page, setPage] = useState("attendance"),
-    [selected, setSelected] = useState(null),
-    [booking, setBooking] = useState(false);
+    [selected, setSelected] = useState(null);
   const table = data.tables.find((t) => t.id === selected);
   return (
     <Shell
@@ -4621,11 +4786,6 @@ function Waiter({ data, refresh, user, logout, toast }) {
             kicker="WAITER FLOOR VIEW"
             title="Tables & Service"
             sub="Select a table to take an order or generate its bill."
-            action={
-              <button className="primary" onClick={() => setBooking(true)}>
-                <CalendarDays size={15} /> New booking
-              </button>
-            }
           />
           <TableSummary data={data} />
           <div className="table-grid waiter-grid">
@@ -4640,9 +4800,6 @@ function Waiter({ data, refresh, user, logout, toast }) {
           </div>
         </>
       )}
-      {page === "bookings" && (
-        <Bookings data={data} open={() => setBooking(true)} />
-      )}{" "}
       {page === "orders" && <WaiterOrders data={data} user={user} />}{" "}
       {table && (
         <TableDrawer
@@ -4654,52 +4811,70 @@ function Waiter({ data, refresh, user, logout, toast }) {
           toast={toast}
         />
       )}{" "}
-      {booking && (
-        <BookingModal
-          data={data}
-          close={() => setBooking(false)}
-          refresh={refresh}
-          toast={toast}
-        />
-      )}
     </Shell>
   );
 }
-function Bookings({ data, open }) {
-  const booked = data.tables.filter((t) => t.status === "reserved");
-  return (
-    <>
-      <PageHead
-        kicker="RESERVATION BOOK"
-        title="Upcoming Bookings"
-        sub={`${booked.length} reservations currently on the floor plan.`}
-        action={
-          <button className="primary" onClick={open}>
-            <Plus size={15} /> Add booking
-          </button>
-        }
-      />
-      <section className="panel">
-        <div className="booking-list">
-          {booked.map((t) => (
-            <div key={t.id}>
-              <span>
-                <CalendarDays size={18} />
-              </span>
-              <div>
-                <b>{t.guestName}</b>
-                <small>
-                  Table {t.number} · {t.seats} guests
-                </small>
-              </div>
-              <strong>{t.bookingTime}</strong>
-              <Status status="confirmed" />
-            </div>
-          ))}
-        </div>
-      </section>
-    </>
-  );
+const bookingMinutes = (time) => {
+  const [hour, minute] = String(time || "00:00").split(":").map(Number);
+  return hour * 60 + minute;
+};
+const bookingTimeLabel = (time) => {
+  const [hour, minute] = String(time || "00:00").split(":").map(Number);
+  return new Date(2000, 0, 1, hour, minute).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
+};
+function Bookings({ data, open, refresh, toast }) {
+  const today = new Date(), bookings = data.bookings || [],
+    [month, setMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1)),
+    [selectedDate, setSelectedDate] = useState(null),
+    year = month.getFullYear(), monthIndex = month.getMonth(),
+    days = new Date(year, monthIndex + 1, 0).getDate(),
+    leading = new Date(year, monthIndex, 1).getDay(),
+    cells = [...Array(leading).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
+  while (cells.length % 7) cells.push(null);
+  const keyFor = (day) => `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+    selectedBookings = selectedDate ? bookings.filter((booking) => booking.bookingDate === selectedDate) : [];
+  async function cancelBooking(id) {
+    if (!confirm("Cancel this table booking?")) return;
+    try { await api(`/bookings/${id}`, { method: "DELETE" }); await refresh(); toast("Booking cancelled and the time slot released"); }
+    catch (error) { toast(error.message); }
+  }
+  if (selectedDate) return <>
+    <PageHead
+      kicker="RESERVATION SCHEDULE"
+      title={new Date(`${selectedDate}T00:00:00`).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+      sub={`${selectedBookings.length} confirmed booking${selectedBookings.length === 1 ? "" : "s"} for this date.`}
+      action={<div className="booking-head-actions"><button className="secondary" onClick={() => setSelectedDate(null)}><ChevronLeft size={15}/> Calendar</button><button className="primary" onClick={() => open(selectedDate)}><Plus size={15}/> Add booking</button></div>}
+    />
+    <section className="panel booking-day-panel">
+      {selectedBookings.length ? <div className="booking-list">{selectedBookings.map((booking) => <div key={booking.id}>
+        <span><CalendarDays size={18}/></span>
+        <div><b>Table {booking.tableNumber}</b><small>{booking.seats} seats · {booking.area} · {booking.customerPhone}</small></div>
+        <div className="booking-slot"><strong>{bookingTimeLabel(booking.bookingTime)}</strong><small>{booking.durationMinutes} minutes</small></div>
+        <span className={`sms-delivery ${booking.notificationStatus}`}><Bell size={12}/>{booking.notificationStatus === "sent" ? "SMS sent" : booking.notificationStatus === "failed" ? "SMS failed" : "SMS queued"}</span>
+        <button className="booking-cancel" onClick={() => cancelBooking(booking.id)}><Trash2 size={14}/></button>
+      </div>)}</div> : <div className="empty-state"><CalendarDays/><h3>No bookings for this date</h3><p>Select Add booking to lock a table and time.</p></div>}
+    </section>
+  </>;
+  return <>
+    <PageHead kicker="RESERVATION CALENDAR" title="Choose a booking date" sub="Select a date to view its reservations or lock a new table time." action={<button className="primary" onClick={() => open(dateKey(today))}><Plus size={15}/> Add booking</button>}/>
+    <section className="finance-calendar booking-calendar">
+      <header><div><span>TABLE RESERVATIONS</span><h2>{month.toLocaleDateString("en-IN", { month: "long", year: "numeric" })}</h2></div><div>
+        <button onClick={() => setMonth(new Date(year, monthIndex - 1, 1))}><ChevronLeft size={18}/></button>
+        <button className="calendar-today" onClick={() => setMonth(new Date(today.getFullYear(), today.getMonth(), 1))}>Today</button>
+        <button onClick={() => setMonth(new Date(year, monthIndex + 1, 1))}><ChevronRight size={18}/></button>
+      </div></header>
+      <div className="finance-weekdays">{["SUN","MON","TUE","WED","THU","FRI","SAT"].map((day) => <span key={day}>{day}</span>)}</div>
+      <div className="finance-month-grid">{cells.map((day,index) => {
+        if (!day) return <span className="calendar-blank" key={`blank-${index}`}/>;
+        const key=keyFor(day), daily=bookings.filter((booking) => booking.bookingDate === key), isToday=key===dateKey(today), weekend=index%7===0||index%7===6;
+        return <button key={key} className={`${daily.length ? "has-activity" : ""} ${isToday ? "is-today" : ""} ${weekend ? "weekend" : ""}`} onClick={() => setSelectedDate(key)}>
+          <header><b>{day}</b><em>{daily.length ? `${daily.length} BOOKED` : weekend ? "W/E" : "OPEN"}</em></header>
+          {daily.length ? <div className="booking-day-data"><strong>{daily.length} reservation{daily.length===1?"":"s"}</strong>{daily.slice(0,2).map((booking) => <small key={booking.id}>T{booking.tableNumber} · {bookingTimeLabel(booking.bookingTime)}</small>)}{daily.length>2?<small>+{daily.length-2} more</small>:null}</div> : <div className="calendar-no-data"><CalendarDays size={19}/><small>No bookings</small></div>}
+        </button>;
+      })}</div>
+      <footer><span><i className="activity"/> Confirmed booking</span><span><i className="today"/> Today</span><span><i/> Available date</span></footer>
+    </section>
+  </>;
 }
 function WaiterOrders({ data, user }) {
   const mine = data.orders.filter(
@@ -4720,71 +4895,56 @@ function WaiterOrders({ data, user }) {
     </>
   );
 }
-function BookingModal({ data, close, refresh, toast }) {
+function BookingModal({ data, close, refresh, toast, initialDate }) {
   const [form, setForm] = useState({
       tableId: "",
-      guestName: "",
-      bookingTime: "20:00",
+      customerPhone: "",
+      bookingDate: initialDate || dateKey(new Date()),
+      bookingTime: "18:00",
+      durationMinutes: 90,
     }),
-    [error, setError] = useState("");
+    [error, setError] = useState(""), [busy, setBusy] = useState(false),
+    bookings = data.bookings || [],
+    requestedStart = bookingMinutes(form.bookingTime), requestedEnd = requestedStart + Number(form.durationMinutes),
+    tableOptions = data.tables.map((table) => {
+      const conflicts = bookings.filter((booking) => booking.tableId === table.id && booking.bookingDate === form.bookingDate && bookingMinutes(booking.bookingTime) < requestedEnd && bookingMinutes(booking.bookingTime) + Number(booking.durationMinutes) > requestedStart);
+      return { value: table.id, label: `Table ${table.number} · ${table.seats} seats`, note: conflicts.length ? `Locked ${conflicts.map((booking) => bookingTimeLabel(booking.bookingTime)).join(", ")}` : table.area, disabled: conflicts.length > 0 };
+    });
   async function submit(e) {
     e.preventDefault();
+    setBusy(true); setError("");
     try {
-      await api("/bookings", { method: "POST", body: JSON.stringify(form) });
+      const result = await api("/bookings", { method: "POST", body: JSON.stringify(form) });
       await refresh();
-      toast("Booking confirmed");
+      toast(result.notificationStatus === "sent" ? "Booking confirmed · SMS sent to customer" : result.notificationStatus === "failed" ? "Booking confirmed · SMS delivery failed" : "Booking confirmed · SMS queued (gateway configuration required)");
       close();
     } catch (e) {
       setError(e.message);
-    }
+    } finally { setBusy(false); }
   }
   return (
     <Modal close={close}>
       <span className="eyebrow">NEW RESERVATION</span>
       <h2>Book a table</h2>
-      <p>Reserve an available table for your guest.</p>
+      <p>The selected table and overlapping time are locked across Admin and Waiter.</p>
       <form className="modal-form" onSubmit={submit}>
+        <label>Customer mobile number<input type="tel" required placeholder="Example: +91 7904951736" value={form.customerPhone} onChange={(e) => setForm({ ...form, customerPhone: e.target.value })}/></label>
+        <div className="booking-form-grid">
+          <label>Booking date<input type="date" min={dateKey(new Date())} required value={form.bookingDate} onChange={(e) => setForm({ ...form, bookingDate: e.target.value, tableId: "" })}/></label>
+          <label>Booking time<input type="time" required value={form.bookingTime} onChange={(e) => setForm({ ...form, bookingTime: e.target.value, tableId: "" })}/></label>
+        </div>
+        <label>Reservation duration<ThemeSelect value={form.durationMinutes} onChange={(durationMinutes) => setForm({ ...form, durationMinutes: Number(durationMinutes), tableId: "" })} options={[60,90,120,150,180].map((minutes) => ({ value: minutes, label: `${minutes} minutes`, note: `Table locked until ${bookingTimeLabel(String(Math.floor((requestedStart+minutes)/60)%24).padStart(2,"0")+":"+String((requestedStart+minutes)%60).padStart(2,"0"))}` }))}/></label>
         <label>
-          Guest name
-          <input
-            required
-            value={form.guestName}
-            onChange={(e) => setForm({ ...form, guestName: e.target.value })}
-          />
-        </label>
-        <label>
-          Available table
-          <select
-            required
-            value={form.tableId}
-            onChange={(e) => setForm({ ...form, tableId: e.target.value })}
-          >
-            <option value="">Choose a table</option>
-            {data.tables
-              .filter((t) => t.status === "available")
-              .map((t) => (
-                <option value={t.id} key={t.id}>
-                  Table {t.number} · {t.seats} seats
-                </option>
-              ))}
-          </select>
-        </label>
-        <label>
-          Booking time
-          <input
-            type="time"
-            required
-            value={form.bookingTime}
-            onChange={(e) => setForm({ ...form, bookingTime: e.target.value })}
-          />
+          Available table for this time
+          <ThemeSelect value={form.tableId} onChange={(tableId) => setForm({ ...form, tableId })} placeholder="Choose an unlocked table" options={tableOptions}/>
         </label>
         {error && <div className="form-error">{error}</div>}
-        <button className="primary wide">Confirm booking</button>
+        <button className="primary wide" disabled={!form.tableId || !form.customerPhone || busy}>{busy ? "Locking table…" : "Confirm booking & send SMS"}</button>
       </form>
     </Modal>
   );
 }
-function Modal({ close, children, wide = false, hideClose = false }) {
+function Modal({ close, children, wide = false, hideClose = false, closeLeft = false }) {
   return (
     <div
       className="modal-wrap"
@@ -4792,7 +4952,7 @@ function Modal({ close, children, wide = false, hideClose = false }) {
     >
       <div className={`modal ${wide ? "wide-modal" : ""}`}>
         {!hideClose ? (
-          <button className="modal-close" onClick={close}>
+          <button className={`modal-close ${closeLeft ? "left" : ""}`} onClick={close}>
             <X size={18} />
           </button>
         ) : null}
@@ -4906,9 +5066,7 @@ function OrderBuilder({ table, data, user, existing, refresh, toast, close }) {
   function add(id) {
     setCart((c) => {
       const x = c.find((i) => i.menuId === id);
-      return x
-        ? c.map((i) => (i.menuId === id ? { ...i, qty: i.qty + 1 } : i))
-        : [...c, { menuId: id, qty: 1, note: "" }];
+      return x ? c : [...c, { menuId: id, qty: 1, note: "" }];
     });
   }
   function qty(id, d) {
@@ -4964,7 +5122,11 @@ function OrderBuilder({ table, data, user, existing, refresh, toast, close }) {
           {data.menu
             .filter((m) => m.available && (cat === "All" || m.category === cat))
             .map((m) => (
-              <button key={m.id} onClick={() => add(m.id)}>
+              <button
+                key={m.id}
+                className={cart.some((item) => item.menuId === m.id) ? "selected-food" : ""}
+                onClick={() => add(m.id)}
+              >
                 <span>
                   {m.imageUrl ? <img src={m.imageUrl} alt="" /> : m.icon}
                 </span>
@@ -4972,7 +5134,7 @@ function OrderBuilder({ table, data, user, existing, refresh, toast, close }) {
                   <b>{m.name}</b>
                   <small>{m.category}</small>
                 </div>
-                <strong>{money(m.price)}</strong>
+                <strong>{cart.some((item) => item.menuId === m.id) ? <><CheckCircle2 size={14}/> Selected</> : money(m.price)}</strong>
               </button>
             ))}
         </div>
@@ -5502,18 +5664,14 @@ function KitchenStaffEditor({ member, user, close, refresh, toast }) {
               onChange={(e) => setForm({ ...form, joinedOn: e.target.value })}
             />
           </label>
-          <label>
+          <label className="choice-field">
             Pay type
-            <select
-              value={form.payType}
-              onChange={(e) => setForm({ ...form, payType: e.target.value })}
-            >
-              <option value="monthly">Monthly</option>
-              <option value="hourly">Hourly</option>
-            </select>
+            <div className="theme-choice-grid pay-choices">
+              {[['daily','Daily'],['monthly','Monthly']].map(([value,label])=><button type="button" key={value} className={form.payType===value?'selected':''} onClick={()=>setForm({...form,payType:value})}>{label}</button>)}
+            </div>
           </label>
           <label>
-            Pay amount
+            {form.payType === "daily" ? "Daily salary amount" : "Monthly salary amount"}
             <input
               type="number"
               min="0"
@@ -5541,83 +5699,45 @@ function KitchenStaffEditor({ member, user, close, refresh, toast }) {
 }
 function KitchenTicket({ order, data, status }) {
   const table = data.tables.find((t) => t.id === order.tableId),
-    isParcel = order.orderType === "parcel";
+    isParcel = order.orderType === "parcel",
+    [expanded, setExpanded] = useState(false);
   return (
-    <article
-      className={`ticket ${order.status} ${isParcel ? "parcel-ticket" : ""}`}
-    >
-      <header>
-        <div>
-          <span className={isParcel ? "parcel-label" : "chef-table-number"}>
-            {isParcel ? (
-              "PARCEL ORDER"
-            ) : (
-              <>
-                TABLE <b>{table?.number}</b>
-              </>
-            )}
-          </span>
-          <h2>Order #{order.id}</h2>
-        </div>
-        <div>
-          <Clock3 size={14} />
-          <b>{elapsed(order.createdAt)}</b>
-        </div>
-      </header>
-      <div className="ticket-meta">
-        <span>{isParcel ? order.guestName : order.waiter}</span>
-        <Status status={order.status} />
-      </div>
-      <div className="ticket-items">
-        {order.items.map((i) => {
-          const m = data.menu.find((x) => x.id === i.menuId);
-          return (
-            <div key={i.menuId}>
-              <b>{i.qty}</b>
-              <span>
-                {m?.name}
-                <small>
-                  {m?.isCombo
-                    ? m.components
-                        .map((c) => c.quantity + "× " + c.name)
-                        .join(" + ")
-                    : i.note}
-                </small>
-              </span>
+    <>
+      <button className={`chef-order-summary ${order.status} ${isParcel ? "parcel" : ""}`} onClick={() => setExpanded(true)}>
+        <span className="chef-summary-table">{isParcel ? "PARCEL" : "TABLE"}<b>{isParcel ? `#${order.id}` : table?.number}</b></span>
+        <span><small>ORDER ID</small><b>#{order.id}</b></span>
+        <span><small>TIME</small><b><Clock3 size={13}/>{elapsed(order.createdAt)}</b></span>
+        <Status status={order.status}/>
+        <ChevronRight size={18}/>
+      </button>
+      {expanded ? (
+        <Modal close={() => setExpanded(false)} closeLeft>
+          <div className="chef-detail-head">
+            <span className={isParcel ? "parcel-label" : "chef-table-number"}>{isParcel ? "PARCEL ORDER" : <>TABLE <b>{table?.number}</b></>}</span>
+            <div><small>ORDER ID</small><h2>#{order.id}</h2></div>
+            <div><small>ELAPSED TIME</small><b><Clock3 size={14}/>{elapsed(order.createdAt)}</b></div>
+            <Status status={order.status}/>
+          </div>
+          <div className="chef-detail-meta"><span>{isParcel ? order.guestName : `Taken by ${order.waiter}`}</span><span>{order.items.reduce((sum,item)=>sum+item.qty,0)} food items</span></div>
+          <div className="ticket-items chef-detail-items">
+            <div className="chef-food-columns" aria-hidden="true">
+              <span>Food item</span>
+              <span>Quantity</span>
             </div>
-          );
-        })}
-      </div>
-      {order.status === "new" && (
-        <button
-          className="primary wide"
-          onClick={() => status(order.id, "preparing")}
-        >
-          Start preparing <ArrowRight size={15} />
-        </button>
-      )}
-      {order.status === "preparing" && (
-        <button
-          className="ready-btn wide"
-          onClick={() => status(order.id, "ready")}
-        >
-          <CheckCircle2 size={16} /> Mark ready for{" "}
-          {isParcel ? "Admin" : "service"}
-        </button>
-      )}
-      {order.status === "ready" && !isParcel && (
-        <button
-          className="secondary wide"
-          onClick={() => status(order.id, "served")}
-        >
-          Mark collected
-        </button>
-      )}
-      {order.status === "ready" && isParcel && (
-        <div className="parcel-done">
-          <CheckCircle2 size={16} /> Sent back to Admin
-        </div>
-      )}
-    </article>
+            {order.items.map((i,index) => {
+              const m=data.menu.find((x)=>x.id===i.menuId);
+              return <div className="chef-food-line" key={`${i.menuId}-${index}`}>
+                <span className="chef-food-name">{m?.name}<small>{m?.isCombo?m.components.map((c)=>c.quantity+"× "+c.name).join(" + "):i.note}</small></span>
+                <strong className="chef-food-quantity"><small>QTY</small>{i.qty}</strong>
+              </div>;
+            })}
+          </div>
+          {order.status === "new" ? <button className="primary wide" onClick={() => status(order.id,"preparing")}>Start preparing <ArrowRight size={15}/></button> : null}
+          {order.status === "preparing" ? <button className="ready-btn wide" onClick={() => status(order.id,"ready")}><CheckCircle2 size={16}/> Mark ready for {isParcel?"Admin":"service"}</button> : null}
+          {order.status === "ready" && !isParcel ? <button className="secondary wide" onClick={() => status(order.id,"served")}>Mark collected</button> : null}
+          {order.status === "ready" && isParcel ? <div className="parcel-done"><CheckCircle2 size={16}/> Sent back to Admin</div> : null}
+        </Modal>
+      ) : null}
+    </>
   );
 }
