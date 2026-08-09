@@ -5634,7 +5634,7 @@ function Juicer({ data, refresh, user, logout, toast }) {
 }
 function ChefDishes({ data, refresh, toast, juicer = false }) {
   const [query, setQuery] = useState("");
-  const dishes = data.menu.filter((item) => !item.isCombo && item.name.toLowerCase().includes(query.toLowerCase()));
+  const dishes = data.menu.filter((item) => !item.isCombo && (juicer ? String(item.category).toLowerCase() === "juices" : String(item.category).toLowerCase() !== "juices") && item.name.toLowerCase().includes(query.toLowerCase()));
   async function setAvailability(item, available) {
     await api(`/menu/${item.id}/availability`, { method: "PATCH", body: JSON.stringify({ available }) });
     await refresh();
