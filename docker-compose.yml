@@ -4,14 +4,14 @@ services:
     container_name: knockout-mariadb
     restart: unless-stopped
     environment:
-      TZ: Asia/Kolkata
-      MARIADB_ROOT_PASSWORD: knockout_root
+      TZ: ${TZ:-Asia/Kolkata}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
       MARIADB_ROOT_HOST: "%"
-      MARIADB_DATABASE: knockout
-      MARIADB_USER: knockout
-      MARIADB_PASSWORD: knockout_pass
+      MARIADB_DATABASE: ${DB_NAME}
+      MARIADB_USER: ${DB_USER}
+      MARIADB_PASSWORD: ${DB_PASSWORD}
     ports:
-      - "3307:3306"
+      - "${DB_EXTERNAL_PORT:-3307}:3306"
     volumes:
       - knockout_mariadb:/var/lib/mysql
     healthcheck:
@@ -28,9 +28,9 @@ services:
       PMA_HOST: mariadb
       PMA_PORT: 3306
       PMA_ARBITRARY: 0
-      UPLOAD_LIMIT: 64M
+      UPLOAD_LIMIT: ${PHPMYADMIN_UPLOAD_LIMIT:-64M}
     ports:
-      - "9200:80"
+      - "${PHPMYADMIN_PORT:-9200}:80"
     depends_on:
       mariadb:
         condition: service_healthy
@@ -41,11 +41,11 @@ services:
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: knockout
-      MINIO_ROOT_PASSWORD: knockout_secret
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
     ports:
-      - "9100:9000"
-      - "9101:9001"
+      - "${MINIO_API_PORT:-9100}:9000"
+      - "${MINIO_CONSOLE_PORT:-9101}:9001"
     volumes:
       - knockout_minio:/data
     healthcheck:
@@ -59,20 +59,20 @@ services:
     container_name: knockout-admin-backend
     restart: unless-stopped
     environment:
-      TZ: Asia/Kolkata
+      TZ: ${TZ:-Asia/Kolkata}
       PORT: 6001
       PORTAL_ROLE: admin
-      DB_HOST: mariadb
-      DB_PORT: 3306
-      DB_USER: knockout
-      DB_PASSWORD: knockout_pass
-      DB_NAME: knockout
-      MINIO_ENDPOINT: minio
-      MINIO_PORT: 9000
-      MINIO_ACCESS_KEY: knockout
-      MINIO_SECRET_KEY: knockout_secret
-      MINIO_BUCKET: food-images
-      MINIO_PUBLIC_URL: http://localhost:9100
+      DB_HOST: ${DB_HOST:-mariadb}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio}
+      MINIO_PORT: ${MINIO_PORT:-9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET: ${MINIO_BUCKET:-food-images}
+      MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL}
       SMS_WEBHOOK_URL: ${SMS_WEBHOOK_URL:-}
       SMS_WEBHOOK_TOKEN: ${SMS_WEBHOOK_TOKEN:-}
     expose:
@@ -93,20 +93,20 @@ services:
     container_name: knockout-waiter-backend
     restart: unless-stopped
     environment:
-      TZ: Asia/Kolkata
+      TZ: ${TZ:-Asia/Kolkata}
       PORT: 7000
       PORTAL_ROLE: waiter
-      DB_HOST: mariadb
-      DB_PORT: 3306
-      DB_USER: knockout
-      DB_PASSWORD: knockout_pass
-      DB_NAME: knockout
-      MINIO_ENDPOINT: minio
-      MINIO_PORT: 9000
-      MINIO_ACCESS_KEY: knockout
-      MINIO_SECRET_KEY: knockout_secret
-      MINIO_BUCKET: food-images
-      MINIO_PUBLIC_URL: http://localhost:9100
+      DB_HOST: ${DB_HOST:-mariadb}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio}
+      MINIO_PORT: ${MINIO_PORT:-9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET: ${MINIO_BUCKET:-food-images}
+      MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL}
     expose:
       - "7000"
     depends_on:
@@ -123,20 +123,20 @@ services:
     container_name: knockout-chef-backend
     restart: unless-stopped
     environment:
-      TZ: Asia/Kolkata
+      TZ: ${TZ:-Asia/Kolkata}
       PORT: 8000
       PORTAL_ROLE: chef
-      DB_HOST: mariadb
-      DB_PORT: 3306
-      DB_USER: knockout
-      DB_PASSWORD: knockout_pass
-      DB_NAME: knockout
-      MINIO_ENDPOINT: minio
-      MINIO_PORT: 9000
-      MINIO_ACCESS_KEY: knockout
-      MINIO_SECRET_KEY: knockout_secret
-      MINIO_BUCKET: food-images
-      MINIO_PUBLIC_URL: http://localhost:9100
+      DB_HOST: ${DB_HOST:-mariadb}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio}
+      MINIO_PORT: ${MINIO_PORT:-9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET: ${MINIO_BUCKET:-food-images}
+      MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL}
     expose:
       - "8000"
     depends_on:
@@ -148,6 +148,36 @@ services:
       timeout: 4s
       retries: 20
 
+  juicer-backend:
+    build: ./backend
+    container_name: knockout-juicer-backend
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Kolkata}
+      PORT: 9000
+      PORTAL_ROLE: juicer
+      DB_HOST: ${DB_HOST:-mariadb}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio}
+      MINIO_PORT: ${MINIO_PORT:-9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET: ${MINIO_BUCKET:-food-images}
+      MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL}
+    expose:
+      - "9000"
+    depends_on:
+      admin-backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:9000/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+
   superadmin-backend:
     build: ./backend
     container_name: knockout-master-backend
@@ -155,13 +185,14 @@ services:
     command: node src/master-server.js
     environment:
       PORT: 5000
-      DB_HOST: mariadb
-      DB_PORT: 3306
-      DB_ROOT_USER: root
-      DB_ROOT_PASSWORD: knockout_root
-      MASTER_DB_NAME: knockout_master
+      TZ: ${TZ:-Asia/Kolkata}
+      DB_HOST: ${DB_HOST:-mariadb}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_ROOT_USER: ${DB_ROOT_USER:-root}
+      DB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MASTER_DB_NAME: ${MASTER_DB_NAME:-knockout_master}
     ports:
-      - "5100:5000"
+      - "${BACKEND_PORT:-5100}:5000"
     depends_on:
       admin-backend:
         condition: service_healthy
@@ -226,7 +257,7 @@ services:
       VITE_PROXY_TARGET: http://superadmin-backend:5000
     command: npm run dev -- --host 0.0.0.0 --port 5000
     ports:
-      - "5200:5000"
+      - "${FRONTEND_PORT:-5200}:5000"
     depends_on:
       superadmin-backend:
         condition: service_healthy

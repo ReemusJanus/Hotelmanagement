@@ -91,8 +91,8 @@ async function companySummary(company){
 
 app.use('/api',asyncRoute(async(req,res,next)=>{
  const role=String(req.headers['x-portal-role']||'').toLowerCase();
- if(!['admin','waiter','chef'].includes(role))return next();
- const targets={admin:'http://admin-backend:6001',waiter:'http://waiter-backend:7000',chef:'http://chef-backend:8000'},headers={'x-company-database':String(req.headers['x-company-database']||'knockout')};
+ if(!['admin','waiter','chef','juicer'].includes(role))return next();
+ const targets={admin:'http://admin-backend:6001',waiter:'http://waiter-backend:7000',chef:'http://chef-backend:8000',juicer:'http://juicer-backend:9000'},headers={'x-company-database':String(req.headers['x-company-database']||'knockout')};
  if(req.headers['content-type'])headers['content-type']=req.headers['content-type'];
  const options={method:req.method,headers};
  if(!['GET','HEAD'].includes(req.method)){if(req.is('application/json'))options.body=JSON.stringify(req.body||{});else{options.body=req;options.duplex='half'}}

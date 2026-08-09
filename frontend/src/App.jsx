@@ -34,6 +34,7 @@ import {
   FileDown,
   Gauge,
   PieChart,
+  CupSoda,
 } from "lucide-react";
 import { api, API_BASE, portalHeaders, resolvePortalLogin } from "./api";
 import AttendancePanel from "./AttendancePanel";
@@ -80,6 +81,14 @@ const loginRoles = [
     icon: ChefHat,
     pin: "2222",
     port: "8100",
+  },
+  {
+    id: "juicer",
+    title: "Juicer",
+    desc: "Juice preparation queue",
+    icon: CupSoda,
+    pin: "6 digits",
+    port: "5200",
   },
 ];
 
@@ -160,7 +169,7 @@ function CompanyApp() {
           logout={logout}
           toast={toast}
         />
-      ) : (
+      ) : user.role === "chef" ? (
         <Chef
           data={data}
           refresh={refresh}
@@ -168,6 +177,8 @@ function CompanyApp() {
           logout={logout}
           toast={toast}
         />
+      ) : (
+        <Juicer data={data} refresh={refresh} user={user} logout={logout} toast={toast} />
       )}
       <div className={`toast ${notice ? "show" : ""}`}>{notice}</div>
     </>
@@ -1059,9 +1070,16 @@ const portalNav = {
   chef: [
     ["attendance", "Check In / Out", Clock3],
     ["team", "Chef Management", Users],
+    ["dishes", "Dishes", UtensilsCrossed],
     ["kitchen", "Dine-in Kitchen", ChefHat],
     ["parcels", "Parcel Queue", Package],
     ["ready", "Ready to Serve", CheckCircle2],
+  ],
+  juicer: [
+    ["attendance", "Check In / Out", Clock3],
+    ["juices", "Juices", CupSoda],
+    ["queue", "Juice Queue", ReceiptText],
+    ["ready", "Ready Juices", CheckCircle2],
   ],
 };
 function Shell({ role, user, page, setPage, logout, children }) {
@@ -1776,19 +1794,59 @@ function TableEditor({ close, refresh, toast }) {
     </Modal>
   );
 }
+function OperationsCalendar({ orders, kicker, title, sub, label, onSelect, action }) {
+  const today = new Date(), [month, setMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1)),
+    year = month.getFullYear(), monthIndex = month.getMonth(), days = new Date(year, monthIndex + 1, 0).getDate(),
+    leading = new Date(year, monthIndex, 1).getDay(), cells = [...Array(leading).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
+  while (cells.length % 7) cells.push(null);
+  const keyFor = (day) => `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  return <>
+    <PageHead kicker={kicker} title={title} sub={sub} action={action}/>
+    <section className="finance-calendar operations-calendar">
+      <header><div><span>{label}</span><h2>{month.toLocaleDateString("en-IN", { month: "long", year: "numeric" })}</h2></div><div>
+        <button onClick={() => setMonth(new Date(year, monthIndex - 1, 1))}><ChevronLeft size={18}/></button>
+        <button className="calendar-today" onClick={() => setMonth(new Date(today.getFullYear(), today.getMonth(), 1))}>Today</button>
+        <button onClick={() => setMonth(new Date(year, monthIndex + 1, 1))}><ChevronRight size={18}/></button>
+      </div></header>
+      <div className="finance-weekdays">{["SUN","MON","TUE","WED","THU","FRI","SAT"].map((day) => <span key={day}>{day}</span>)}</div>
+      <div className="finance-month-grid">{cells.map((day, index) => {
+        if (!day) return <span className="calendar-blank" key={`blank-${index}`}/>;
+        const key = keyFor(day), daily = orders.filter((order) => dateKey(order.createdAt) === key),
+          paid = daily.filter((order) => order.paymentStatus === "paid"), revenue = paid.reduce((sum, order) => sum + Number(order.total || 0), 0),
+          open = daily.filter((order) => order.status !== "completed").length, isToday = key === dateKey(today), weekend = index % 7 === 0 || index % 7 === 6;
+        return <button key={key} className={`${daily.length ? "has-activity" : ""} ${isToday ? "is-today" : ""} ${weekend ? "weekend" : ""}`} onClick={() => onSelect(key)}>
+          <header><b>{day}</b><em>{daily.length ? `${daily.length} ${daily.length === 1 ? "ORDER" : "ORDERS"}` : weekend ? "W/E" : "OPEN"}</em></header>
+          {daily.length ? <div className="order-day-data"><strong>{revenue ? money(revenue) : `${daily.length} order${daily.length === 1 ? "" : "s"}`}</strong><small>{paid.length} paid · {open} active</small><p>{daily.slice(0, 3).map((order) => <span key={order.id}>#{order.id}</span>)}</p></div> : <div className="calendar-no-data"><ReceiptText size={19}/><small>No orders</small></div>}
+        </button>;
+      })}</div>
+      <footer><span><i className="activity"/> Orders recorded</span><span><i className="today"/> Today</span><span><i/> No orders</span></footer>
+    </section>
+  </>;
+}
+function DailyOrderCards({ orders, data }) {
+  const [receipt, setReceipt] = useState(null);
+  return <>
+    <div className="daily-order-grid">{orders.map((order) => {
+      const table = data.tables.find((item) => item.id === order.tableId), bill = calculateBill(order, data), itemCount = order.items.reduce((sum, item) => sum + item.qty, 0);
+      return <article className={`order-history-card ${order.status}`} key={order.id}>
+        <header><div><span>{order.orderType === "parcel" ? "PARCEL" : `TABLE ${table?.number || "—"}`}</span><h2>#{order.id}</h2></div><Status status={order.paymentStatus === "paid" ? "paid" : order.status}/></header>
+        <h3>{order.guestName || "Walk-in Guest"}</h3><p>{order.waiter || "Admin"} · {new Date(order.createdAt).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}</p>
+        <div className="order-history-items">{order.items.map((item, index) => <span key={`${item.menuId}-${index}`}><b>{item.qty}×</b> {data.menu.find((food) => food.id === item.menuId)?.name || "Menu item"}</span>)}</div>
+        <footer><span>{itemCount} items</span><strong>{money(order.total || bill.total)}</strong></footer>
+        {(order.paymentStatus === "paid" || order.status === "completed") ? <button className="parcel-receipt-button" onClick={() => setReceipt({ order, table, bill })}><Printer size={14}/> View / print bill</button> : null}
+      </article>;
+    })}</div>
+    {!orders.length ? <div className="empty-state"><ReceiptText/><h3>No orders for this date</h3><p>Orders created on this date will appear here.</p></div> : null}
+    {receipt ? <Modal close={() => setReceipt(null)} wide><BillReceipt table={receipt.table} order={receipt.order} data={data} bill={receipt.bill}/></Modal> : null}
+  </>;
+}
 function AdminOrders({ data }) {
-  return (
-    <>
-      <PageHead
-        kicker="SALES & SERVICE"
-        title="Orders & Billing"
-        sub="Every open and completed order in one place."
-      />
-      <section className="panel">
-        <OrderTable orders={data.orders} tables={data.tables} />
-      </section>
-    </>
-  );
+  const [selectedDate, setSelectedDate] = useState(null), daily = selectedDate ? data.orders.filter((order) => dateKey(order.createdAt) === selectedDate) : [];
+  if (!selectedDate) return <OperationsCalendar orders={data.orders} kicker="SALES & SERVICE" title="Orders & Billing Calendar" sub="Select a date to view its dine-in and parcel orders, bills, payments and totals." label="ALL SALES ORDERS" onSelect={setSelectedDate}/>;
+  return <>
+    <PageHead kicker="DAILY SALES & SERVICE" title={new Date(`${selectedDate}T12:00:00`).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} sub={`${daily.length} order${daily.length === 1 ? "" : "s"} created on this date.`} action={<button className="secondary" onClick={() => setSelectedDate(null)}><ChevronLeft size={15}/> Calendar</button>}/>
+    <DailyOrderCards orders={daily} data={data}/>
+  </>;
 }
 function FoodManager({ data, refresh, toast }) {
   const [uploading, setUploading] = useState(null);
@@ -2197,8 +2255,10 @@ function ComboEditor({ item, dishes, close, refresh, toast }) {
 function ParcelPanel({ data, refresh, user, toast }) {
   const [creating, setCreating] = useState(false),
     [paying, setPaying] = useState(null),
-    [prepaying, setPrepaying] = useState(null);
-  const parcels = data.orders.filter((o) => o.orderType === "parcel");
+    [prepaying, setPrepaying] = useState(null),
+    [selectedDate, setSelectedDate] = useState(null);
+  const allParcels = data.orders.filter((o) => o.orderType === "parcel"),
+    parcels = selectedDate ? allParcels.filter((order) => dateKey(order.createdAt) === selectedDate) : allParcels;
   async function collect(order, method) {
     try {
       const result = await api(`/orders/${order.id}/finalize`, {
@@ -2228,16 +2288,18 @@ function ParcelPanel({ data, refresh, user, toast }) {
       toast(e.message);
     }
   }
+  if (!selectedDate) return <>
+    <OperationsCalendar orders={allParcels} kicker="TAKEAWAY OPERATIONS" title="Parcel Orders Calendar" sub="Select a date to open its parcel orders, payment status, bills and kitchen progress." label="PARCEL ORDER HISTORY" onSelect={setSelectedDate} action={<button className="primary" onClick={() => setCreating(true)}><Plus size={15}/> New parcel order</button>}/>
+    {creating ? <ParcelBuilder data={data} user={user} close={() => setCreating(false)} refresh={refresh} toast={toast}/> : null}
+  </>;
   return (
     <>
       <PageHead
         kicker="TAKEAWAY OPERATIONS"
-        title="Parcel Orders"
-        sub="Take parcel orders, record advance payment, and complete handoff when Chef sends them back."
+        title={new Date(`${selectedDate}T12:00:00`).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+        sub={`${parcels.length} parcel order${parcels.length === 1 ? "" : "s"} created on this date.`}
         action={
-          <button className="primary" onClick={() => setCreating(true)}>
-            <Plus size={15} /> New parcel order
-          </button>
+          <div className="booking-head-actions"><button className="secondary" onClick={() => setSelectedDate(null)}><ChevronLeft size={15}/> Calendar</button><button className="primary" onClick={() => setCreating(true)}><Plus size={15}/> New parcel order</button></div>
         }
       />
       <div className="parcel-flow">
@@ -2573,7 +2635,7 @@ function ParcelBuilder({ data, user, close, refresh, toast }) {
       <div className="order-builder">
         <div className="menu-list">
           {data.menu.map((m) => (
-            <button key={m.id} className={cart.some((item) => item.menuId === m.id) ? "selected-food" : ""} onClick={() => add(m.id)}>
+            <button key={m.id} disabled={!m.available} className={`${cart.some((item) => item.menuId === m.id) ? "selected-food" : ""} ${!m.available ? "dish-disabled" : ""}`} onClick={() => add(m.id)}>
               <span>
                 {m.imageUrl ? <img src={m.imageUrl} alt="" /> : m.icon}
               </span>
@@ -2581,7 +2643,7 @@ function ParcelBuilder({ data, user, close, refresh, toast }) {
                 <b>{m.name}</b>
                 <small>{m.category}</small>
               </div>
-              <strong>{cart.some((item) => item.menuId === m.id) ? <><CheckCircle2 size={14}/> Selected</> : money(m.price)}</strong>
+              <strong>{!m.available ? "Unavailable" : cart.some((item) => item.menuId === m.id) ? <><CheckCircle2 size={14}/> Selected</> : money(m.price)}</strong>
             </button>
           ))}
         </div>
@@ -4648,6 +4710,7 @@ function StaffEditor({ staff, users, close, refresh, toast }) {
                 ["waiter", "Waiter", "Multiple accounts"],
                 ["chef", "Head Chef", "Single company login"],
                 ["admin", "Admin", "Single company login"],
+                ...(staff?.role === "juicer" ? [["juicer", "Juicer", "Created by Head Chef · managed by Admin"]] : []),
               ].map(([value, label, note]) => {
                 const disabled = value !== "waiter" && roleExists(value);
                 return <button type="button" key={value} disabled={disabled} className={form.role === value ? "selected" : ""} onClick={() => setForm({ ...form, role: value })}><span>{label}</span><small>{disabled ? "Already created · unavailable" : note}</small>{disabled ? <CheckCircle2 size={14}/> : null}</button>;
@@ -5120,11 +5183,12 @@ function OrderBuilder({ table, data, user, existing, refresh, toast, close }) {
         </div>
         <div className="menu-list">
           {data.menu
-            .filter((m) => m.available && (cat === "All" || m.category === cat))
+            .filter((m) => cat === "All" || m.category === cat)
             .map((m) => (
               <button
                 key={m.id}
-                className={cart.some((item) => item.menuId === m.id) ? "selected-food" : ""}
+                disabled={!m.available}
+                className={`${cart.some((item) => item.menuId === m.id) ? "selected-food" : ""} ${!m.available ? "dish-disabled" : ""}`}
                 onClick={() => add(m.id)}
               >
                 <span>
@@ -5132,9 +5196,9 @@ function OrderBuilder({ table, data, user, existing, refresh, toast, close }) {
                 </span>
                 <div>
                   <b>{m.name}</b>
-                  <small>{m.category}</small>
+                  <small>{m.available ? m.category : `${m.category} · Not available`}</small>
                 </div>
-                <strong>{cart.some((item) => item.menuId === m.id) ? <><CheckCircle2 size={14}/> Selected</> : money(m.price)}</strong>
+                <strong>{!m.available ? "Not available" : cart.some((item) => item.menuId === m.id) ? <><CheckCircle2 size={14}/> Selected</> : money(m.price)}</strong>
               </button>
             ))}
         </div>
@@ -5426,11 +5490,29 @@ function AdminBillPopup({ order, table, data, refresh, toast, close }) {
   );
 }
 
+function productionOrders(data, role) {
+  const wantsJuice = role === "juicer";
+  return data.orders
+    .filter((order) => !["completed", "served", "billing_requested"].includes(order.status))
+    .map((order) => {
+      const items = order.items.filter((line) => {
+        const menu = data.menu.find((item) => item.id === line.menuId);
+        return (String(menu?.category || "").toLowerCase() === "juices") === wantsJuice;
+      });
+      if (!items.length) return null;
+      const status = items.every((line) => line.itemStatus === "ready")
+        ? "ready"
+        : items.every((line) => (line.itemStatus || "new") === "new")
+          ? "new"
+          : "preparing";
+      return { ...order, items, status, department: role };
+    })
+    .filter(Boolean);
+}
+
 function Chef({ data, refresh, user, logout, toast }) {
   const [page, setPage] = useState("attendance");
-  const active = data.orders.filter(
-    (o) => !["completed", "served", "billing_requested"].includes(o.status),
-  );
+  const active = productionOrders(data, "chef");
   const orders =
     page === "parcels"
       ? active.filter((o) => o.orderType === "parcel")
@@ -5468,8 +5550,14 @@ function Chef({ data, refresh, user, logout, toast }) {
         />
       </Shell>
     );
+  if (page === "dishes")
+    return (
+      <Shell role="chef" user={user} page={page} setPage={setPage} logout={logout}>
+        <ChefDishes data={data} refresh={refresh} toast={toast} />
+      </Shell>
+    );
   async function status(id, next) {
-    await api(`/orders/${id}/status`, {
+    await api(`/orders/${id}/items/status`, {
       method: "PATCH",
       body: JSON.stringify({ status: next }),
     });
@@ -5525,9 +5613,52 @@ function Chef({ data, refresh, user, logout, toast }) {
     </Shell>
   );
 }
+
+function Juicer({ data, refresh, user, logout, toast }) {
+  const [page, setPage] = useState("attendance");
+  const active = productionOrders(data, "juicer");
+  if (page === "attendance") return <Shell role="juicer" user={user} page={page} setPage={setPage} logout={logout}><AttendancePanel user={user} toast={toast}/></Shell>;
+  if (page === "juices") return <Shell role="juicer" user={user} page={page} setPage={setPage} logout={logout}><ChefDishes data={{...data,menu:data.menu.filter(item=>String(item.category).toLowerCase()==="juices")}} refresh={refresh} toast={toast} juicer/></Shell>;
+  const orders = page === "ready" ? active.filter(order => order.status === "ready") : active.filter(order => order.status !== "ready");
+  async function status(id, next) {
+    await api(`/orders/${id}/items/status`, { method: "PATCH", body: JSON.stringify({ status: next }) });
+    await refresh();
+    toast(`Juice order #${id} marked ${next}`);
+  }
+  return <Shell role="juicer" user={user} page={page} setPage={setPage} logout={logout}>
+    <PageHead kicker="LIVE JUICE STATION" title={page === "ready" ? "Ready Juices" : "Juice Queue"} sub={`${orders.length} juice tickets · food items remain in the Chef portal.`}/>
+    <div className="kitchen-summary"><span><i className="new"/><b>{active.filter(o=>o.status==="new").length}</b> New</span><span><i className="preparing"/><b>{active.filter(o=>o.status==="preparing").length}</b> Preparing</span><span><i className="ready"/><b>{active.filter(o=>o.status==="ready").length}</b> Ready</span></div>
+    <div className="kitchen-grid">{orders.map(order=><KitchenTicket key={order.id} order={order} data={data} status={status} departmentLabel="juice items"/>)}</div>
+    {!orders.length?<div className="empty-state"><CupSoda/><h3>Juice station is clear</h3><p>No juice items in this queue right now.</p></div>:null}
+  </Shell>;
+}
+function ChefDishes({ data, refresh, toast, juicer = false }) {
+  const [query, setQuery] = useState("");
+  const dishes = data.menu.filter((item) => !item.isCombo && item.name.toLowerCase().includes(query.toLowerCase()));
+  async function setAvailability(item, available) {
+    await api(`/menu/${item.id}/availability`, { method: "PATCH", body: JSON.stringify({ available }) });
+    await refresh();
+    toast(`${item.name} marked ${available ? "available" : "completed / unavailable"}`);
+  }
+  return <>
+    <PageHead kicker={juicer?"JUICE MENU CONTROL":"KITCHEN MENU CONTROL"} title={juicer?"Juices":"Dishes"} sub={`Mark a completed or sold-out ${juicer?"juice":"dish"} unavailable. Admin and Waiter ordering screens update automatically.`} />
+    <div className="dish-control-toolbar"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search dishes…"/><span><b>{dishes.filter((item) => item.available).length}</b> available · <b>{dishes.filter((item) => !item.available).length}</b> completed</span></div>
+    <div className="chef-dish-grid">{dishes.map((item) => <article className={`chef-dish-card ${item.available ? "available" : "completed"}`} key={item.id}>
+      <div className="chef-dish-visual">{item.imageUrl ? <img src={item.imageUrl} alt=""/> : <span>{item.icon}</span>}</div>
+      <div><small>{item.category}</small><h3>{item.name}</h3><p>{item.description || "Kitchen menu item"}</p></div>
+      <Status status={item.available ? "available" : "completed"}/>
+      {item.available ? <button className="secondary" onClick={() => setAvailability(item, false)}><CheckCircle2 size={15}/> Mark completed</button> : <button className="primary" onClick={() => setAvailability(item, true)}>Make available</button>}
+    </article>)}</div>
+    {!dishes.length ? <div className="empty-state"><UtensilsCrossed/><h3>No dishes found</h3></div> : null}
+  </>;
+}
 function ChefManagement({ data, refresh, user, toast }) {
   const [editor, setEditor] = useState(null),
+    [juicer, setJuicer] = useState(undefined),
+    [juicerEditor, setJuicerEditor] = useState(false),
     staff = data.kitchenStaff || [];
+  const loadJuicer = useCallback(() => api("/juicer-login").then(setJuicer).catch((error) => toast(error.message)), [toast]);
+  useEffect(() => { loadJuicer(); }, [loadJuicer]);
   async function remove(id) {
     try {
       await api(`/kitchen-staff/${id}`, { method: "DELETE" });
@@ -5543,12 +5674,12 @@ function ChefManagement({ data, refresh, user, toast }) {
         kicker="HEAD CHEF CONTROL"
         title="Chef Management"
         sub="Add kitchen employees without separate application logins."
-        action={
-          <button className="primary" onClick={() => setEditor({})}>
-            <Plus size={15} /> Add chef
-          </button>
-        }
+        action={<div className="page-actions"><button className="secondary" disabled={!!juicer} onClick={() => setJuicerEditor(true)}><CupSoda size={15}/> {juicer ? "Juicer login created" : "Create Juicer login"}</button><button className="primary" onClick={() => setEditor({})}><Plus size={15}/> Add chef</button></div>}
       />
+      <section className="panel juicer-account-panel">
+        <div><span className="eyebrow">JUICE STATION ACCESS</span><h3>{juicer ? juicer.name : "No Juicer login yet"}</h3><p>{juicer ? `Six-digit PIN assigned · ${juicer.active ? "Active" : "Disabled by Admin"}` : "Create the company’s single Juicer PIN. Admin can edit or disable it from Staff Management."}</p></div>
+        <Status status={juicer ? (juicer.active ? "active" : "inactive") : "not created"}/>
+      </section>
       <div className="stats">
         <Stat
           icon={ChefHat}
@@ -5583,8 +5714,14 @@ function ChefManagement({ data, refresh, user, toast }) {
           toast={toast}
         />
       )}
+      {juicerEditor && !juicer ? <JuicerLoginEditor close={() => setJuicerEditor(false)} done={async()=>{setJuicerEditor(false);await loadJuicer();await refresh()}} toast={toast}/> : null}
     </>
   );
+}
+function JuicerLoginEditor({ close, done, toast }) {
+  const [form,setForm]=useState({name:"",pin:"",phone:"",payType:"monthly",payRate:0}),[busy,setBusy]=useState(false);
+  async function save(event){event.preventDefault();setBusy(true);try{await api("/juicer-login",{method:"POST",body:JSON.stringify(form)});toast("Juicer login created");await done()}catch(error){toast(error.message)}finally{setBusy(false)}}
+  return <Modal close={close}><span className="eyebrow">JUICE STATION LOGIN</span><h2>Create Juicer login</h2><p>The six-digit PIN is unique across every role and KnockOUT company.</p><form className="modal-form" onSubmit={save}><label>Full name<input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></label><div className="form-grid"><label>6-digit login PIN<input required pattern="[0-9]{6}" maxLength="6" inputMode="numeric" value={form.pin} onChange={e=>setForm({...form,pin:e.target.value.replace(/\D/g,"").slice(0,6)})}/></label><label>Phone<input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})}/></label><label>Salary basis<select value={form.payType} onChange={e=>setForm({...form,payType:e.target.value})}><option value="daily">Daily</option><option value="monthly">Monthly</option></select></label><label>Salary amount<input type="number" min="0" value={form.payRate} onChange={e=>setForm({...form,payRate:e.target.value})}/></label></div><button className="primary wide" disabled={busy||form.pin.length!==6}>{busy?"Creating…":"Create Juicer login"}</button></form></Modal>;
 }
 function KitchenStaffEditor({ member, user, close, refresh, toast }) {
   const [form, setForm] = useState({
@@ -5697,7 +5834,7 @@ function KitchenStaffEditor({ member, user, close, refresh, toast }) {
     </Modal>
   );
 }
-function KitchenTicket({ order, data, status }) {
+function KitchenTicket({ order, data, status, departmentLabel = "food items" }) {
   const table = data.tables.find((t) => t.id === order.tableId),
     isParcel = order.orderType === "parcel",
     [expanded, setExpanded] = useState(false);
@@ -5718,7 +5855,7 @@ function KitchenTicket({ order, data, status }) {
             <div><small>ELAPSED TIME</small><b><Clock3 size={14}/>{elapsed(order.createdAt)}</b></div>
             <Status status={order.status}/>
           </div>
-          <div className="chef-detail-meta"><span>{isParcel ? order.guestName : `Taken by ${order.waiter}`}</span><span>{order.items.reduce((sum,item)=>sum+item.qty,0)} food items</span></div>
+          <div className="chef-detail-meta"><span>{isParcel ? order.guestName : `Taken by ${order.waiter}`}</span><span>{order.items.reduce((sum,item)=>sum+item.qty,0)} {departmentLabel}</span></div>
           <div className="ticket-items chef-detail-items">
             <div className="chef-food-columns" aria-hidden="true">
               <span>Food item</span>
@@ -5734,8 +5871,7 @@ function KitchenTicket({ order, data, status }) {
           </div>
           {order.status === "new" ? <button className="primary wide" onClick={() => status(order.id,"preparing")}>Start preparing <ArrowRight size={15}/></button> : null}
           {order.status === "preparing" ? <button className="ready-btn wide" onClick={() => status(order.id,"ready")}><CheckCircle2 size={16}/> Mark ready for {isParcel?"Admin":"service"}</button> : null}
-          {order.status === "ready" && !isParcel ? <button className="secondary wide" onClick={() => status(order.id,"served")}>Mark collected</button> : null}
-          {order.status === "ready" && isParcel ? <div className="parcel-done"><CheckCircle2 size={16}/> Sent back to Admin</div> : null}
+          {order.status === "ready" ? <div className="parcel-done"><CheckCircle2 size={16}/> Department items ready · waiting for remaining service flow</div> : null}
         </Modal>
       ) : null}
     </>

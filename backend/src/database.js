@@ -27,14 +27,14 @@ export const pool={
 export async function migrate() {
   const sql = [
     `CREATE TABLE IF NOT EXISTS settings (id INT PRIMARY KEY DEFAULT 1, hotel_name VARCHAR(120) NOT NULL, tax_rate DECIMAL(5,2) NOT NULL DEFAULT 5, service_charge DECIMAL(5,2) NOT NULL DEFAULT 5, currency VARCHAR(8) NOT NULL DEFAULT 'INR', updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)`,
-    `CREATE TABLE IF NOT EXISTS users (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(120) NOT NULL, role ENUM('admin','waiter','chef') NOT NULL, pin VARCHAR(20) NOT NULL, phone VARCHAR(30) DEFAULT '', pay_type ENUM('daily','monthly') DEFAULT 'monthly', pay_rate DECIMAL(10,2) DEFAULT 0, active BOOLEAN DEFAULT TRUE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`,
+    `CREATE TABLE IF NOT EXISTS users (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(120) NOT NULL, role ENUM('admin','waiter','chef','juicer') NOT NULL, pin VARCHAR(20) NOT NULL, phone VARCHAR(30) DEFAULT '', pay_type ENUM('daily','monthly') DEFAULT 'monthly', pay_rate DECIMAL(10,2) DEFAULT 0, active BOOLEAN DEFAULT TRUE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`,
     `CREATE TABLE IF NOT EXISTS kitchen_staff (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(120) NOT NULL, designation VARCHAR(100) NOT NULL DEFAULT 'Chef', phone VARCHAR(30) DEFAULT '', specialization VARCHAR(120) DEFAULT '', pay_type ENUM('daily','monthly') DEFAULT 'monthly', pay_rate DECIMAL(10,2) DEFAULT 0, joined_on DATE NULL, notes VARCHAR(255) DEFAULT '', active BOOLEAN DEFAULT TRUE, created_by VARCHAR(120) DEFAULT 'Head Chef', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)`,
     `CREATE TABLE IF NOT EXISTS staff_attendance (id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, check_in DATETIME NOT NULL, check_out DATETIME NULL, notes VARCHAR(255) DEFAULT '', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id))`,
     `CREATE TABLE IF NOT EXISTS restaurant_tables (id INT AUTO_INCREMENT PRIMARY KEY, table_number INT NOT NULL UNIQUE, seats INT NOT NULL, area VARCHAR(80) NOT NULL, status ENUM('available','occupied','reserved','cleaning') DEFAULT 'available', guest_name VARCHAR(120) DEFAULT '', booking_time VARCHAR(10) DEFAULT '', order_id INT NULL, active BOOLEAN DEFAULT TRUE)`,
     `CREATE TABLE IF NOT EXISTS menu_items (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(160) NOT NULL, category VARCHAR(80) NOT NULL, description VARCHAR(500) DEFAULT '', price DECIMAL(10,2) NOT NULL, icon VARCHAR(20) DEFAULT '🍽️', image_url VARCHAR(500) NULL, image_object VARCHAR(255) NULL, is_combo BOOLEAN DEFAULT FALSE, available BOOLEAN DEFAULT TRUE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`,
     `CREATE TABLE IF NOT EXISTS combo_components (id INT AUTO_INCREMENT PRIMARY KEY, combo_id INT NOT NULL, menu_id INT NOT NULL, quantity INT NOT NULL DEFAULT 1, FOREIGN KEY (combo_id) REFERENCES menu_items(id) ON DELETE CASCADE, FOREIGN KEY (menu_id) REFERENCES menu_items(id))`,
     `CREATE TABLE IF NOT EXISTS orders (id INT AUTO_INCREMENT PRIMARY KEY, table_id INT NULL, order_type ENUM('dine_in','parcel') NOT NULL DEFAULT 'dine_in', guest_name VARCHAR(120), customer_phone VARCHAR(30) DEFAULT '', waiter VARCHAR(120), status ENUM('new','preparing','ready','served','billing_requested','completed') DEFAULT 'new', payment_status ENUM('unpaid','paid') DEFAULT 'unpaid', payment_method VARCHAR(30) NULL, subtotal DECIMAL(10,2) NULL, tax DECIMAL(10,2) NULL, service_charge DECIMAL(10,2) NULL, total DECIMAL(10,2) NULL, created_at DATETIME NOT NULL, completed_at DATETIME NULL, FOREIGN KEY (table_id) REFERENCES restaurant_tables(id))`,
-    `CREATE TABLE IF NOT EXISTS order_items (id INT AUTO_INCREMENT PRIMARY KEY, order_id INT NOT NULL, menu_id INT NOT NULL, quantity INT NOT NULL, note VARCHAR(255) DEFAULT '', price DECIMAL(10,2) NOT NULL, FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE, FOREIGN KEY (menu_id) REFERENCES menu_items(id))`,
+    `CREATE TABLE IF NOT EXISTS order_items (id INT AUTO_INCREMENT PRIMARY KEY, order_id INT NOT NULL, menu_id INT NOT NULL, quantity INT NOT NULL, note VARCHAR(255) DEFAULT '', price DECIMAL(10,2) NOT NULL, production_status ENUM('new','preparing','ready') NOT NULL DEFAULT 'new', FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE, FOREIGN KEY (menu_id) REFERENCES menu_items(id))`,
     `CREATE TABLE IF NOT EXISTS inventory (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(160) NOT NULL, category VARCHAR(80), quantity DECIMAL(10,2) NOT NULL, unit VARCHAR(20) NOT NULL, min_quantity DECIMAL(10,2) NOT NULL, cost DECIMAL(10,2) NOT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)`,
     `CREATE TABLE IF NOT EXISTS inventory_transactions (id INT AUTO_INCREMENT PRIMARY KEY, inventory_id INT NOT NULL, movement_type ENUM('purchase','usage','adjustment','waste') NOT NULL, quantity DECIMAL(10,2) NOT NULL, unit_cost DECIMAL(10,2) NULL, note VARCHAR(255) DEFAULT '', created_by VARCHAR(120) DEFAULT 'Admin', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (inventory_id) REFERENCES inventory(id))`,
     `CREATE TABLE IF NOT EXISTS finance_entries (id INT AUTO_INCREMENT PRIMARY KEY, entry_type ENUM('income','expense') NOT NULL, category VARCHAR(100) NOT NULL, description VARCHAR(255) NOT NULL, amount DECIMAL(12,2) NOT NULL, payment_method VARCHAR(40) DEFAULT 'Cash', entry_date DATE NOT NULL, reference VARCHAR(100) DEFAULT '', created_by VARCHAR(120) DEFAULT 'Admin', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`,
@@ -55,6 +55,8 @@ export async function migrate() {
     ,`ALTER TABLE restaurant_tables MODIFY status ENUM('available','occupied','reserved','cleaning') DEFAULT 'available'`
     ,`ALTER TABLE restaurant_tables ADD COLUMN active BOOLEAN DEFAULT TRUE AFTER order_id`
     ,`ALTER TABLE orders MODIFY status ENUM('new','preparing','ready','served','billing_requested','completed') DEFAULT 'new'`
+    ,`ALTER TABLE users MODIFY role ENUM('admin','waiter','chef','juicer') NOT NULL`
+    ,`ALTER TABLE order_items ADD COLUMN production_status ENUM('new','preparing','ready') NOT NULL DEFAULT 'new' AFTER price`
   ];
   for (const statement of upgrades) { try { await pool.query(statement); } catch (error) { if (error.code !== 'ER_DUP_FIELDNAME') throw error; } }
   const salaryUpgrades = [
@@ -70,6 +72,8 @@ export async function migrate() {
   for (const {databaseName} of companySchemas) {
     if (!/^[a-z0-9_]+$/.test(databaseName)) continue;
     const bookingUpgrades = [
+      `ALTER TABLE \`${databaseName}\`.users MODIFY role ENUM('admin','waiter','chef','juicer') NOT NULL`,
+      `ALTER TABLE \`${databaseName}\`.order_items ADD COLUMN production_status ENUM('new','preparing','ready') NOT NULL DEFAULT 'new' AFTER price`,
       `ALTER TABLE \`${databaseName}\`.bookings ADD COLUMN customer_phone VARCHAR(30) NOT NULL DEFAULT '' AFTER guest_name`,
       `ALTER TABLE \`${databaseName}\`.bookings ADD COLUMN booking_date DATE NULL AFTER customer_phone`,
       `ALTER TABLE \`${databaseName}\`.bookings ADD COLUMN duration_minutes INT NOT NULL DEFAULT 90 AFTER booking_time`,
@@ -119,7 +123,7 @@ export async function getState() {
     pool.query('SELECT id,name,category,description,price,icon,image_url imageUrl,image_object imageObject,is_combo isCombo,available FROM menu_items ORDER BY id'),
     pool.query('SELECT cc.combo_id comboId,cc.menu_id menuId,cc.quantity,m.name,m.category FROM combo_components cc JOIN menu_items m ON m.id=cc.menu_id ORDER BY cc.id'),
     pool.query('SELECT id,table_id tableId,order_type orderType,guest_name guestName,customer_phone customerPhone,waiter,status,payment_status paymentStatus,payment_method paymentMethod,total,created_at createdAt,completed_at completedAt FROM orders ORDER BY id DESC'),
-    pool.query('SELECT order_id orderId,menu_id menuId,quantity qty,note FROM order_items ORDER BY id'),
+    pool.query('SELECT order_id orderId,menu_id menuId,quantity qty,note,production_status itemStatus FROM order_items ORDER BY id'),
     pool.query('SELECT id,name,category,quantity,unit,min_quantity min,cost,updated_at updatedAt FROM inventory ORDER BY id'),
     pool.query('SELECT id,inventory_id inventoryId,movement_type movementType,quantity,unit_cost unitCost,note,created_by createdBy,created_at createdAt FROM inventory_transactions ORDER BY id DESC LIMIT 300'),
     pool.query('SELECT id,entry_type entryType,category,description,amount,payment_method paymentMethod,entry_date entryDate,reference,created_by createdBy,created_at createdAt FROM finance_entries ORDER BY entry_date DESC,id DESC LIMIT 500'),

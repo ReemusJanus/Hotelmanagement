@@ -9,7 +9,7 @@ function portalIdentity(){
 export function portalHeaders(){const identity=portalIdentity();return {'X-Company-Database':identity.companyDatabase,'X-Portal-Role':identity.role}}
 export async function api(path, options={}) {
   const identity=portalIdentity(),companyDatabase=identity.companyDatabase;
-  const buildRole=import.meta.env.VITE_PORTAL_ROLE||'admin',activeRole=identity.role||buildRole,ports={admin:6100,waiter:7100,chef:8100};
+  const buildRole=import.meta.env.VITE_PORTAL_ROLE||'admin',activeRole=identity.role||buildRole,ports={admin:6100,waiter:7100,chef:8100,juicer:9100};
   const base=['superadmin','unified'].includes(buildRole)?API_BASE:`${location.protocol}//${location.hostname}:${ports[activeRole]||ports.admin}/api`;
   const response = await fetch(base + path, {...options,headers: {'Content-Type':'application/json','X-Company-Database':companyDatabase,'X-Portal-Role':activeRole,...options.headers}});
   const data = await response.json();
