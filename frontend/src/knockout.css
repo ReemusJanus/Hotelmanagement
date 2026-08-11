@@ -243,6 +243,23 @@
 .table-kitchen-state.kitchen-preparing { border-color:#356d92; background:#152b39; color:#83c9f4; }
 .table-kitchen-state.kitchen-ready { border-color:#3e8552; background:#163421; color:#91e5a9; }
 .table-kitchen-state.kitchen-served { border-color:#3f8070; background:#17332d; color:#91dac8; }
+.table-production-monitor { display:grid!important; gap:6px; margin:12px 0 2px; padding:8px; border:1px solid #ffffff1c; border-radius:10px; background:#0d0f0bd1; box-shadow:inset 0 1px #ffffff0c; }
+.table-production-head { display:flex!important; align-items:center; justify-content:space-between!important; color:#898c82; font-size:7px; font-weight:900; letter-spacing:.1em; text-transform:uppercase; }
+.table-production-head b { display:flex; align-items:center; gap:4px; color:#ff9b79; animation:productionAttention 1.5s ease-in-out infinite; }
+.table-production-row { display:grid!important; grid-template-columns:25px minmax(0,1fr) auto; align-items:center; gap:7px; padding:7px; border:1px solid #383a32; border-radius:8px; background:#20211b; }
+.table-production-row .production-icon { width:25px; height:25px; display:grid; place-items:center; border-radius:7px; background:#ffffff0c; color:#d5d7cd; }
+.table-production-row .production-copy { min-width:0; }
+.table-production-row small,.table-production-row b { display:block; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.table-production-row small { color:#85887e; font-size:6.5px; text-transform:uppercase; letter-spacing:.05em; }
+.table-production-row b { margin-top:3px; color:#f2f2e9; font-size:7.5px; }
+.table-production-row em { min-width:50px; padding:4px 6px; border-radius:10px; border:1px solid currentColor; font-size:6.5px; font-weight:900; text-align:center; text-transform:uppercase; }
+.table-production-row.dish { border-left:3px solid #e69d43; }.table-production-row.juice { border-left:3px solid #5eb9d1; }
+.table-production-row.new em { color:#eab35f; background:#3a2816; }.table-production-row.preparing em { color:#82cafa; background:#142e40; }.table-production-row.ready em { color:#8ce0a4; background:#153622; }
+.table-detail-production { display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-bottom:14px; }
+.table-detail-production>div { padding:11px; border:1px solid #41433a; border-radius:10px; background:#171813; }
+.table-detail-production>div>span { display:flex; align-items:center; gap:7px; color:#f4f4ea; font-size:9px; }.table-detail-production em { float:right; margin-top:-17px; font-size:7px; font-weight:900; text-transform:uppercase; }.table-detail-production p { clear:both; margin:9px 0 0; color:#989b91; font-size:8px; line-height:1.5; }
+.table-detail-production .dish { border-left:3px solid #e69d43; }.table-detail-production .juice { border-left:3px solid #5eb9d1; }.table-detail-production .new em { color:#eab35f; }.table-detail-production .preparing em { color:#82cafa; }.table-detail-production .ready em { color:#8ce0a4; }
+@keyframes productionAttention { 50% { opacity:.48; } }
 .table-card-actions { display:flex; gap:7px; margin-top:11px; padding-top:10px; border-top:1px solid #35362f; }
 .table-card-actions button { flex:1; min-height:34px; display:flex; align-items:center; justify-content:center; gap:6px; border:1px solid #4a4b41; border-radius:8px; background:#292a23; color:#f4f4ee; font-size:8px; font-weight:800; }
 .table-card-actions.urgent button { border-color:#a6473e; background:#351b18; color:#ffaaa2; }
@@ -495,6 +512,7 @@ input,select,textarea,.modal-form input,.modal-form select,.settings-form input{
 }
 .brand .logo { width:50px!important; height:50px!important; flex-basis:50px!important; }
 .receipt-brand .logo { width:62px; height:62px; }
+.receipt-logo{display:block;width:72px;height:72px;margin:0 auto 10px;border-radius:50%;object-fit:cover;border:1px solid #d4d0c2}
 
 /* Advanced stock and finance workspaces */
 .stock-toolbar,.stock-history-tools{display:flex;align-items:center;gap:9px;margin-bottom:14px;padding:11px;border:1px solid rgba(255,255,255,.13);border-radius:13px;background:rgba(31,33,27,.68);backdrop-filter:blur(18px)}
@@ -551,3 +569,38 @@ input,select,textarea,.modal-form input,.modal-form select,.settings-form input{
 .chef-summary-table{display:flex;align-items:baseline;gap:8px;padding:12px;border:1px solid rgba(244,196,48,.38);border-radius:12px;background:rgba(244,196,48,.1);color:#f4c430;font-size:8px;font-weight:900;letter-spacing:.11em}.chef-summary-table b{color:#fff6c9;font:900 29px 'Playfair Display';line-height:1}.chef-order-summary.parcel .chef-summary-table{display:grid;gap:4px}.chef-order-summary.parcel .chef-summary-table b{font-size:16px}
 @media(max-width:800px){.chef-order-summary{grid-template-columns:105px 1fr auto;gap:10px}.chef-order-summary>span:nth-child(3){display:none}.chef-order-summary>.status{grid-column:auto}.chef-detail-head{grid-template-columns:1fr auto;padding-top:48px;padding-left:0}.chef-detail-head>span{grid-column:1/-1}.chef-detail-head>div:nth-of-type(2){display:none}}
 .page-actions,.juicer-account-panel{display:flex;align-items:center;gap:12px}.juicer-account-panel{justify-content:space-between;margin-bottom:20px;padding:18px 20px}.juicer-account-panel h3{margin:5px 0}.juicer-account-panel p{margin:0;color:var(--muted)}
+.staff-delete-button{width:100%;min-height:44px;margin-top:10px;border:1px solid rgba(255,112,96,.35);border-radius:10px;background:rgba(85,31,25,.35);color:#ff8b7d;display:flex;align-items:center;justify-content:center;gap:8px}.staff-delete-confirm{margin-top:12px;padding:14px;border:1px solid rgba(255,112,96,.4);border-radius:12px;background:rgba(73,25,20,.4)}.staff-delete-confirm b{color:#ff9a8e}.staff-delete-confirm p{margin:6px 0 12px;font-size:11px}.staff-delete-confirm>div{display:flex;gap:8px}.staff-delete-confirm button{flex:1;min-height:39px;border-radius:8px}.staff-delete-confirm button.danger{border:1px solid #774038;background:#3d211d;color:#ff8d81}.protected-account-note{margin-top:11px;padding:10px;border:1px solid rgba(244,196,48,.25);border-radius:9px;color:#baae7b;font-size:10px;text-align:center}
+
+/* Print only the selected receipt. The temporary top-level copy prevents the
+   hidden dashboard and modal from producing blank extra pages. */
+.print-receipt-root{display:none}
+@media print{
+  @page{size:72mm 120mm;margin:0}
+  html,body{width:72mm!important;max-width:72mm!important;margin:0!important;padding:0!important;overflow:hidden!important;background:#fff!important}
+  body.printing-receipt #root{display:none!important}
+  body.printing-receipt .print-receipt-root{display:block!important;width:72mm!important;max-width:72mm!important;margin:0!important;padding:0!important;overflow:hidden!important}
+  body.printing-receipt .print-receipt-copy{break-after:page;page-break-after:always}
+  body.printing-receipt .print-receipt-copy:last-child{break-after:auto;page-break-after:auto}
+  body.printing-receipt .print-receipt-root .receipt{box-sizing:border-box!important;position:relative!important;inset:auto!important;display:block!important;width:72mm!important;max-width:72mm!important;min-height:0!important;margin:0!important;padding:4mm 2mm!important;overflow:hidden!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:#fff!important;color:#000!important;font-family:Arial,Helvetica,sans-serif!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body.printing-receipt .receipt-logo{display:block!important;width:15mm!important;height:15mm!important;margin:0 auto 1mm!important;border-radius:50%!important;object-fit:cover!important;filter:grayscale(1) contrast(1.35)!important}
+  body.printing-receipt .receipt-watermark{display:block!important;width:56mm!important;height:56mm!important;opacity:.035!important;filter:grayscale(1) contrast(1.25)!important}
+  body.printing-receipt .receipt-brand h2{margin:.8mm 0 .4mm!important;color:#000!important;font:700 16pt Georgia,'Times New Roman',serif!important;letter-spacing:.4pt!important}
+  body.printing-receipt .receipt-brand p{margin:0 0 2mm!important;color:#000!important;font:700 9.5pt Arial,Helvetica,sans-serif!important;letter-spacing:.35pt!important;text-transform:uppercase!important}
+  body.printing-receipt .receipt-meta{display:grid!important;grid-template-columns:auto 1fr!important;gap:1mm 3mm!important;margin:1.5mm 0!important;padding:2mm 0!important;border-color:#000!important;color:#000!important;font-size:9.5pt!important;line-height:1.25!important}
+  body.printing-receipt .receipt-meta span:nth-child(2){text-align:right!important}
+  body.printing-receipt .receipt-meta span:last-child{grid-column:1/-1!important;text-align:center!important}
+  body.printing-receipt .receipt-items{padding:2.5mm 0!important;border-color:#000!important}
+  body.printing-receipt .receipt-items>div,body.printing-receipt .receipt-totals p{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;gap:3mm!important;align-items:start!important;margin:1.5mm 0!important;color:#000!important;font-size:10.5pt!important;line-height:1.25!important}
+  body.printing-receipt .receipt-items span{overflow-wrap:anywhere!important}
+  body.printing-receipt .receipt-items b,body.printing-receipt .receipt-totals b{white-space:nowrap!important;text-align:right!important}
+  body.printing-receipt .receipt-totals{padding-top:1mm!important;border-color:#000!important}
+  body.printing-receipt .receipt-totals .grand{margin-top:2.5mm!important;padding-top:2.5mm!important;border-color:#000!important;color:#000!important;font:700 14pt Georgia,'Times New Roman',serif!important;grid-template-columns:1fr auto!important}
+  body.printing-receipt .receipt-totals .grand b{color:#000!important;font-weight:900!important;opacity:1!important;filter:none!important}
+  body.printing-receipt .receipt-footer{display:flex!important;flex-direction:column!important;align-items:center!important;gap:1mm!important;margin-top:4mm!important;padding-top:3mm!important;border-top:1px solid #000!important;text-align:center!important;color:#000!important}
+  body.printing-receipt .receipt-footer b{font:700 9.5pt Georgia,'Times New Roman',serif!important;letter-spacing:.25pt!important;text-transform:uppercase!important}
+  body.printing-receipt .receipt-footer span{font:8.5pt Arial,Helvetica,sans-serif!important}
+  body.printing-receipt .receipt-footer i{margin-top:.5mm!important;font-size:6pt!important;font-style:normal!important}
+  body.printing-receipt .receipt *{text-shadow:none!important}
+  body.printing-receipt .print{display:none!important}
+  body.printing-receipt .receipt,.print-receipt-root .receipt *{visibility:visible!important}
+}

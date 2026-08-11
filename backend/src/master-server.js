@@ -1,14 +1,36 @@
 import express from 'express';
 import cors from 'cors';
 import mysql from 'mysql2/promise';
+import http from 'node:http';
+import {WebSocketServer,WebSocket} from 'ws';
 
 const app=express(),port=Number(process.env.PORT||5000),masterDb=process.env.MASTER_DB_NAME||'knockout_master';
+const server=http.createServer(app),socketServer=new WebSocketServer({server,path:'/ws'});
 const rootConfig={host:process.env.DB_HOST||'mariadb',port:Number(process.env.DB_PORT||3306),user:process.env.DB_ROOT_USER||'root',password:process.env.DB_ROOT_PASSWORD||'knockout_root'};
 let adminPool,masterPool;
 app.use(cors());app.use(express.json());
 const asyncRoute=fn=>(req,res,next)=>Promise.resolve(fn(req,res,next)).catch(next);
 const ident=value=>{const clean=String(value||'').toLowerCase().trim().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');if(!/^[a-z][a-z0-9_]{1,62}$/.test(clean))throw Object.assign(new Error('Company name cannot be converted to a valid database name'),{status:400});return clean};
 const validTenant=value=>/^knockout(?:_[0-9]+)?$/.test(String(value||''));
+const socketDatabase=value=>validTenant(value)?String(value):value==='master'?'master':null;
+function broadcastChange(database,resource='state'){
+ const message=JSON.stringify({type:'state.changed',database,resource,at:new Date().toISOString()});
+ for(const client of socketServer.clients)if(client.readyState===WebSocket.OPEN&&(client.database===database||client.database==='master'))client.send(message);
+}
+socketServer.on('connection',(socket,request)=>{
+ const database=socketDatabase(new URL(request.url,'http://localhost').searchParams.get('database'));
+ if(!database)return socket.close(1008,'Invalid company database');
+ socket.database=database;socket.isAlive=true;
+ socket.on('pong',()=>{socket.isAlive=true});
+ socket.send(JSON.stringify({type:'connected',database,at:new Date().toISOString()}));
+});
+const socketHeartbeat=setInterval(()=>{for(const socket of socketServer.clients){if(socket.isAlive===false){socket.terminate();continue}socket.isAlive=false;socket.ping()}},25000);
+socketServer.on('close',()=>clearInterval(socketHeartbeat));
+app.use((req,res,next)=>{
+ if(['GET','HEAD','OPTIONS'].includes(req.method)||['/api/login','/api/public/resolve-login'].includes(req.path))return next();
+ res.on('finish',()=>{if(res.statusCode<400){const requested=String(req.headers['x-company-database']||'');const database=socketDatabase(requested)||'master';broadcastChange(database,req.path)}});
+ next();
+});
 
 async function activeCompanies(includeSuspended=false){
  const[rows]=await masterPool.query(`SELECT id,company_name companyName,database_name databaseName FROM companies ${includeSuspended?'':"WHERE status='active'"} ORDER BY id`);
@@ -24,7 +46,7 @@ async function findPortalLogins(role,pin,includeInactive=false){
  for(const company of await activeCompanies(includeInactive)){
   try{
    const params=role?[role,String(pin)]:[String(pin)];
-   const[[user]]=await adminPool.query(`SELECT id,name,role FROM \`${company.databaseName}\`.users WHERE ${role?'role=? AND ':''}pin=? ${includeInactive?'':'AND active=TRUE'} LIMIT 1`,params);
+   const[[user]]=await adminPool.query(`SELECT id,name,role FROM \`${company.databaseName}\`.users WHERE ${role?'role=? AND ':''}pin=? AND deleted_at IS NULL ${includeInactive?'':'AND active=TRUE'} LIMIT 1`,params);
    if(user)matches.push({...user,companyDatabase:company.databaseName,companyName:company.companyName});
   }catch(error){if(error.code!=='ER_NO_SUCH_TABLE')throw error}
  }
@@ -86,7 +108,7 @@ async function provisionCompany({companyName,adminName,adminPin,email='',phone='
 }
 
 async function companySummary(company){
- try{const db=mysql.createPool({...rootConfig,database:company.databaseName,connectionLimit:1});const[[users],[admins],[orders],[revenue],[stock],[daily]]=await Promise.all([db.query('SELECT id,name,role,pin,phone,active FROM users ORDER BY role,name'),db.query("SELECT COUNT(*) count FROM users WHERE role='admin' AND active=TRUE"),db.query("SELECT COUNT(*) count FROM orders WHERE status<>'completed'"),db.query("SELECT COALESCE(SUM(total),0) total FROM orders WHERE payment_status='paid'"),db.query('SELECT COUNT(*) count FROM inventory WHERE quantity<=min_quantity'),db.query("SELECT DATE_FORMAT(completed_at,'%Y-%m-%d') day,COUNT(*) bills,COALESCE(SUM(total),0) total FROM orders WHERE payment_status='paid' AND completed_at IS NOT NULL GROUP BY DATE(completed_at) ORDER BY day DESC LIMIT 31")]);await db.end();return{...company,users,staffCount:users.filter(user=>user.active).length,adminLoginActive:admins[0].count>0,activeOrders:orders[0].count,revenue:Number(revenue[0].total),dailyRevenue:daily.map(row=>({date:row.day,bills:row.bills,total:Number(row.total)})),lowStock:stock[0].count,online:true}}catch{return{...company,users:[],staffCount:0,adminLoginActive:false,activeOrders:0,revenue:0,dailyRevenue:[],lowStock:0,online:false}}
+ try{const db=mysql.createPool({...rootConfig,database:company.databaseName,connectionLimit:1});const[[users],[admins],[orders],[revenue],[stock],[daily]]=await Promise.all([db.query('SELECT id,name,role,pin,phone,active FROM users WHERE deleted_at IS NULL ORDER BY role,name'),db.query("SELECT COUNT(*) count FROM users WHERE role='admin' AND active=TRUE AND deleted_at IS NULL"),db.query("SELECT COUNT(*) count FROM orders WHERE status<>'completed'"),db.query("SELECT COALESCE(SUM(total),0) total FROM orders WHERE payment_status='paid'"),db.query('SELECT COUNT(*) count FROM inventory WHERE quantity<=min_quantity'),db.query("SELECT DATE_FORMAT(completed_at,'%Y-%m-%d') day,COUNT(*) bills,COALESCE(SUM(total),0) total FROM orders WHERE payment_status='paid' AND completed_at IS NOT NULL GROUP BY DATE(completed_at) ORDER BY day DESC LIMIT 31")]);await db.end();return{...company,users,staffCount:users.filter(user=>user.active).length,adminLoginActive:admins[0].count>0,activeOrders:orders[0].count,revenue:Number(revenue[0].total),dailyRevenue:daily.map(row=>({date:row.day,bills:row.bills,total:Number(row.total)})),lowStock:stock[0].count,online:true}}catch{return{...company,users:[],staffCount:0,adminLoginActive:false,activeOrders:0,revenue:0,dailyRevenue:[],lowStock:0,online:false}}
 }
 
 app.use('/api',asyncRoute(async(req,res,next)=>{
@@ -108,10 +130,10 @@ app.get('/api/state',asyncRoute(async(_req,res)=>{const[companies]=await masterP
 app.post('/api/companies',asyncRoute(async(req,res)=>res.status(201).json(await provisionCompany(req.body))));
 app.patch('/api/companies/:id/status',asyncRoute(async(req,res)=>{if(!['active','suspended'].includes(req.body.status))return res.status(400).json({message:'Invalid company status'});await masterPool.query('UPDATE companies SET status=? WHERE id=?',[req.body.status,req.params.id]);res.json({ok:true})}));
 app.delete('/api/companies/:id/admin-login',asyncRoute(async(req,res)=>{const[[company]]=await masterPool.query('SELECT id,company_name companyName,database_name databaseName FROM companies WHERE id=?',[req.params.id]);if(!company)return res.status(404).json({message:'Company not found'});if(!validTenant(company.databaseName))return res.status(400).json({message:'Invalid company database'});const[result]=await adminPool.query(`UPDATE \`${company.databaseName}\`.users SET active=FALSE WHERE role='admin' AND active=TRUE`);res.json({ok:true,disabled:result.affectedRows,companyName:company.companyName})}));
-app.patch('/api/companies/:companyId/users/:userId/pin',asyncRoute(async(req,res)=>{const pin=String(req.body.pin||'');if(!/^[0-9]{6}$/.test(pin))return res.status(400).json({message:'PIN must contain exactly 6 digits'});const[[company]]=await masterPool.query('SELECT id,company_name companyName,database_name databaseName FROM companies WHERE id=?',[req.params.companyId]);if(!company||!validTenant(company.databaseName))return res.status(404).json({message:'Company not found'});const[[user]]=await adminPool.query(`SELECT id,name FROM \`${company.databaseName}\`.users WHERE id=?`,[req.params.userId]);if(!user)return res.status(404).json({message:'User not found'});const matches=await findPortalLogins(null,pin,true),used=matches.find(match=>match.companyDatabase!==company.databaseName||Number(match.id)!==Number(user.id));if(used)return res.status(409).json({message:`This PIN is already assigned to ${used.name} at ${used.companyName}`});await adminPool.query(`UPDATE \`${company.databaseName}\`.users SET pin=? WHERE id=?`,[pin,user.id]);res.json({ok:true,userId:user.id,name:user.name,pin})}));
+app.patch('/api/companies/:companyId/users/:userId/pin',asyncRoute(async(req,res)=>{const pin=String(req.body.pin||'');if(!/^[0-9]{6}$/.test(pin))return res.status(400).json({message:'PIN must contain exactly 6 digits'});const[[company]]=await masterPool.query('SELECT id,company_name companyName,database_name databaseName FROM companies WHERE id=?',[req.params.companyId]);if(!company||!validTenant(company.databaseName))return res.status(404).json({message:'Company not found'});const[[user]]=await adminPool.query(`SELECT id,name FROM \`${company.databaseName}\`.users WHERE id=? AND deleted_at IS NULL`,[req.params.userId]);if(!user)return res.status(404).json({message:'User not found'});const matches=await findPortalLogins(null,pin,true),used=matches.find(match=>match.companyDatabase!==company.databaseName||Number(match.id)!==Number(user.id));if(used)return res.status(409).json({message:`This PIN is already assigned to ${used.name} at ${used.companyName}`});await adminPool.query(`UPDATE \`${company.databaseName}\`.users SET pin=? WHERE id=?`,[pin,user.id]);res.json({ok:true,userId:user.id,name:user.name,pin})}));
 app.patch('/api/master-users/:userId/pin',asyncRoute(async(req,res)=>{const pin=String(req.body.pin||'');if(!/^[0-9]{6}$/.test(pin))return res.status(400).json({message:'PIN must contain exactly 6 digits'});const[[user]]=await masterPool.query('SELECT id,name FROM master_users WHERE id=?',[req.params.userId]);if(!user)return res.status(404).json({message:'Master user not found'});const matches=await findPortalLogins(null,pin,true),used=matches.find(match=>match.role!=='superadmin'||Number(match.id)!==Number(user.id));if(used)return res.status(409).json({message:`This PIN is already assigned to ${used.name} at ${used.companyName}`});await masterPool.query('UPDATE master_users SET pin=? WHERE id=?',[pin,user.id]);res.json({ok:true,userId:user.id,name:user.name,pin})}));
 app.delete('/api/companies/:id',asyncRoute(async(req,res)=>{const[[company]]=await masterPool.query('SELECT id,company_name companyName,database_name databaseName FROM companies WHERE id=?',[req.params.id]);if(!company)return res.status(404).json({message:'Company not found'});if(company.databaseName==='knockout')return res.status(409).json({message:'KnockOUT 1 is the protected primary company and cannot be deleted'});if(!/^knockout_[0-9]+$/.test(company.databaseName))return res.status(400).json({message:'Invalid company database'});if(req.body.companyName!==company.companyName)return res.status(400).json({message:'Type the exact company name to confirm deletion'});await adminPool.query(`DROP DATABASE \`${company.databaseName}\``);await masterPool.query('DELETE FROM companies WHERE id=?',[company.id]);res.json({ok:true,deleted:company.companyName})}));
 app.use((error,_req,res,_next)=>{console.error(error);res.status(error.status||500).json({message:error.message||'Master server error'})});
 
-async function start(){for(let attempt=1;attempt<=30;attempt++){try{await initialize();app.listen(port,()=>console.log(`KnockOUT Master API on http://localhost:${port}`));return}catch(error){console.log(`Waiting for master database (${attempt}/30): ${error.message}`);await new Promise(resolve=>setTimeout(resolve,3000))}}process.exit(1)}
+async function start(){for(let attempt=1;attempt<=30;attempt++){try{await initialize();server.listen(port,()=>console.log(`KnockOUT Master API + WebSocket on http://localhost:${port}`));return}catch(error){console.log(`Waiting for master database (${attempt}/30): ${error.message}`);await new Promise(resolve=>setTimeout(resolve,3000))}}process.exit(1)}
 start();

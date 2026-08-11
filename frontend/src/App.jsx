@@ -57,6 +57,26 @@ const exportCsv = (name, rows) => {
 };
 const elapsed = (iso) =>
   `${Math.max(1, Math.floor((Date.now() - new Date(iso)) / 60000))} min`;
+function useLiveUpdates(enabled, database, onChange) {
+  useEffect(() => {
+    if (!enabled || !database) return;
+    let socket, retryTimer, stopped = false, retries = 0;
+    const connect = () => {
+      const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+      socket = new WebSocket(`${protocol}//${location.host}/ws?database=${encodeURIComponent(database)}`);
+      socket.onopen = () => { retries = 0; };
+      socket.onmessage = (event) => {
+        try { if (JSON.parse(event.data).type === "state.changed") onChange(); } catch {}
+      };
+      socket.onclose = () => {
+        if (!stopped) retryTimer = setTimeout(connect, Math.min(1000 * 2 ** retries++, 15000));
+      };
+    };
+    connect();
+    const fallback = setInterval(onChange, 60000);
+    return () => { stopped = true; clearTimeout(retryTimer); clearInterval(fallback); socket?.close(); };
+  }, [enabled, database, onChange]);
+}
 const loginRoles = [
   {
     id: "admin",
@@ -122,10 +142,9 @@ function CompanyApp() {
   useEffect(() => {
     if (user && user.role !== "superadmin") {
       refresh();
-      const id = setInterval(refresh, 5000);
-      return () => clearInterval(id);
     }
   }, [user, refresh]);
+  useLiveUpdates(Boolean(user && user.role !== "superadmin"), user?.companyDatabase || "knockout", refresh);
   const login = (u) => {
     localStorage.setItem("knockout-company-db", u.companyDatabase);
     localStorage.setItem("knockout-portal-role", u.role);
@@ -337,10 +356,9 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
   useEffect(() => {
     if (user) {
       refresh();
-      const id = setInterval(refresh, 7000);
-      return () => clearInterval(id);
     }
   }, [user, refresh]);
+  useLiveUpdates(Boolean(user), "master", refresh);
   const toast = (message) => {
     setNotice(message);
     setTimeout(() => setNotice(""), 3500);
@@ -1374,6 +1392,33 @@ function Ring({ value }) {
     </div>
   );
 }
+function orderDepartmentProgress(order, data, wantsJuice) {
+  if (!order) return null;
+  const lines = order.items
+    .map((line) => ({
+      ...line,
+      menu: data.menu.find((item) => item.id === line.menuId),
+    }))
+    .filter(
+      (line) =>
+        (String(line.menu?.category || "").toLowerCase() === "juices") ===
+        wantsJuice,
+    );
+  if (!lines.length) return null;
+  const status = lines.every((line) => line.itemStatus === "ready")
+    ? "ready"
+    : lines.every((line) => (line.itemStatus || "new") === "new")
+      ? "new"
+      : "preparing";
+  const names = lines.map((line) => `${line.qty}× ${line.menu?.name || "Menu item"}`);
+  return {
+    key: wantsJuice ? "juice" : "dish",
+    label: wantsJuice ? "Juice station" : "Kitchen dishes",
+    status,
+    count: lines.reduce((sum, line) => sum + line.qty, 0),
+    names,
+  };
+}
 function AdminTables({ data, refresh, toast, user }) {
   const [selected, setSelected] = useState(null),
     [creating, setCreating] = useState(false),
@@ -1399,6 +1444,7 @@ function AdminTables({ data, refresh, toast, user }) {
             key={t.id}
             table={t}
             order={data.orders.find((o) => o.id === t.orderId)}
+            data={data}
             onClick={() => setSelected(t.id)}
             onBill={(order) => setBillOrder(order)}
             onPay={(order) => setPayOrder(order)}
@@ -1441,7 +1487,7 @@ function AdminTables({ data, refresh, toast, user }) {
               <span className="eyebrow">READY TO PRINT</span>
               <h3>{money(calculateBill(billOrder, data).total)}</h3>
               <p>Review the complete table bill and print a copy for the customer.</p>
-              <button className="primary wide" onClick={() => window.print()}>
+              <button className="primary wide" onClick={openPrinter}>
                 <Printer size={17} /> Print bill
               </button>
               {billOrder.status === "billing_requested" ? (
@@ -1490,7 +1536,7 @@ function TableSummary({ data }) {
     </div>
   );
 }
-function TableCard({ table, order, onClick, onBill, onPay }) {
+function TableCard({ table, order, data, onClick, onBill, onPay }) {
   const idle =
       table.status === "cleaning" ? "Cleaning in progress" : "Clean & ready",
     paymentRequested = order?.status === "billing_requested",
@@ -1509,7 +1555,18 @@ function TableCard({ table, order, onClick, onBill, onPay }) {
     visibleStatus = kitchenStatus || {
       key: table.status,
       label: table.status,
-    };
+    },
+    departments = order
+      ? [
+          orderDepartmentProgress(order, data, false),
+          orderDepartmentProgress(order, data, true),
+        ].filter(Boolean)
+      : [],
+    ageMinutes = order
+      ? Math.max(0, Math.floor((Date.now() - new Date(order.createdAt)) / 60000))
+      : 0,
+    needsAttention =
+      ageMinutes >= 20 && departments.some((item) => item.status !== "ready");
   return (
     <article
       className={`table-card ${table.status} ${kitchenStatus?.key || ""}`}
@@ -1530,16 +1587,23 @@ function TableCard({ table, order, onClick, onBill, onPay }) {
           </div>
         ) : null}
         {order && !paymentRequested ? (
-          <div className={`table-kitchen-state ${visibleStatus.key}`}>
-            {order.status === "ready" ? (
-              <CheckCircle2 size={15} />
-            ) : (
-              <ChefHat size={15} />
-            )}
-            <span>
-              <small>Kitchen status</small>
-              <b>{visibleStatus.label}</b>
-            </span>
+          <div className="table-production-monitor">
+            <div className="table-production-head">
+              <span>Live preparation</span>
+              {needsAttention ? <b><Clock3 size={11}/> Needs attention</b> : null}
+            </div>
+            {departments.map((department) => (
+              <div className={`table-production-row ${department.key} ${department.status}`} key={department.key}>
+                <span className="production-icon">
+                  {department.key === "juice" ? <CupSoda size={14}/> : <ChefHat size={14}/>}
+                </span>
+                <span className="production-copy">
+                  <small>{department.label} · {department.count} item{department.count === 1 ? "" : "s"}</small>
+                  <b>{department.names.slice(0, 2).join(" · ")}{department.names.length > 2 ? ` +${department.names.length - 2} more` : ""}</b>
+                </span>
+                <em>{department.status}</em>
+              </div>
+            ))}
           </div>
         ) : null}
         <h3>
@@ -1597,7 +1661,10 @@ function AdminTableDetails({ table, order, data, close, refresh, toast, user }) 
         ...i,
         menu: data.menu.find((m) => m.id === i.menuId),
       })) || [],
-    subtotal = lines.reduce((sum, i) => sum + (i.menu?.price || 0) * i.qty, 0);
+    subtotal = lines.reduce((sum, i) => sum + (i.menu?.price || 0) * i.qty, 0),
+    departments = order
+      ? [orderDepartmentProgress(order, data, false), orderDepartmentProgress(order, data, true)].filter(Boolean)
+      : [];
   async function remove() {
     if (!confirm(`Delete Table ${table.number}?`)) return;
     try {
@@ -1649,6 +1716,9 @@ function AdminTableDetails({ table, order, data, close, refresh, toast, user }) 
               </p>
             </div>
             <Status status={order.status} />
+          </div>
+          <div className="table-detail-production">
+            {departments.map((department) => <div className={`${department.key} ${department.status}`} key={department.key}><span>{department.key === "juice" ? <CupSoda size={16}/> : <ChefHat size={16}/>}<b>{department.label}</b></span><em>{department.status}</em><p>{department.names.join(" · ")}</p></div>)}
           </div>
           {lines.map((i, index) => (
             <div className="detail-line" key={`${i.menuId}-${index}`}>
@@ -2463,7 +2533,7 @@ function ParcelHandoffModal({ order, data, complete, close }) {
                 Review the parcel invoice and print it before choosing how the
                 customer paid.
               </p>
-              <button className="secondary wide" onClick={() => window.print()}>
+              <button className="secondary wide" onClick={openPrinter}>
                 <Printer size={17} /> Print bill
               </button>
               <button className="primary wide" onClick={() => setStep("payment")}>
@@ -2532,7 +2602,7 @@ function ParcelHandoffModal({ order, data, complete, close }) {
               <p>
                 Parcel #{order.id} was completed by {paymentMethod || order.paymentMethod}.
               </p>
-              <button className="primary wide" onClick={() => window.print()}>
+              <button className="primary wide" onClick={openPrinter}>
                 <Printer size={17} /> Print final bill
               </button>
               <button className="secondary wide" onClick={close}>
@@ -4670,7 +4740,9 @@ function StaffEditor({ staff, users, close, refresh, toast }) {
       payRate: staff?.payRate || 0,
       active: staff?.active ?? true,
     }),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [deleteArmed, setDeleteArmed] = useState(false),
+    [deleting, setDeleting] = useState(false);
   const roleExists = (role) =>
     users.some((user) => user.role === role && user.id !== staff?.id);
   async function save(e) {
@@ -4686,6 +4758,21 @@ function StaffEditor({ staff, users, close, refresh, toast }) {
       close();
     } catch (e) {
       setError(e.message);
+    }
+  }
+  async function removeStaff() {
+    setDeleting(true);
+    setError("");
+    try {
+      await api(`/staff/${staff.id}`, { method: "DELETE" });
+      await refresh();
+      toast(`${staff.name} removed from Staff Management`);
+      close();
+    } catch (e) {
+      setError(e.message);
+      setDeleteArmed(false);
+    } finally {
+      setDeleting(false);
     }
   }
   return (
@@ -4771,6 +4858,9 @@ function StaffEditor({ staff, users, close, refresh, toast }) {
         <button className="primary wide">
           {staff ? "Save staff changes" : "Create staff login"}
         </button>
+        {staff && staff.role !== "admin" && !deleteArmed && <button type="button" className="staff-delete-button" onClick={() => setDeleteArmed(true)}><Trash2 size={15}/> Delete staff</button>}
+        {staff && staff.role !== "admin" && deleteArmed && <div className="staff-delete-confirm"><b>Delete {staff.name}?</b><p>The login will be removed and its PIN can be reused. Attendance history will be preserved.</p><div><button type="button" className="secondary" onClick={() => setDeleteArmed(false)}>Cancel</button><button type="button" className="danger" disabled={deleting} onClick={removeStaff}>{deleting ? "Deleting…" : "Confirm delete"}</button></div></div>}
+        {staff?.role === "admin" && <div className="protected-account-note">Primary Admin login is protected from deletion.</div>}
       </form>
     </Modal>
   );
@@ -4856,6 +4946,7 @@ function Waiter({ data, refresh, user, logout, toast }) {
               <TableCard
                 key={t.id}
                 table={t}
+                data={data}
                 order={data.orders.find((o) => o.id === t.orderId)}
                 onClick={() => setSelected(t.id)}
               />
@@ -4940,23 +5031,24 @@ function Bookings({ data, open, refresh, toast }) {
   </>;
 }
 function WaiterOrders({ data, user }) {
-  const mine = data.orders.filter(
-    (o) =>
-      o.waiter.toLowerCase().includes(user.name.split(" ")[0].toLowerCase()) ||
-      true,
-  );
-  return (
-    <>
-      <PageHead
-        kicker="MY SERVICE"
-        title="Orders"
-        sub="Track the kitchen and payment status of your tables."
-      />
-      <section className="panel">
-        <OrderTable orders={mine} tables={data.tables} />
-      </section>
-    </>
-  );
+  const [selectedDate, setSelectedDate] = useState(null),
+    firstName = String(user?.name || "").trim().split(/\s+/)[0].toLowerCase(),
+    mine = data.orders.filter((order) => {
+      if (order.orderType === "parcel") return false;
+      const waiter = String(order.waiter || "").toLowerCase();
+      return !firstName || waiter.includes(firstName);
+    }),
+    daily = selectedDate ? mine.filter((order) => dateKey(order.createdAt) === selectedDate) : [];
+  if (!selectedDate) return <OperationsCalendar orders={mine} kicker="MY SERVICE" title="My Orders Calendar" sub="Select a date to review your table orders and their kitchen and payment status." label="WAITER TABLE ORDERS" onSelect={setSelectedDate}/>;
+  return <>
+    <PageHead
+      kicker="DAILY TABLE SERVICE"
+      title={new Date(`${selectedDate}T12:00:00`).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+      sub={`${daily.length} table order${daily.length === 1 ? "" : "s"} handled on this date.`}
+      action={<button className="secondary" onClick={() => setSelectedDate(null)}><ChevronLeft size={15}/> Calendar</button>}
+    />
+    <DailyOrderCards orders={daily} data={data}/>
+  </>;
 }
 function BookingModal({ data, close, refresh, toast, initialDate }) {
   const [form, setForm] = useState({
@@ -5292,6 +5384,65 @@ function calculateBill(order, data) {
     service = (subtotal * data.settings.serviceCharge) / 100;
   return { items, subtotal, tax, service, total: subtotal + tax + service };
 }
+async function openPrinter(event) {
+  const container = event.currentTarget.closest(".modal-wrap") || document;
+  const receipt = event.currentTarget.closest(".receipt") || container.querySelector(".receipt");
+  if (!receipt) return;
+  // Chrome/macOS does not always dispatch afterprint. Remove any abandoned
+  // print DOM first so an earlier bill can never be included in this job.
+  document.querySelectorAll(".print-receipt-root").forEach((root) => root.remove());
+  document.querySelectorAll("style[data-receipt-page-style]").forEach((style) => style.remove());
+  document.body.classList.remove("printing-receipt");
+  const requestedCopies = window.prompt("How many bills do you want to print?", "1");
+  if (requestedCopies === null) return;
+  const copies = Number(requestedCopies);
+  if (!Number.isInteger(copies) || copies < 1 || copies > 20) {
+    window.alert("Please enter a whole number from 1 to 20.");
+    return;
+  }
+  const printRoot = document.createElement("div");
+  printRoot.className = "print-receipt-root";
+  for (let copy = 0; copy < copies; copy += 1) {
+    const printedReceipt = receipt.cloneNode(true);
+    printedReceipt.classList.add("print-receipt-copy");
+    printRoot.appendChild(printedReceipt);
+  }
+  const itemRows = receipt.querySelectorAll(".receipt-items > div");
+  const itemHeight = [...itemRows].reduce((height, row) => {
+    const name = row.querySelector("span")?.textContent?.trim().length || 0;
+    return height + Math.max(7, Math.ceil(name / 30) * 5);
+  }, 0);
+  // Allow room for the larger luxury layout, totals, and closing footer.
+  // A little trailing allowance is intentional so the cutter never clips the total.
+  const pageHeight = Math.min(500, Math.max(145, 116 + itemHeight));
+  const pageStyle = document.createElement("style");
+  pageStyle.dataset.receiptPageStyle = "true";
+  pageStyle.textContent = `@media print { @page { size: 72mm ${pageHeight}mm; margin: 0; } }`;
+  document.head.appendChild(pageStyle);
+  const previousTitle = document.title;
+  document.title = "";
+  document.body.appendChild(printRoot);
+  document.body.classList.add("printing-receipt");
+  const images = [...printRoot.querySelectorAll("img")];
+  await Promise.all(images.map((image) => image.complete
+    ? Promise.resolve()
+    : new Promise((resolve) => {
+        image.addEventListener("load", resolve, { once: true });
+        image.addEventListener("error", resolve, { once: true });
+      })));
+  let cleaned = false;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    document.body.classList.remove("printing-receipt");
+    printRoot.remove();
+    pageStyle.remove();
+    document.title = previousTitle;
+  };
+  window.addEventListener("afterprint", cleanup, { once: true });
+  window.addEventListener("focus", () => window.setTimeout(cleanup, 500), { once: true });
+  window.print();
+}
 function BillReceipt({ table, order, data, bill }) {
   return (
     <div className="receipt parcel-print-receipt">
@@ -5302,7 +5453,7 @@ function BillReceipt({ table, order, data, bill }) {
         aria-hidden="true"
       />
       <div className="receipt-brand">
-        <span className="logo">K</span>
+        <img className="receipt-logo" src="/knockout-logo.png" alt="KnockOUT" />
         <h2>{data.settings.hotelName}</h2>
         <p>Tax Invoice · Order #{order.id}</p>
       </div>
@@ -5339,7 +5490,12 @@ function BillReceipt({ table, order, data, bill }) {
           <b>{money(bill.total)}</b>
         </p>
       </div>
-      <button className="print" onClick={() => window.print()}>
+      <footer className="receipt-footer">
+        <b>Thank you for dining with us</b>
+        <span>We look forward to welcoming you again</span>
+        <i aria-hidden="true">◆</i>
+      </footer>
+      <button className="print" onClick={openPrinter}>
         <Printer size={14} /> Print bill
       </button>
     </div>

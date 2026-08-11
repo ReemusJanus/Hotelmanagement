@@ -5,7 +5,7 @@ import {api} from './api';
 export default function AttendancePanel({user,toast}) {
   const [record,setRecord]=useState(null),[now,setNow]=useState(Date.now()),[busy,setBusy]=useState(false);
   const load=useCallback(()=>api(`/attendance/${user.id}`).then(setRecord).catch(e=>toast(e.message)),[user.id]);
-  useEffect(()=>{load();const id=setInterval(()=>{load();setNow(Date.now())},5000);return()=>clearInterval(id)},[load]);
+  useEffect(()=>{load();const clock=setInterval(()=>setNow(Date.now()),1000),protocol=location.protocol==='https:'?'wss:':'ws:';let socket,retry,stopped=false;const connect=()=>{socket=new WebSocket(`${protocol}//${location.host}/ws?database=${encodeURIComponent(user.companyDatabase||localStorage.getItem('knockout-company-db')||'knockout')}`);socket.onmessage=event=>{try{if(JSON.parse(event.data).type==='state.changed')load()}catch{}};socket.onclose=()=>{if(!stopped)retry=setTimeout(connect,2500)}};connect();const fallback=setInterval(load,60000);return()=>{stopped=true;clearInterval(clock);clearInterval(fallback);clearTimeout(retry);socket?.close()}},[load,user.companyDatabase]);
   if(!record)return <div className="loading"><span className="logo">K</span><p>Loading attendance…</p></div>;
   const active=record.activeShift;
   const duration=s=>{const ms=new Date(s.checkOut||now)-new Date(s.checkIn),h=Math.floor(ms/3600000),m=Math.floor(ms%3600000/60000),sec=Math.floor(ms%60000/1000);return `${h}h ${m}m ${sec}s`};

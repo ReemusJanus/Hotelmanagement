@@ -2,12 +2,16 @@
   "name": "hotel-backend",
   "version": "1.0.0",
   "type": "module",
-  "scripts": {"dev": "node --watch src/server.js", "start": "node src/server.js"},
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js"
+  },
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "minio": "^8.0.5",
     "multer": "^2.0.2",
-    "mysql2": "^3.14.3"
+    "mysql2": "^3.14.3",
+    "ws": "^8.21.3"
   }
 }

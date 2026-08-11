@@ -27,7 +27,7 @@ export const pool={
 export async function migrate() {
   const sql = [
     `CREATE TABLE IF NOT EXISTS settings (id INT PRIMARY KEY DEFAULT 1, hotel_name VARCHAR(120) NOT NULL, tax_rate DECIMAL(5,2) NOT NULL DEFAULT 5, service_charge DECIMAL(5,2) NOT NULL DEFAULT 5, currency VARCHAR(8) NOT NULL DEFAULT 'INR', updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)`,
-    `CREATE TABLE IF NOT EXISTS users (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(120) NOT NULL, role ENUM('admin','waiter','chef','juicer') NOT NULL, pin VARCHAR(20) NOT NULL, phone VARCHAR(30) DEFAULT '', pay_type ENUM('daily','monthly') DEFAULT 'monthly', pay_rate DECIMAL(10,2) DEFAULT 0, active BOOLEAN DEFAULT TRUE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`,
+    `CREATE TABLE IF NOT EXISTS users (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(120) NOT NULL, role ENUM('admin','waiter','chef','juicer') NOT NULL, pin VARCHAR(80) NOT NULL, phone VARCHAR(30) DEFAULT '', pay_type ENUM('daily','monthly') DEFAULT 'monthly', pay_rate DECIMAL(10,2) DEFAULT 0, active BOOLEAN DEFAULT TRUE, deleted_at DATETIME NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`,
     `CREATE TABLE IF NOT EXISTS kitchen_staff (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(120) NOT NULL, designation VARCHAR(100) NOT NULL DEFAULT 'Chef', phone VARCHAR(30) DEFAULT '', specialization VARCHAR(120) DEFAULT '', pay_type ENUM('daily','monthly') DEFAULT 'monthly', pay_rate DECIMAL(10,2) DEFAULT 0, joined_on DATE NULL, notes VARCHAR(255) DEFAULT '', active BOOLEAN DEFAULT TRUE, created_by VARCHAR(120) DEFAULT 'Head Chef', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)`,
     `CREATE TABLE IF NOT EXISTS staff_attendance (id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, check_in DATETIME NOT NULL, check_out DATETIME NULL, notes VARCHAR(255) DEFAULT '', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id))`,
     `CREATE TABLE IF NOT EXISTS restaurant_tables (id INT AUTO_INCREMENT PRIMARY KEY, table_number INT NOT NULL UNIQUE, seats INT NOT NULL, area VARCHAR(80) NOT NULL, status ENUM('available','occupied','reserved','cleaning') DEFAULT 'available', guest_name VARCHAR(120) DEFAULT '', booking_time VARCHAR(10) DEFAULT '', order_id INT NULL, active BOOLEAN DEFAULT TRUE)`,
@@ -57,6 +57,8 @@ export async function migrate() {
     ,`ALTER TABLE orders MODIFY status ENUM('new','preparing','ready','served','billing_requested','completed') DEFAULT 'new'`
     ,`ALTER TABLE users MODIFY role ENUM('admin','waiter','chef','juicer') NOT NULL`
     ,`ALTER TABLE order_items ADD COLUMN production_status ENUM('new','preparing','ready') NOT NULL DEFAULT 'new' AFTER price`
+    ,`ALTER TABLE users MODIFY pin VARCHAR(80) NOT NULL`
+    ,`ALTER TABLE users ADD COLUMN deleted_at DATETIME NULL AFTER active`
   ];
   for (const statement of upgrades) { try { await pool.query(statement); } catch (error) { if (error.code !== 'ER_DUP_FIELDNAME') throw error; } }
   const salaryUpgrades = [
@@ -73,6 +75,8 @@ export async function migrate() {
     if (!/^[a-z0-9_]+$/.test(databaseName)) continue;
     const bookingUpgrades = [
       `ALTER TABLE \`${databaseName}\`.users MODIFY role ENUM('admin','waiter','chef','juicer') NOT NULL`,
+      `ALTER TABLE \`${databaseName}\`.users MODIFY pin VARCHAR(80) NOT NULL`,
+      `ALTER TABLE \`${databaseName}\`.users ADD COLUMN deleted_at DATETIME NULL AFTER active`,
       `ALTER TABLE \`${databaseName}\`.order_items ADD COLUMN production_status ENUM('new','preparing','ready') NOT NULL DEFAULT 'new' AFTER price`,
       `ALTER TABLE \`${databaseName}\`.bookings ADD COLUMN customer_phone VARCHAR(30) NOT NULL DEFAULT '' AFTER guest_name`,
       `ALTER TABLE \`${databaseName}\`.bookings ADD COLUMN booking_date DATE NULL AFTER customer_phone`,
@@ -115,7 +119,7 @@ async function seed() {
 export async function getState() {
   const [[settings], [users], [attendance], [kitchenStaff], [tables], [bookings], [menu], [comboComponents], [orders], [orderItems], [inventory], [inventoryTransactions], [financeEntries], [supplierPurchases], [supplierPayments]] = await Promise.all([
     pool.query('SELECT hotel_name hotelName,tax_rate taxRate,service_charge serviceCharge,currency FROM settings WHERE id=1'),
-    pool.query('SELECT id,name,role,pin,phone,pay_type payType,pay_rate payRate,active,created_at createdAt FROM users ORDER BY active DESC,name'),
+    pool.query('SELECT id,name,role,pin,phone,pay_type payType,pay_rate payRate,active,created_at createdAt FROM users WHERE deleted_at IS NULL ORDER BY active DESC,name'),
     pool.query('SELECT a.id,a.user_id userId,a.check_in checkIn,a.check_out checkOut,a.notes,u.name,u.role FROM staff_attendance a JOIN users u ON u.id=a.user_id ORDER BY a.check_in DESC LIMIT 300'),
     pool.query('SELECT id,name,designation,phone,specialization,pay_type payType,pay_rate payRate,joined_on joinedOn,notes,active,created_by createdBy,created_at createdAt FROM kitchen_staff ORDER BY active DESC,name'),
     pool.query('SELECT id,table_number number,seats,area,status,guest_name guestName,booking_time bookingTime,order_id orderId FROM restaurant_tables WHERE active=TRUE ORDER BY table_number'),
