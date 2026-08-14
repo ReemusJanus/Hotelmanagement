@@ -344,6 +344,8 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
     [creating, setCreating] = useState(false),
     [masterAction, setMasterAction] = useState(null),
     [pinUser, setPinUser] = useState(null),
+    [selectedCompanyId, setSelectedCompanyId] = useState(null),
+    [companySection, setCompanySection] = useState("overview"),
     [actionBusy, setActionBusy] = useState(false),
     [notice, setNotice] = useState("");
   const refresh = useCallback(
@@ -426,7 +428,7 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
       </div>
     );
   const companies = data.companies || [],
-    revenue = companies.reduce((sum, x) => sum + x.revenue, 0);
+    selectedCompany = companies.find((company) => company.id === selectedCompanyId) || null;
   const logoutMaster = () => {
     sessionStorage.removeItem("knockout-master-user");
     if (onLogout) onLogout();
@@ -443,10 +445,14 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
           </div>
         </div>
         <nav>
-          <button className="active">
+          <button className={!selectedCompany ? "active" : ""} onClick={() => { setSelectedCompanyId(null); setCompanySection("overview"); }}>
             <LayoutDashboard size={18} />
             Companies
           </button>
+          <div className="master-company-nav">
+            <small>COMPANY USERS</small>
+            {companies.map((company) => <button key={company.id} className={selectedCompany?.id === company.id ? "active" : ""} onClick={() => { setSelectedCompanyId(company.id); setCompanySection("overview"); }}><Building2 size={17}/><span>{company.companyName}<small>{company.staffCount} users</small></span></button>)}
+          </div>
         </nav>
         <div className="system-ok">
           <i />
@@ -477,38 +483,16 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
           </button>
         </header>
         <div className="page">
-          <PageHead
-            kicker="SUPER ADMIN"
-            title="Company Network"
-            sub="Register isolated KnockOUT companies and monitor every business database."
-          />
-          <div className="stats master-stats">
-            <Stat
-              icon={Building2}
-              label="Companies"
-              value={companies.length}
-              note={`${companies.filter((x) => x.status === "active").length} active`}
-            />
-            <Stat
-              icon={TrendingUp}
-              label="Network Revenue"
-              value={money(revenue)}
-              note="Paid orders across companies"
-            />
-            <Stat
-              icon={Users}
-              label="Total Staff"
-              value={companies.reduce((s, x) => s + x.staffCount, 0)}
-              note="Active accounts"
-            />
-            <Stat
-              icon={AlertTriangle}
-              label="Low Stock Alerts"
-              value={companies.reduce((s, x) => s + x.lowStock, 0)}
-              note="Across all databases"
-              tone="warning"
-            />
-          </div>
+          {selectedCompany ? <>
+            <PageHead kicker="COMPANY WORKSPACE" title={selectedCompany.companyName} sub={`All details and controls for the isolated ${selectedCompany.databaseName} database.`} action={<button className="secondary" onClick={() => setSelectedCompanyId(null)}><ChevronLeft size={15}/> All companies</button>}/>
+            <div className="company-detail-tabs"><div>{[["overview","Overview",LayoutDashboard],["users","Users",Users],["revenue","Revenue",TrendingUp],["controls","Controls",Settings]].map(([id,label,Icon])=><button key={id} className={companySection===id?"active":""} onClick={()=>setCompanySection(id)}><Icon size={15}/>{label}{id==="users"?<b>{selectedCompany.users?.length||0}</b>:null}</button>)}</div><span><i className={selectedCompany.online ? "online" : ""}/>{selectedCompany.online ? "Database online" : "Database unavailable"}</span></div>
+            {companySection === "overview" ? <CompanyWorkspaceOverview company={selectedCompany} openUsers={()=>setCompanySection("users")} openRevenue={()=>setCompanySection("revenue")}/> : null}
+            {companySection === "users" ? <MasterUsers company={selectedCompany} changePin={setPinUser}/> : null}
+            {companySection === "revenue" ? <MasterRevenue companies={[selectedCompany]}/> : null}
+            {companySection === "controls" ? <CompanyControls company={selectedCompany} status={status} setMasterAction={setMasterAction}/> : null}
+          </> : <>
+          <PageHead kicker="SUPER ADMIN" title="Company Network" sub="Select a company to open its isolated user directory and controls." />
+          <div className="company-directory-summary"><Building2/><div><b>{companies.length} registered compan{companies.length===1?"y":"ies"}</b><small>Select a company to see its users, revenue, operations, and controls.</small></div></div>
           <div className="company-grid">
             {companies.map((company) => (
               <article
@@ -523,77 +507,12 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
                 </header>
                 <h2>{company.companyName}</h2>
                 <code>{company.databaseName}</code>
-                <p>
-                  Admin: {company.adminName} ·{" "}
-                  <strong
-                    className={
-                      company.adminLoginActive
-                        ? "admin-enabled"
-                        : "admin-disabled"
-                    }
-                  >
-                    {company.adminLoginActive
-                      ? "Login active"
-                      : "Login deleted"}
-                  </strong>
-                </p>
-                <div>
-                  <span>
-                    <b>{company.activeOrders}</b>
-                    <small>Active orders</small>
-                  </span>
-                  <span>
-                    <b>{company.staffCount}</b>
-                    <small>Staff</small>
-                  </span>
-                  <span>
-                    <b>{money(company.revenue)}</b>
-                    <small>Total revenue</small>
-                  </span>
-                </div>
-                <footer>
-                  <em className={company.online ? "online" : ""}>
-                    {company.online
-                      ? "Database online"
-                      : "Database unavailable"}
-                  </em>
-                  <button onClick={() => status(company)}>
-                    {company.status === "active" ? "Suspend" : "Activate"}
-                  </button>
-                </footer>
-                <section className="company-danger-actions">
-                  <button
-                    onClick={() => setMasterAction({ type: "admin", company })}
-                    disabled={!company.adminLoginActive}
-                  >
-                    <Users size={13} />
-                    {company.adminLoginActive
-                      ? "Delete Admin login"
-                      : "Admin login deleted"}
-                  </button>
-                  {company.databaseName === "knockout" ? (
-                    <span>Primary company protected</span>
-                  ) : (
-                    <button
-                      className="danger"
-                      onClick={() =>
-                        setMasterAction({ type: "company", company })
-                      }
-                    >
-                      <Trash2 size={13} />
-                      Delete company
-                    </button>
-                  )}
-                </section>
+                <p>Open this company to view its operations, users, revenue, database status, and administrative controls.</p>
+                <button className="company-users-button" onClick={() => { setSelectedCompanyId(company.id); setCompanySection("overview"); }}><LayoutDashboard size={15}/><span>Open company workspace<small>All details and controls</small></span><ArrowRight size={16}/></button>
               </article>
             ))}
           </div>
-          <MasterUsers
-            companies={companies}
-            masterUsers={data.masterUsers || []}
-            changePin={setPinUser}
-          />
-          <MasterRevenue companies={companies} />
+          </>}
         </div>
       </main>
       {creating ? (
@@ -687,34 +606,36 @@ function MasterActionModal({ action, busy, close, confirm }) {
   );
 }
 
-function MasterUsers({ companies, masterUsers = [], changePin }) {
-  const masterCompany = {
-      id: "master",
-      companyName: "KnockOUT Master",
-      databaseName: "knockout_master",
-    },
-    rows = [
-      ...masterUsers.map((user) => ({
-        company: masterCompany,
-        user,
-        isMaster: true,
-      })),
-      ...companies.flatMap((company) =>
-        (company.users || []).map((user) => ({
-          company,
-          user,
-          isMaster: false,
-        })),
-      ),
-    ];
+function CompanyWorkspaceOverview({ company, openUsers, openRevenue }) {
+  const todayRevenue = (company.dailyRevenue || []).find((day) => dateKey(day.date) === dateKey(new Date()));
+  return <div className="company-workspace-overview">
+    <div className="stats master-stats">
+      <Stat icon={TrendingUp} label="Total revenue" value={money(company.revenue)} note="Completed and paid bills"/>
+      <Stat icon={ReceiptText} label="Active orders" value={company.activeOrders} note="Current live workload"/>
+      <Stat icon={Users} label="Declared users" value={company.users?.length || 0} note={`${company.staffCount} active staff accounts`}/>
+      <Stat icon={AlertTriangle} label="Low stock" value={company.lowStock} note="Items requiring attention" tone="warning"/>
+    </div>
+    <div className="company-workspace-grid">
+      <section className="panel company-profile-panel"><PanelHead title="Company profile" sub="Tenant identity and database isolation"/><div className="company-profile-facts"><p><span>Company</span><b>{company.companyName}</b></p><p><span>Database</span><code>{company.databaseName}</code></p><p><span>Administrator</span><b>{company.adminName}</b></p><p><span>Admin access</span><b className={company.adminLoginActive?"admin-enabled":"admin-disabled"}>{company.adminLoginActive?"Login active":"Login disabled"}</b></p><p><span>Status</span><Status status={company.status}/></p><p><span>Today</span><b>{money(todayRevenue?.total || 0)} · {todayRevenue?.bills || 0} bills</b></p></div></section>
+      <aside className="company-workspace-actions"><button onClick={openUsers}><Users/><span><b>Company users</b><small>Manage {company.users?.length || 0} declared accounts</small></span><ArrowRight/></button><button onClick={openRevenue}><TrendingUp/><span><b>Revenue history</b><small>Open daily bill performance</small></span><ArrowRight/></button></aside>
+    </div>
+  </div>;
+}
+
+function CompanyControls({ company, status, setMasterAction }) {
+  return <section className="panel company-controls-panel"><span className="eyebrow">COMPANY ADMINISTRATION</span><h2>Access and lifecycle controls</h2><p>These actions affect only <b>{company.companyName}</b> and its isolated database.</p><div className="company-control-grid"><article><Building2/><div><b>Company status</b><small>{company.status === "active" ? "Suspend all company portal access" : "Restore company portal access"}</small></div><button onClick={()=>status(company)}>{company.status === "active" ? "Suspend company" : "Activate company"}</button></article><article><Users/><div><b>Administrator login</b><small>{company.adminLoginActive ? `${company.adminName} can currently sign in` : "The Admin login has been deleted"}</small></div><button disabled={!company.adminLoginActive} onClick={()=>setMasterAction({type:"admin",company})}>{company.adminLoginActive?"Delete Admin login":"Login deleted"}</button></article><article className="danger"><Trash2/><div><b>Delete company</b><small>Remove the company and its isolated database permanently</small></div>{company.databaseName==="knockout"?<span>Primary company protected</span>:<button onClick={()=>setMasterAction({type:"company",company})}>Delete company</button>}</article></div></section>;
+}
+
+function MasterUsers({ company, changePin }) {
+  const rows = (company.users || []).map((user) => ({ company, user, isMaster: false }));
   return (
     <section className="master-users-panel">
       <div>
         <span className="eyebrow">ACCESS DIRECTORY</span>
-        <h2>Every KnockOUT user</h2>
+        <h2>{company.companyName} users</h2>
         <p>
-          Every six-digit PIN is unique across Super Admin, Admin, Waiter, Chef,
-          and every company.
+          Admin, Waiter, Chef, and Juicer accounts declared under this company only.
+          Every six-digit PIN remains unique across the KnockOUT network.
         </p>
       </div>
       <div className="table-scroll">
@@ -723,7 +644,6 @@ function MasterUsers({ companies, masterUsers = [], changePin }) {
             <tr>
               <th>User</th>
               <th>Designation</th>
-              <th>Company</th>
               <th>6-digit PIN</th>
               <th>Status</th>
               <th>Recovery</th>
@@ -740,10 +660,6 @@ function MasterUsers({ companies, masterUsers = [], changePin }) {
                   <span className={`designation ${user.role}`}>
                     {user.role}
                   </span>
-                </td>
-                <td>
-                  <b>{company.companyName}</b>
-                  <small>{company.databaseName}</small>
                 </td>
                 <td>
                   <code className="master-user-pin">{user.pin}</code>
@@ -767,6 +683,7 @@ function MasterUsers({ companies, masterUsers = [], changePin }) {
             ))}
           </tbody>
         </table>
+        {!rows.length ? <div className="master-users-empty"><Users/><b>No company users yet</b><small>Create staff from this company’s Admin portal.</small></div> : null}
       </div>
     </section>
   );
@@ -1081,12 +998,14 @@ const portalNav = {
     ["settings", "Settings", Settings],
   ],
   waiter: [
-    ["attendance", "Check In / Out", Clock3],
+    ["overview", "Overview", LayoutDashboard],
+    // ["attendance", "Check In / Out", Clock3], // Temporarily disabled; retain for later.
     ["floor", "Tables", Armchair],
     ["orders", "My Orders", ReceiptText],
   ],
   chef: [
-    ["attendance", "Check In / Out", Clock3],
+    ["overview", "Overview", LayoutDashboard],
+    // ["attendance", "Check In / Out", Clock3], // Temporarily disabled; retain for later.
     ["team", "Chef Management", Users],
     ["dishes", "Dishes", UtensilsCrossed],
     ["kitchen", "Dine-in Kitchen", ChefHat],
@@ -1094,7 +1013,8 @@ const portalNav = {
     ["ready", "Ready to Serve", CheckCircle2],
   ],
   juicer: [
-    ["attendance", "Check In / Out", Clock3],
+    ["overview", "Overview", LayoutDashboard],
+    // ["attendance", "Check In / Out", Clock3], // Temporarily disabled; retain for later.
     ["juices", "Juices", CupSoda],
     ["queue", "Juice Queue", ReceiptText],
     ["ready", "Ready Juices", CheckCircle2],
@@ -1276,7 +1196,7 @@ function AdminOverview({ data, setPage }) {
       .filter((o) => o.total)
       .reduce((s, o) => s + o.total, 0);
   return (
-    <>
+    <div className="portal-overview admin-overview">
       <PageHead
         kicker="ADMIN COMMAND CENTER"
         title="Good afternoon, Arjun"
@@ -1365,7 +1285,7 @@ function AdminOverview({ data, setPage }) {
         />
         <OrderTable orders={data.orders.slice(0, 6)} tables={data.tables} />
       </section>
-    </>
+    </div>
   );
 }
 function PanelHead({ title, sub, action }) {
@@ -1473,7 +1393,7 @@ function AdminTables({ data, refresh, toast, user }) {
         <Modal close={() => setBillOrder(null)} wide>
           <span className="eyebrow">DINE-IN BILL</span>
           <h2>
-            Table {data.tables.find((t) => t.id === billOrder.tableId)?.number} · Bill #{billOrder.id}
+            Table {data.tables.find((t) => t.id === billOrder.tableId)?.number} · Bill #{billNumber(billOrder)}
           </h2>
           <div className="table-bill-preview">
             <BillReceipt
@@ -2510,7 +2430,7 @@ function ParcelHandoffModal({ order, data, complete, close }) {
             {step === "complete" ? "PARCEL COMPLETED" : "PARCEL HANDOFF"}
           </span>
           <h2>
-            {step === "complete" ? "Final bill" : "Complete parcel"} #{order.id}
+            {step === "complete" ? "Final bill" : "Complete parcel"} #{billNumber(order)}
           </h2>
         </div>
         <div className="parcel-stepper" aria-label="Parcel billing steps">
@@ -2600,7 +2520,7 @@ function ParcelHandoffModal({ order, data, complete, close }) {
               <span>PAYMENT COMPLETE</span>
               <h3>{money(bill.total)}</h3>
               <p>
-                Parcel #{order.id} was completed by {paymentMethod || order.paymentMethod}.
+                Parcel #{billNumber(order)} was completed by {paymentMethod || order.paymentMethod}.
               </p>
               <button className="primary wide" onClick={openPrinter}>
                 <Printer size={17} /> Print final bill
@@ -4906,22 +4826,60 @@ function SettingsPanel({ data, refresh, toast }) {
               onChange={(e) => setS({ ...s, taxRate: +e.target.value })}
             />
           </label>
-          <label>
-            Service charge (%)
-            <input
-              type="number"
-              value={s.serviceCharge}
-              onChange={(e) => setS({ ...s, serviceCharge: +e.target.value })}
-            />
-          </label>
         </div>
       </section>
     </>
   );
 }
 
+function RoleOverview({ role, data, user, setPage }) {
+  const firstName = String(user?.name || role).trim().split(/\s+/)[0];
+  const today = dateKey(new Date());
+  const todayOrders = data.orders.filter((order) => dateKey(order.createdAt) === today);
+  const mine = role === "waiter"
+    ? todayOrders.filter((order) => order.orderType !== "parcel" && String(order.waiter || "").toLowerCase().includes(firstName.toLowerCase()))
+    : productionOrders(data, role);
+  const ready = mine.filter((order) => order.status === "ready").length;
+  const preparing = mine.filter((order) => order.status === "preparing").length;
+  const fresh = mine.filter((order) => order.status === "new").length;
+  const occupied = data.tables.filter((table) => table.status === "occupied").length;
+  const availableMenu = role === "juicer"
+    ? data.menu.filter((item) => String(item.category).toLowerCase() === "juices" && item.available)
+    : data.menu.filter((item) => String(item.category).toLowerCase() !== "juices" && !item.isCombo && item.available);
+  const config = role === "waiter" ? {
+    kicker: "SERVICE PULSE", title: `Welcome back, ${firstName}`, sub: "Your floor, guest requests, and kitchen handoffs in one live view.",
+    metrics: [
+      [Armchair, "Occupied tables", `${occupied}/${data.tables.length}`, `${data.tables.filter(t => t.status === "available").length} ready for guests`, "gold"],
+      [ReceiptText, "My orders today", mine.length, `${mine.filter(o => o.paymentStatus === "paid").length} paid`, "blue"],
+      [CheckCircle2, "Ready to serve", mine.filter(o => o.status === "ready").length, "Collect from kitchen", "green"],
+      [Clock3, "Awaiting progress", mine.filter(o => ["new", "preparing"].includes(o.status)).length, "Live kitchen status", "orange"],
+    ],
+    primary: ["floor", "Open floor", "Take orders and manage tables", Armchair], secondary: ["orders", "My order history", "Review today's service", ReceiptText],
+  } : role === "chef" ? {
+    kicker: "KITCHEN INTELLIGENCE", title: `Good service, Chef ${firstName}`, sub: "Prioritize tickets, balance dine-in and parcel demand, and keep service moving.",
+    metrics: [[ReceiptText,"New tickets",fresh,"Waiting to be started","orange"],[ChefHat,"In preparation",preparing,"Currently cooking","blue"],[CheckCircle2,"Ready",ready,"Awaiting handoff","green"],[UtensilsCrossed,"Available dishes",availableMenu.length,`${data.menu.filter(i=>String(i.category).toLowerCase()!=="juices"&&!i.isCombo&&!i.available).length} unavailable`,"gold"]],
+    primary: ["kitchen", "Open dine-in queue", "Prioritize table tickets", ChefHat], secondary: ["parcels", "Open parcel queue", "Manage takeaway demand", Package],
+  } : {
+    kicker: "BEVERAGE STATION", title: `Fresh start, ${firstName}`, sub: "See every juice ticket, preparation state, and menu availability at a glance.",
+    metrics: [[ReceiptText,"New juice tickets",fresh,"Waiting to start","orange"],[CupSoda,"Being prepared",preparing,"Active drinks","blue"],[CheckCircle2,"Ready juices",ready,"Ready for pickup","green"],[Gauge,"Available juices",availableMenu.length,`${data.menu.filter(i=>String(i.category).toLowerCase()==="juices"&&!i.available).length} unavailable`,"gold"]],
+    primary: ["queue", "Open juice queue", "Start the next drinks", CupSoda], secondary: ["juices", "Manage juice menu", "Update availability", Gauge],
+  };
+  const recent = [...mine].sort((a,b) => new Date(b.createdAt)-new Date(a.createdAt)).slice(0,4);
+  return <div className={`portal-overview ${role}-overview`}>
+    <section className="overview-hero glass-card">
+      <div><span className="eyebrow">{config.kicker}</span><h1>{config.title}</h1><p>{config.sub}</p><div className="overview-live"><i/> Live operations · {new Date().toLocaleTimeString("en-IN",{hour:"numeric",minute:"2-digit"})}</div></div>
+      <div className="overview-hero-orb"><span>{role === "waiter" ? occupied : mine.length}</span><small>{role === "waiter" ? "tables in service" : "active tickets"}</small></div>
+    </section>
+    <div className="overview-metrics">{config.metrics.map(([Icon,label,value,note,tone])=><article className={`overview-metric glass-card ${tone}`} key={label}><span><Icon size={19}/></span><div><small>{label}</small><strong>{value}</strong><p>{note}</p></div></article>)}</div>
+    <div className="overview-workspace">
+      <section className="glass-card overview-priority"><PanelHead title="Live priority" sub="The newest operational updates"/><div className="overview-feed">{recent.length?recent.map(order=><div key={order.id}><span className={`priority-dot ${order.status}`}/><div><b>{order.orderType === "parcel" ? `Parcel #${billNumber(order)}` : `Table ${data.tables.find(t=>t.id===order.tableId)?.number || "—"}`}</b><small>{order.items.reduce((sum,item)=>sum+item.qty,0)} items · {elapsed(order.createdAt)}</small></div><Status status={order.status}/></div>):<div className="overview-clear"><CheckCircle2/><b>Everything is clear</b><small>No active work needs attention.</small></div>}</div></section>
+      <aside className="overview-actions"><button className="glass-card primary-action" onClick={()=>setPage(config.primary[0])}>{(() => { const Icon=config.primary[3]; return <Icon/>; })()}<span><b>{config.primary[1]}</b><small>{config.primary[2]}</small></span><ArrowRight/></button><button className="glass-card" onClick={()=>setPage(config.secondary[0])}>{(() => { const Icon=config.secondary[3]; return <Icon/>; })()}<span><b>{config.secondary[1]}</b><small>{config.secondary[2]}</small></span><ArrowRight/></button>{/* Attendance shortcut temporarily disabled; retain for later. */}</aside>
+    </div>
+  </div>;
+}
+
 function Waiter({ data, refresh, user, logout, toast }) {
-  const [page, setPage] = useState("attendance"),
+  const [page, setPage] = useState("overview"),
     [selected, setSelected] = useState(null);
   const table = data.tables.find((t) => t.id === selected);
   return (
@@ -4932,7 +4890,10 @@ function Waiter({ data, refresh, user, logout, toast }) {
       setPage={setPage}
       logout={logout}
     >
-      {page === "attendance" && <AttendancePanel user={user} toast={toast} />}{" "}
+      {page === "overview" && <RoleOverview role="waiter" data={data} user={user} setPage={setPage} />}{" "}
+      {/* Temporarily disabled; retain for later:
+      {page === "attendance" && <AttendancePanel user={user} toast={toast} />}
+      */}{" "}
       {page === "floor" && (
         <>
           <PageHead
@@ -5380,9 +5341,36 @@ function calculateBill(order, data) {
       menu: data.menu.find((m) => m.id === i.menuId),
     })),
     subtotal = items.reduce((s, i) => s + (i.menu?.price || 0) * i.qty, 0),
-    tax = (subtotal * data.settings.taxRate) / 100,
-    service = (subtotal * data.settings.serviceCharge) / 100;
-  return { items, subtotal, tax, service, total: subtotal + tax + service };
+    tax = (subtotal * data.settings.taxRate) / 100;
+  return { items, subtotal, tax, service: 0, total: subtotal + tax };
+}
+function billNumber(order) {
+  return order?.dailyNumber ?? order?.id;
+}
+function playReceiptPrintAnimation(receipt, copies) {
+  const overlay = document.createElement("div");
+  overlay.className = "receipt-print-animation";
+  const stage = document.createElement("div");
+  stage.className = "receipt-animation-stage";
+  const slot = document.createElement("div");
+  slot.className = "receipt-animation-slot";
+  const paper = receipt.cloneNode(true);
+  paper.className = "receipt-animation-paper";
+  paper.querySelector(".print")?.remove();
+  const message = document.createElement("div");
+  message.className = "receipt-animation-message";
+  message.innerHTML = `<b>Receipt ready</b><span>${copies} ${copies === 1 ? "bill" : "bills"} prepared for printing</span>`;
+  stage.append(slot, paper);
+  overlay.append(stage, message);
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add("playing"));
+  return new Promise((resolve) => window.setTimeout(() => {
+    overlay.classList.add("leaving");
+    window.setTimeout(() => {
+      overlay.remove();
+      resolve();
+    }, 220);
+  }, 1750));
 }
 async function openPrinter(event) {
   const container = event.currentTarget.closest(".modal-wrap") || document;
@@ -5430,6 +5418,7 @@ async function openPrinter(event) {
         image.addEventListener("load", resolve, { once: true });
         image.addEventListener("error", resolve, { once: true });
       })));
+  await playReceiptPrintAnimation(receipt, copies);
   let cleaned = false;
   const cleanup = () => {
     if (cleaned) return;
@@ -5455,7 +5444,7 @@ function BillReceipt({ table, order, data, bill }) {
       <div className="receipt-brand">
         <img className="receipt-logo" src="/knockout-logo.png" alt="KnockOUT" />
         <h2>{data.settings.hotelName}</h2>
-        <p>Tax Invoice · Order #{order.id}</p>
+        <p>Tax Invoice · Bill #{billNumber(order)}</p>
       </div>
       <div className="receipt-meta">
         <span>{table ? `Table ${table.number}` : "Parcel order"}</span>
@@ -5481,17 +5470,13 @@ function BillReceipt({ table, order, data, bill }) {
           <span>GST ({data.settings.taxRate}%)</span>
           <b>{money(bill.tax)}</b>
         </p>
-        <p>
-          <span>Service charge ({data.settings.serviceCharge}%)</span>
-          <b>{money(bill.service)}</b>
-        </p>
         <p className="grand">
           <span>Total bill</span>
           <b>{money(bill.total)}</b>
         </p>
       </div>
       <footer className="receipt-footer">
-        <b>Thank you for dining with us</b>
+        <b>Thank you for choosing us</b>
         <span>We look forward to welcoming you again</span>
         <i aria-hidden="true">◆</i>
       </footer>
@@ -5667,7 +5652,7 @@ function productionOrders(data, role) {
 }
 
 function Chef({ data, refresh, user, logout, toast }) {
-  const [page, setPage] = useState("attendance");
+  const [page, setPage] = useState("overview");
   const active = productionOrders(data, "chef");
   const orders =
     page === "parcels"
@@ -5677,6 +5662,8 @@ function Chef({ data, refresh, user, logout, toast }) {
         : active;
   const shown =
     page === "ready" ? orders.filter((o) => o.status === "ready") : orders;
+  if (page === "overview") return <Shell role="chef" user={user} page={page} setPage={setPage} logout={logout}><RoleOverview role="chef" data={data} user={user} setPage={setPage}/></Shell>;
+  /* Temporarily disabled; retain the Chef attendance screen for later.
   if (page === "attendance")
     return (
       <Shell
@@ -5689,6 +5676,7 @@ function Chef({ data, refresh, user, logout, toast }) {
         <AttendancePanel user={user} toast={toast} />
       </Shell>
     );
+  */
   if (page === "team")
     return (
       <Shell
@@ -5771,9 +5759,11 @@ function Chef({ data, refresh, user, logout, toast }) {
 }
 
 function Juicer({ data, refresh, user, logout, toast }) {
-  const [page, setPage] = useState("attendance");
+  const [page, setPage] = useState("overview");
   const active = productionOrders(data, "juicer");
-  if (page === "attendance") return <Shell role="juicer" user={user} page={page} setPage={setPage} logout={logout}><AttendancePanel user={user} toast={toast}/></Shell>;
+  if (page === "overview") return <Shell role="juicer" user={user} page={page} setPage={setPage} logout={logout}><RoleOverview role="juicer" data={data} user={user} setPage={setPage}/></Shell>;
+  // Temporarily disabled; retain the Juicer attendance screen for later:
+  // if (page === "attendance") return <Shell role="juicer" user={user} page={page} setPage={setPage} logout={logout}><AttendancePanel user={user} toast={toast}/></Shell>;
   if (page === "juices") return <Shell role="juicer" user={user} page={page} setPage={setPage} logout={logout}><ChefDishes data={{...data,menu:data.menu.filter(item=>String(item.category).toLowerCase()==="juices")}} refresh={refresh} toast={toast} juicer/></Shell>;
   const orders = page === "ready" ? active.filter(order => order.status === "ready") : active.filter(order => order.status !== "ready");
   async function status(id, next) {
