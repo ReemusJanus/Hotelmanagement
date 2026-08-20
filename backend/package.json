@@ -2,19 +2,28 @@
   "name": "hotel-backend",
   "version": "1.0.0",
   "packageManager": "npm@11.16.0",
-  "engines": {"node": "24.18.1", "npm": "11.16.0"},
+  "engines": {
+    "node": "24.18.1",
+    "npm": "11.16.0"
+  },
   "type": "module",
   "scripts": {
     "preinstall": "node scripts/check-runtime-versions.mjs",
-    "dev": "node --watch src/server.js",
-    "start": "node src/server.js"
+    "dev": "node --watch src/main.js",
+    "start": "node src/main.js",
+    "start:master": "node src/main-master.js"
   },
   "dependencies": {
+    "@nestjs/common": "11.2.1",
+    "@nestjs/core": "11.2.1",
+    "@nestjs/platform-express": "11.2.1",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "minio": "^8.0.5",
     "multer": "^2.0.2",
     "mysql2": "^3.14.3",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2",
     "ws": "^8.21.3"
   }
 }

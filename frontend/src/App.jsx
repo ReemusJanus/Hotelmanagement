@@ -36,7 +36,7 @@ import {
   PieChart,
   CupSoda,
 } from "lucide-react";
-import { api, API_BASE, portalHeaders, resolvePortalLogin } from "./api";
+import { api, apiForm, resolvePortalLogin, submitCompanyRegistration } from "./api";
 import AttendancePanel from "./AttendancePanel";
 
 const money = (n) =>
@@ -153,9 +153,23 @@ function CompanyApp() {
   };
   const logout = () => {
     sessionStorage.removeItem("knockout-portal-user");
+    sessionStorage.removeItem("knockout-access-token");
     setUser(null);
     setData(null);
   };
+  useEffect(() => {
+    const revoke = (event) => {
+      logout();
+      setNotice(event.detail?.message || "Your company access has been disabled.");
+    };
+    window.addEventListener("knockout:session-revoked", revoke);
+    return () => window.removeEventListener("knockout:session-revoked", revoke);
+  }, []);
+  useEffect(() => {
+    const updateProfile = (event) => setUser(event.detail);
+    window.addEventListener("knockout:profile-updated", updateProfile);
+    return () => window.removeEventListener("knockout:profile-updated", updateProfile);
+  }, []);
   const toast = (m) => {
     setNotice(m);
     setTimeout(() => setNotice(""), 2800);
@@ -247,14 +261,14 @@ function WebRoleSelect({ choose }) {
 }
 
 function Login({ onLogin }) {
-  const [pin, setPin] = useState(""),
+  const [mode,setMode]=useState("login"),[pin, setPin] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [verified, setVerified] = useState(false),
     input = useRef(null);
   useEffect(() => {
-    input.current?.focus();
-  }, []);
+    if(mode==="login")input.current?.focus();
+  }, [mode]);
   useEffect(() => {
     if (pin.length === 6 && !busy) submit();
   }, [pin]);
@@ -275,6 +289,7 @@ function Login({ onLogin }) {
       setBusy(false);
     }
   }
+  if(mode==="register")return <PublicCompanyRegistration back={()=>setMode("login")}/>;
   return (
     <main className="web-auth otp-entry">
       <header className="otp-web-brand">
@@ -321,9 +336,17 @@ function Login({ onLogin }) {
         <small className="otp-demo">
           Forgot your PIN? Ask KnockOUT Master to change it.
         </small>
+        <div className="public-auth-divider"><span>NEW COMPANY?</span></div>
+        <button className="public-register-link" onClick={()=>setMode("register")}><Building2/><span><b>Register your company</b><small>Submit an application for Master approval</small></span><ArrowRight/></button>
       </section>
     </main>
   );
+}
+
+function PublicCompanyRegistration({ back }) {
+  const[form,setForm]=useState({companyName:"",adminName:"",adminPin:"",email:"",phone:""}),[busy,setBusy]=useState(false),[error,setError]=useState(""),[submitted,setSubmitted]=useState(null);
+  async function submit(event){event.preventDefault();setBusy(true);setError("");try{setSubmitted(await submitCompanyRegistration(form))}catch(err){setError(err.message)}finally{setBusy(false)}}
+  return <main className="web-auth public-registration-page"><header className="otp-web-brand"><span className="logo">K</span><b>KnockOUT</b><small>NEW COMPANY APPLICATION</small></header><section className="public-registration-card">{submitted?<div className="registration-success"><span><CheckCircle2/></span><span className="eyebrow">APPLICATION #{submitted.id}</span><h1>Sent for Master approval</h1><p>Your database has <b>not</b> been created yet. KnockOUT Master will review the application. After approval, the company database and first Admin login will be created automatically.</p><div><i/><span><b>Current status: Pending</b><small>Use your Admin PIN only after approval.</small></span></div><button className="primary wide" onClick={back}>Return to login</button></div>:<><button className="web-back registration-back" onClick={back}><ChevronLeft/>Back to login</button><span className="eyebrow">COMPANY REGISTRATION</span><h1>Apply to join KnockOUT</h1><p>Submit the company and first Administrator details. Database creation requires Master approval.</p><form className="public-registration-form" onSubmit={submit}><label>COMPANY NAME<input value={form.companyName} onChange={(e)=>setForm({...form,companyName:e.target.value})} placeholder="Example: KnockOUT 2" required/></label><label>ADMINISTRATOR NAME<input value={form.adminName} onChange={(e)=>setForm({...form,adminName:e.target.value})} placeholder="Full name" required/></label><label>ADMIN EMAIL<input type="email" value={form.email} onChange={(e)=>setForm({...form,email:e.target.value})} placeholder="admin@company.com" required/></label><label>PHONE NUMBER<input value={form.phone} onChange={(e)=>setForm({...form,phone:e.target.value})} placeholder="9876543210" inputMode="tel" required/></label><label className="full">REQUESTED 6-DIGIT ADMIN PIN<input type="password" value={form.adminPin} onChange={(e)=>setForm({...form,adminPin:e.target.value.replace(/\D/g,"").slice(0,6)})} placeholder="••••••" inputMode="numeric" required/></label><div className="registration-process full"><span><b>1</b>Submit</span><i/><span><b>2</b>Master review</span><i/><span><b>3</b>Database created</span></div>{error?<div className="form-error full">{error}</div>:null}<button className="primary wide full" disabled={busy||form.adminPin.length!==6}>{busy?"Sending application…":"Send for Master approval"}</button></form></>}</section></main>;
 }
 
 function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
@@ -341,11 +364,13 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
         })(),
     ),
     [data, setData] = useState(null),
-    [creating, setCreating] = useState(false),
     [masterAction, setMasterAction] = useState(null),
     [pinUser, setPinUser] = useState(null),
     [selectedCompanyId, setSelectedCompanyId] = useState(null),
     [companySection, setCompanySection] = useState("overview"),
+    [companySearch, setCompanySearch] = useState(""),
+    [companyFilter, setCompanyFilter] = useState("all"),
+    [reviewBusy,setReviewBusy]=useState(null),
     [actionBusy, setActionBusy] = useState(false),
     [notice, setNotice] = useState("");
   const refresh = useCallback(
@@ -411,10 +436,12 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
       setActionBusy(false);
     }
   }
+  async function reviewRegistration(request,status){setReviewBusy(request.id);try{await api(`/company-registrations/${request.id}/${status}`,{method:"POST",body:JSON.stringify({reviewNote:status==="reject"?"Application declined by KnockOUT Master":"Approved by KnockOUT Master"})});await refresh();toast(status==="approve"?`${request.companyName} approved · database and Admin created`:`${request.companyName} registration rejected`)}catch(error){toast(error.message)}finally{setReviewBusy(null)}}
   if (!user)
     return (
       <MasterLogin
         login={(value) => {
+          if(value.accessToken)sessionStorage.setItem("knockout-access-token",value.accessToken);
           sessionStorage.setItem("knockout-master-user", JSON.stringify(value));
           setUser(value);
         }}
@@ -428,9 +455,16 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
       </div>
     );
   const companies = data.companies || [],
-    selectedCompany = companies.find((company) => company.id === selectedCompanyId) || null;
+    registrationRequests=data.registrationRequests||[],pendingRegistrations=registrationRequests.filter((request)=>request.status==="pending"),
+    selectedCompany = companies.find((company) => company.id === selectedCompanyId) || null,
+    visibleCompanies = companies.filter((company) => {
+      const matchesStatus = companyFilter === "all" || company.status === companyFilter || (companyFilter === "attention" && (!company.online || company.lowStock > 0));
+      const query = companySearch.trim().toLowerCase();
+      return matchesStatus && (!query || [company.companyName, company.databaseName, company.adminName].some((value) => String(value || "").toLowerCase().includes(query)));
+    });
   const logoutMaster = () => {
     sessionStorage.removeItem("knockout-master-user");
+    sessionStorage.removeItem("knockout-access-token");
     if (onLogout) onLogout();
     else setUser(null);
   };
@@ -454,13 +488,6 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
             {companies.map((company) => <button key={company.id} className={selectedCompany?.id === company.id ? "active" : ""} onClick={() => { setSelectedCompanyId(company.id); setCompanySection("overview"); }}><Building2 size={17}/><span>{company.companyName}<small>{company.staffCount} users</small></span></button>)}
           </div>
         </nav>
-        <div className="system-ok">
-          <i />
-          <span>
-            <b>Master database online</b>
-            <small>Tenant isolation active</small>
-          </span>
-        </div>
         <div className="side-user">
           <span>KM</span>
           <div>
@@ -478,9 +505,7 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
             <span className="eyebrow">MULTI-COMPANY CONTROL</span>
             <h2>KnockOUT Master</h2>
           </div>
-          <button className="primary" onClick={() => setCreating(true)}>
-            <Plus size={15} /> Register company
-          </button>
+          <div className="master-pending-counter"><Bell size={15}/><span><b>{pendingRegistrations.length}</b><small>Pending registrations</small></span></div>
         </header>
         <div className="page">
           {selectedCompany ? <>
@@ -491,10 +516,16 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
             {companySection === "revenue" ? <MasterRevenue companies={[selectedCompany]}/> : null}
             {companySection === "controls" ? <CompanyControls company={selectedCompany} status={status} setMasterAction={setMasterAction}/> : null}
           </> : <>
-          <PageHead kicker="SUPER ADMIN" title="Company Network" sub="Select a company to open its isolated user directory and controls." />
-          <div className="company-directory-summary"><Building2/><div><b>{companies.length} registered compan{companies.length===1?"y":"ies"}</b><small>Select a company to see its users, revenue, operations, and controls.</small></div></div>
+          <PageHead kicker="EXECUTIVE COMMAND" title="Company Network" sub="A live operational view of every company in the KnockOUT group." />
+          <MasterRegistrationRequests requests={registrationRequests} busy={reviewBusy} review={reviewRegistration}/>
+          <MasterNetworkOverview companies={companies}/>
+          <div className="master-directory-toolbar">
+            <div><span className="eyebrow">COMPANY DIRECTORY</span><b>{visibleCompanies.length} of {companies.length} companies</b></div>
+            <label><Search size={15}/><input value={companySearch} onChange={(event)=>setCompanySearch(event.target.value)} placeholder="Search company, database or admin"/></label>
+            <div className="master-filter-chips">{[["all","All"],["active","Active"],["suspended","Suspended"],["attention","Needs attention"]].map(([id,label])=><button key={id} className={companyFilter===id?"active":""} onClick={()=>setCompanyFilter(id)}>{label}</button>)}</div>
+          </div>
           <div className="company-grid">
-            {companies.map((company) => (
+            {visibleCompanies.map((company) => (
               <article
                 className={`company-card ${company.status}`}
                 key={company.id}
@@ -507,21 +538,18 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
                 </header>
                 <h2>{company.companyName}</h2>
                 <code>{company.databaseName}</code>
-                <p>Open this company to view its operations, users, revenue, database status, and administrative controls.</p>
+                <p>{company.adminName} · {company.staffCount} active users</p>
+                <div className="company-card-metrics"><span><b>{money(company.revenue)}</b><small>Total revenue</small></span><span><b>{company.activeOrders}</b><small>Live orders</small></span><span className={company.lowStock?"warning":""}><b>{company.lowStock}</b><small>Low stock</small></span></div>
+                <footer className="company-health"><span><i className={company.online?"online":""}/>{company.online?"Database online":"Database offline"}</span><small>{company.adminLoginActive?"Admin enabled":"Admin disabled"}</small></footer>
                 <button className="company-users-button" onClick={() => { setSelectedCompanyId(company.id); setCompanySection("overview"); }}><LayoutDashboard size={15}/><span>Open company workspace<small>All details and controls</small></span><ArrowRight size={16}/></button>
               </article>
             ))}
           </div>
+          {!visibleCompanies.length?<div className="master-directory-empty"><Search/><b>No companies found</b><small>Change the search or status filter.</small></div>:null}
+          <MasterRevenue companies={companies}/>
           </>}
         </div>
       </main>
-      {creating ? (
-        <CompanyRegistration
-          close={() => setCreating(false)}
-          refresh={refresh}
-          toast={toast}
-        />
-      ) : null}
       {masterAction ? (
         <MasterActionModal
           action={masterAction}
@@ -541,6 +569,31 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
       <div className={`toast ${notice ? "show" : ""}`}>{notice}</div>
     </div>
   );
+}
+
+function MasterRegistrationRequests({ requests,busy,review }) {
+  const pending=requests.filter((request)=>request.status==="pending"),history=requests.filter((request)=>request.status!=="pending").slice(0,5);
+  return <section className="panel master-registration-queue"><header><div><span className="eyebrow">MASTER APPROVAL REQUIRED</span><h2>Company registration requests</h2><p>No database is created until you approve an application.</p></div><span className={pending.length?"has-pending":""}><b>{pending.length}</b><small>Awaiting review</small></span></header>{pending.length?<div className="registration-request-list">{pending.map((request)=><article key={request.id}><span className="registration-company-icon"><Building2/></span><div><h3>{request.companyName}</h3><code>{request.companyName.toLowerCase().trim().replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"")}</code><p>Requested {new Date(request.createdAt).toLocaleString("en-IN")}</p></div><div className="registration-admin-details"><small>FIRST ADMINISTRATOR</small><b>{request.adminName}</b><span>{request.email} · {request.phone}</span></div><div className="registration-review-actions"><button disabled={busy===request.id} onClick={()=>review(request,"reject")}>Reject</button><button className="primary" disabled={busy===request.id} onClick={()=>review(request,"approve")}><CheckCircle2/>{busy===request.id?"Processing…":"Approve & create DB"}</button></div></article>)}</div>:<div className="registration-empty"><CheckCircle2/><span><b>No registrations awaiting approval</b><small>New public applications will appear here automatically.</small></span></div>}{history.length?<details><summary>Recent decisions ({history.length})</summary><div className="registration-history">{history.map((request)=><span key={request.id}><Status status={request.status}/><b>{request.companyName}</b><small>{request.adminName} · {request.reviewedAt?new Date(request.reviewedAt).toLocaleDateString("en-IN"):"Reviewed"}</small></span>)}</div></details>:null}</section>;
+}
+
+function MasterNetworkOverview({ companies }) {
+  const totalRevenue = companies.reduce((sum, company) => sum + Number(company.revenue || 0), 0),
+    activeOrders = companies.reduce((sum, company) => sum + Number(company.activeOrders || 0), 0),
+    staff = companies.reduce((sum, company) => sum + Number(company.staffCount || 0), 0),
+    alerts = companies.filter((company) => !company.online || company.lowStock > 0 || !company.adminLoginActive),
+    today = dateKey(new Date()),
+    todayRevenue = companies.reduce((sum, company) => sum + Number((company.dailyRevenue || []).find((day) => dateKey(day.date) === today)?.total || 0), 0);
+  return <>
+    <div className="stats master-stats master-network-stats">
+      <Stat icon={Building2} label="Companies" value={companies.length} note={`${companies.filter((company)=>company.status==="active").length} active tenants`}/>
+      <Stat icon={TrendingUp} label="Group revenue" value={money(totalRevenue)} note={`${money(todayRevenue)} collected today`}/>
+      <Stat icon={ReceiptText} label="Live orders" value={activeOrders} note="Across the company network"/>
+      <Stat icon={Users} label="Active workforce" value={staff} note="Declared company users"/>
+    </div>
+    <section className={`master-command-strip ${alerts.length?"has-alerts":"healthy"}`}>
+      <Gauge/><div><span className="eyebrow">NETWORK HEALTH</span><b>{alerts.length?`${alerts.length} compan${alerts.length===1?"y needs":"ies need"} attention`:"All companies operating normally"}</b><small>{alerts.length?alerts.map((company)=>company.companyName).join(" · "):"Databases, administrators, and stock levels are healthy."}</small></div><span>{companies.filter((company)=>company.online).length}/{companies.length}<small>online</small></span>
+    </section>
+  </>;
 }
 
 function MasterActionModal({ action, busy, close, confirm }) {
@@ -1007,6 +1060,7 @@ const portalNav = {
     ["overview", "Overview", LayoutDashboard],
     // ["attendance", "Check In / Out", Clock3], // Temporarily disabled; retain for later.
     ["team", "Chef Management", Users],
+    ["stock-booking", "Book Kitchen Stock", Boxes],
     ["dishes", "Dishes", UtensilsCrossed],
     ["kitchen", "Dine-in Kitchen", ChefHat],
     ["parcels", "Parcel Queue", Package],
@@ -1021,6 +1075,8 @@ const portalNav = {
   ],
 };
 function Shell({ role, user, page, setPage, logout, children }) {
+  const [profileOpen,setProfileOpen]=useState(false),[profile,setProfile]=useState(user);
+  async function openProfile(){setProfileOpen(true);try{setProfile(await api("/profile"))}catch{/* Keep the signed-in identity visible if loading fails. */}}
   return (
     <div className="shell">
       <aside>
@@ -1043,25 +1099,11 @@ function Shell({ role, user, page, setPage, logout, children }) {
             </button>
           ))}
         </nav>
-        <div className="system-ok">
-          <i />
-          <span>
-            <b>All systems online</b>
-            <small>Last synced just now</small>
-          </span>
-        </div>
         <div className="side-user">
-          <span>
-            {user.name
-              .split(" ")
-              .map((x) => x[0])
-              .join("")
-              .slice(0, 2)}
-          </span>
-          <div>
-            <b>{user.name}</b>
-            <small>{role}</small>
-          </div>
+          <button className="side-profile" onClick={openProfile} title="Open my profile">
+            <span className="side-avatar">{profile.profileImageUrl?<img src={profile.profileImageUrl} alt=""/>:profile.name.split(" ").map((x) => x[0]).join("").slice(0, 2)}</span>
+            <span className="side-profile-copy"><b>{profile.name}</b><small>{role} · Edit profile</small></span>
+          </button>
           <button onClick={logout}>
             <LogOut size={17} />
           </button>
@@ -1074,9 +1116,6 @@ function Shell({ role, user, page, setPage, logout, children }) {
             <input placeholder="Search anything…" />
           </div>
           <div className="header-actions">
-            <span className="live">
-              <i /> Live
-            </span>
             <button>
               <Bell size={17} />
             </button>
@@ -1096,8 +1135,16 @@ function Shell({ role, user, page, setPage, logout, children }) {
         </header>
         <div className="page">{children}</div>
       </main>
+      {profileOpen?<ProfileEditor user={profile} close={()=>setProfileOpen(false)} saved={(updated)=>{const next={...user,...updated};setProfile(next);sessionStorage.setItem("knockout-portal-user",JSON.stringify(next));window.dispatchEvent(new CustomEvent("knockout:profile-updated",{detail:next}));setProfileOpen(false)}}/>:null}
     </div>
   );
+}
+
+function ProfileEditor({user,close,saved}){
+  const[form,setForm]=useState({name:user.name||"",phone:user.phone||"",email:user.email||""}),[image,setImage]=useState(null),[preview,setPreview]=useState(user.profileImageUrl||""),[busy,setBusy]=useState(false),[error,setError]=useState("");
+  function choose(file){if(!file)return;if(!file.type.startsWith("image/")){setError("Choose a JPG, PNG, or WebP image");return}if(file.size>5*1024*1024){setError("Profile photo must be smaller than 5 MB");return}setError("");setImage(file);setPreview(URL.createObjectURL(file))}
+  async function submit(event){event.preventDefault();setBusy(true);setError("");try{const body=new FormData();body.append("name",form.name);body.append("phone",form.phone);body.append("email",form.email);if(image)body.append("image",image);const updated=await apiForm("/profile",body,{method:"PATCH"});saved({...form,...updated,profileImageUrl:updated.profileImageUrl||preview})}catch(err){setError(err.message)}finally{setBusy(false)}}
+  return <Modal close={close} hideClose={busy}><div className="profile-editor-head"><label className="profile-photo-picker"><span>{preview?<img src={preview} alt="Profile preview"/>:form.name.split(" ").map(part=>part[0]).join("").slice(0,2)}</span><input type="file" accept="image/png,image/jpeg,image/webp" onChange={event=>choose(event.target.files[0])}/><small>Change photo</small></label><div><span className="eyebrow">MY ACCOUNT</span><h2>Edit your profile</h2><p>{String(user.role||"").toUpperCase()} portal identity</p></div></div><form className="modal-form" onSubmit={submit}><label>FULL NAME<input required value={form.name} onChange={event=>setForm({...form,name:event.target.value})}/></label><div className="form-grid"><label>MOBILE NUMBER<input value={form.phone} onChange={event=>setForm({...form,phone:event.target.value})} inputMode="tel" placeholder="9876543210"/></label><label>EMAIL ADDRESS<input type="email" value={form.email} onChange={event=>setForm({...form,email:event.target.value})} placeholder="name@company.com"/></label></div>{error?<div className="form-error">{error}</div>:null}<button className="primary wide" disabled={busy}>{busy?"Saving profile…":"Save profile"}</button></form></Modal>
 }
 function PageHead({ kicker, title, sub, action }) {
   return (
@@ -1140,6 +1187,7 @@ function ThemeSelect({ value, onChange, options, placeholder = "Choose an option
 
 function Admin({ data, refresh, user, logout, toast }) {
   const [page, setPage] = useState("overview"), [booking, setBooking] = useState(false);
+  const pendingStockRequests = (data.stockRequests || []).filter((request) => request.status !== "resolved"), lowStock = (data.inventory || []).filter((item) => item.quantity <= item.min);
   return (
     <>
       <Shell
@@ -1149,7 +1197,8 @@ function Admin({ data, refresh, user, logout, toast }) {
         setPage={setPage}
         logout={logout}
       >
-        {page === "overview" && <AdminOverview data={data} setPage={setPage} />}{" "}
+        {(pendingStockRequests.length || lowStock.length) ? <button className="admin-stock-notification" onClick={()=>setPage("stock")}><Bell/><span><b>{pendingStockRequests.length ? `${pendingStockRequests.length} kitchen stock request${pendingStockRequests.length===1?"":"s"}` : `${lowStock.length} low-stock item${lowStock.length===1?"":"s"}`}</b><small>{pendingStockRequests.length ? "Chef requested replenishment · open Stock Management" : "Inventory has reached its minimum level"}</small></span><ArrowRight/></button> : null}
+        {page === "overview" && <AdminOverview data={data} setPage={setPage} user={user} />}{" "}
         {page === "tables" && (
           <AdminTables data={data} refresh={refresh} toast={toast} user={user} />
         )}{" "}
@@ -1188,18 +1237,20 @@ function Admin({ data, refresh, user, logout, toast }) {
     </>
   );
 }
-function AdminOverview({ data, setPage }) {
+function AdminOverview({ data, setPage, user }) {
   const active = data.orders.filter(
       (o) => !["completed", "served"].includes(o.status),
     ),
     revenue = data.orders
       .filter((o) => o.total)
-      .reduce((s, o) => s + o.total, 0);
+      .reduce((s, o) => s + o.total, 0),
+    hour = new Date().getHours(),
+    greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   return (
     <div className="portal-overview admin-overview">
       <PageHead
         kicker="ADMIN COMMAND CENTER"
-        title="Good afternoon, Arjun"
+        title={`${greeting}, ${user?.name || "Admin"}`}
         sub="A complete view of today's restaurant operations."
         action={
           <button className="primary" onClick={() => setPage("orders")}>
@@ -1846,13 +1897,7 @@ function FoodManager({ data, refresh, toast }) {
     try {
       const form = new FormData();
       form.append("image", file);
-      const response = await fetch(`${API_BASE}/menu/${item.id}/image`, {
-        method: "POST",
-        headers: portalHeaders(),
-        body: form,
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.message);
+      await apiForm(`/menu/${item.id}/image`, form);
       await refresh();
       toast(`${item.name} photo saved to MinIO`);
     } catch (e) {
@@ -1921,13 +1966,7 @@ function MenuManager({ data, refresh, toast }) {
     const form = new FormData();
     form.append("image", file);
     try {
-      const r = await fetch(`${API_BASE}/menu/${item.id}/image`, {
-          method: "POST",
-          headers: portalHeaders(),
-          body: form,
-        }),
-        result = await r.json();
-      if (!r.ok) throw new Error(result.message);
+      await apiForm(`/menu/${item.id}/image`, form);
       await refresh();
       toast("Photo saved to MinIO");
     } catch (e) {
@@ -2780,6 +2819,11 @@ function Stock({ data, refresh, toast, user }) {
     wasteCost = recent
       .filter((x) => x.movementType === "waste")
       .reduce((s, x) => s + Math.abs(x.quantity) * (x.unitCost || 0), 0),
+    todayKey = dateKey(new Date()),
+    todayMovements = transactions.filter((x) => dateKey(x.createdAt) === todayKey),
+    todayReceived = todayMovements.filter((x) => x.movementType === "purchase").reduce((s, x) => s + Math.abs(x.quantity), 0),
+    todayUsed = todayMovements.filter((x) => x.movementType === "usage").reduce((s, x) => s + Math.abs(x.quantity), 0),
+    todayWaste = todayMovements.filter((x) => x.movementType === "waste").reduce((s, x) => s + Math.abs(x.quantity), 0),
     categories = [...new Set(data.inventory.map((i) => i.category).filter(Boolean))].sort(),
     visibleInventory = data.inventory.filter((item) => {
       const matchesText = `${item.name} ${item.category}`.toLowerCase().includes(query.toLowerCase()),
@@ -2803,6 +2847,11 @@ function Stock({ data, refresh, toast, user }) {
       .sort((a, b) => (a.daysCover ?? 9999) - (b.daysCover ?? 9999)),
     reorderItems = planning.filter((x) => x.quantity <= x.min || (x.daysCover !== null && x.daysCover <= 7)),
     reorderCost = reorderItems.reduce((s, x) => s + x.reorderCost, 0);
+  const stockRequests = data.stockRequests || [];
+  async function updateRequest(request, status) {
+    try { await api(`/stock-requests/${request.id}/status`, { method:"PATCH", body:JSON.stringify({status}) }); await refresh(); toast(`${request.itemName} request marked ${status}`); }
+    catch (error) { toast(error.message); }
+  }
   const exportMovements = () =>
     exportCsv(`knockout-stock-${new Date().toISOString().slice(0, 10)}.csv`, [
       ["Date", "Item", "Category", "Movement", "Quantity", "Unit", "Unit cost", "Value", "Note", "Recorded by"],
@@ -2870,6 +2919,14 @@ function Stock({ data, refresh, toast, user }) {
           tone={reorderItems.length ? "warning" : undefined}
         />
       </div>
+      <section className="stock-daily-desk">
+        <div><span className="eyebrow">TODAY'S STOCK DESK</span><h3>Daily inventory movement</h3><p>{todayMovements.length} movements recorded today</p></div>
+        <span className="stock-daily-number received"><b>+{todayReceived.toFixed(2)}</b><small>Received</small></span>
+        <span className="stock-daily-number used"><b>−{todayUsed.toFixed(2)}</b><small>Used</small></span>
+        <span className="stock-daily-number waste"><b>−{todayWaste.toFixed(2)}</b><small>Wasted</small></span>
+        <div className="stock-urgent-actions"><small>{low.length ? `${low.length} urgent items` : "Stock healthy"}</small>{low.slice(0,3).map((item)=><button key={item.id} onClick={()=>setMoving(item)}><Plus size={12}/>{item.name}</button>)}</div>
+      </section>
+      {stockRequests.length ? <section className="panel admin-stock-requests"><PanelHead title="Chef stock requests" sub="Kitchen replenishment notifications and purchase progress"/><div>{stockRequests.map((request)=><article className={request.status} key={request.id}><span><Bell/><i/></span><div><b>{request.itemName}</b><small>{request.requestedBy} requested {request.requestedQuantity} {request.unit} · Current {request.currentQuantity} {request.unit}</small><p>{request.note || "Kitchen stock is approaching its minimum level."}</p></div><Status status={request.status}/><time>{new Date(request.createdAt).toLocaleString("en-IN")}</time><div className="request-actions">{request.status==="pending"?<button onClick={()=>updateRequest(request,"ordered")}>Mark ordered</button>:null}{request.status!=="resolved"?<button onClick={()=>updateRequest(request,"resolved")}>Resolve</button>:null}</div></article>)}</div></section>:null}
       <div className="inventory-tabs">
         <button
           className={tab === "inventory" ? "active" : ""}
@@ -3582,12 +3639,14 @@ function FinanceCalendar({ data, selectDate }) {
         title="Choose a finance date"
         sub="Select a day to open its bills, spending, purchases, dealer payments, and daily calculation."
       />
+      <div className="monthly-report-selector"><div><span className="eyebrow">OVERALL REVENUE REPORT</span><b>Select any month to review the complete business performance</b></div><label>REPORT MONTH<input type="month" value={`${year}-${String(monthIndex+1).padStart(2,"0")}`} onChange={(event)=>{const [nextYear,nextMonth]=event.target.value.split("-").map(Number);if(nextYear&&nextMonth)setMonth(new Date(nextYear,nextMonth-1,1));}}/></label></div>
       <div className="finance-month-summary">
         <DailyKpi icon={ReceiptText} label="Monthly bills" value={monthBills} amount={monthSales} tone="income" />
         <DailyKpi icon={Wallet} label="Cash paid out" value={money(monthSpent)} note="Expenses and dealer payments" tone="expense" />
         <DailyKpi icon={ShoppingCart} label="Purchase invoices" value={money(monthPurchases)} note="Products bought this month" />
         <DailyKpi icon={TrendingUp} label="Monthly net cash" value={money(monthSales-monthSpent)} note="Paid bills minus cash outflow" tone={monthSales-monthSpent>=0?"income":"expense"} />
       </div>
+      <MonthlyRevenueReport data={data} year={year} monthIndex={monthIndex}/>
       <section className="finance-calendar">
         <header>
           <div>
@@ -3675,6 +3734,35 @@ function FinanceCalendar({ data, selectDate }) {
       </section>
     </>
   );
+}
+
+function MonthlyRevenueReport({ data, year, monthIndex }) {
+  const prefix = `${year}-${String(monthIndex + 1).padStart(2, "0")}`,
+    orders = data.orders.filter((order) => order.paymentStatus === "paid" && dateKey(order.completedAt).startsWith(prefix)),
+    entries = (data.financeEntries || []).filter((entry) => dateKey(entry.entryDate).startsWith(prefix)),
+    payments = (data.supplierPayments || []).filter((payment) => dateKey(payment.paymentDate).startsWith(prefix)),
+    revenue = orders.reduce((sum, order) => sum + Number(order.total || 0), 0),
+    income = entries.filter((entry) => entry.entryType === "income").reduce((sum, entry) => sum + Number(entry.amount || 0), 0),
+    expenses = entries.filter((entry) => entry.entryType === "expense").reduce((sum, entry) => sum + Number(entry.amount || 0), 0),
+    dealerPayments = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0),
+    net = revenue + income - expenses - dealerPayments,
+    days = new Date(year, monthIndex + 1, 0).getDate(),
+    daily = Array.from({ length: days }, (_, index) => {
+      const key = `${prefix}-${String(index + 1).padStart(2, "0")}`,
+        rows = orders.filter((order) => dateKey(order.completedAt) === key),
+        total = rows.reduce((sum, order) => sum + Number(order.total || 0), 0);
+      return { key, bills: rows.length, total };
+    }),
+    paymentMix = Object.entries(orders.reduce((result, order) => { const method = order.paymentMethod || "Unspecified"; result[method] = (result[method] || 0) + Number(order.total || 0); return result; }, {})),
+    maxRevenue = Math.max(1, ...daily.map((day) => day.total));
+  const exportMonth = () => exportCsv(`knockout-revenue-${prefix}.csv`, [
+    ["KnockOUT monthly revenue report", prefix], ["Metric", "Amount"], ["Bill revenue", revenue], ["Other income", income], ["Operating expenses", expenses], ["Dealer payments", dealerPayments], ["Net cash", net], ["Paid bills", orders.length], [], ["Date", "Bills", "Revenue"], ...daily.map((day) => [day.key, day.bills, day.total]), [], ["Payment method", "Revenue"], ...paymentMix,
+  ]);
+  return <section className="panel monthly-revenue-report">
+    <header><div><span className="eyebrow">MONTHLY PERFORMANCE</span><h2>{new Date(year,monthIndex,1).toLocaleDateString("en-IN",{month:"long",year:"numeric"})} revenue report</h2><p>Complete paid-bill revenue, inflow, outflow, and daily sales performance.</p></div><button className="secondary" onClick={exportMonth}><FileDown size={14}/> Export monthly CSV</button></header>
+    <div className="monthly-report-kpis"><span><small>Overall revenue</small><b>{money(revenue)}</b><em>{orders.length} completed bills</em></span><span><small>Average bill</small><b>{money(orders.length?revenue/orders.length:0)}</b><em>Per paid order</em></span><span><small>Total cash outflow</small><b className="amount-out">{money(expenses+dealerPayments)}</b><em>Expenses + dealers</em></span><span><small>Net business cash</small><b className={net>=0?"amount-in":"amount-out"}>{money(net)}</b><em>Revenue + income − outflow</em></span></div>
+    <div className="monthly-report-body"><div className="monthly-bars">{daily.map((day)=><button key={day.key} title={`${day.key}: ${money(day.total)} from ${day.bills} bills`}><i style={{height:`${Math.max(day.total?5:1,(day.total/maxRevenue)*100)}%`}}/><small>{Number(day.key.slice(-2))}</small></button>)}</div><aside><h3>Payment collection</h3>{paymentMix.map(([method,amount])=><span key={method}><b>{method}</b><em>{revenue?`${((amount/revenue)*100).toFixed(1)}%`:"0%"}</em><strong>{money(amount)}</strong></span>)}{!paymentMix.length?<p>No paid bills in this month.</p>:null}</aside></div>
+  </section>;
 }
 function DailyFinanceDetails({
   data,
@@ -5694,6 +5782,8 @@ function Chef({ data, refresh, user, logout, toast }) {
         />
       </Shell>
     );
+  if (page === "stock-booking")
+    return <Shell role="chef" user={user} page={page} setPage={setPage} logout={logout}><ChefStockBooking data={data} refresh={refresh} user={user} toast={toast}/></Shell>;
   if (page === "dishes")
     return (
       <Shell role="chef" user={user} page={page} setPage={setPage} logout={logout}>
@@ -5756,6 +5846,25 @@ function Chef({ data, refresh, user, logout, toast }) {
       )}
     </Shell>
   );
+}
+
+function ChefStockBooking({ data, refresh, user, toast }) {
+  const [query,setQuery]=useState(""),[booking,setBooking]=useState(null), inventory=data.inventory||[], requests=data.stockRequests||[], activeRequests=requests.filter((request)=>request.status!=="resolved"), low=inventory.filter((item)=>item.quantity<=item.min), visible=inventory.filter((item)=>`${item.name} ${item.category}`.toLowerCase().includes(query.toLowerCase())).sort((a,b)=>(a.quantity/a.min||0)-(b.quantity/b.min||0));
+  return <>
+    <PageHead kicker="KITCHEN PROCUREMENT" title="Book Kitchen Stock" sub="Request ingredients before they finish. Admin receives the request immediately."/>
+    <div className="stats chef-stock-stats"><Stat icon={AlertTriangle} label="Low / finished" value={low.length} note="Needs kitchen attention" tone="warning"/><Stat icon={Bell} label="Active requests" value={activeRequests.length} note="Pending or ordered by Admin"/><Stat icon={Boxes} label="Ingredients" value={inventory.length} note="Available stock records"/></div>
+    {low.length?<section className="chef-low-alert"><AlertTriangle/><div><b>{low.length} ingredient{low.length===1?" is":"s are"} at or below minimum</b><small>Book these items now to avoid interrupting kitchen service.</small></div></section>:null}
+    <div className="chef-stock-toolbar"><label><Search/><input value={query} onChange={(event)=>setQuery(event.target.value)} placeholder="Search ingredient or category"/></label><span>{visible.length} stock items</span></div>
+    <div className="chef-stock-grid">{visible.map((item)=>{const request=activeRequests.find((entry)=>entry.inventoryId===item.id),ratio=item.min?item.quantity/item.min:2,status=item.quantity===0?"Finished":ratio<=1?"Low":"Available";return <article className={ratio<=1?"low":""} key={item.id}><header><span>{item.category||"Kitchen"}</span><em>{status}</em></header><h2>{item.name}</h2><div className="chef-stock-level"><b>{item.quantity}</b><span>{item.unit}<small>Minimum {item.min} {item.unit}</small></span></div><div className="stock-meter"><i style={{width:`${Math.min(100,ratio*50)}%`}}/></div>{request?<div className={`chef-request-state ${request.status}`}><Bell/><span><b>{request.status}</b><small>{request.requestedQuantity} {item.unit} requested by {request.requestedBy}</small></span></div>:<button className="primary wide" onClick={()=>setBooking(item)}><ShoppingCart/>Book this stock</button>}</article>})}</div>
+    {!visible.length?<div className="empty-state"><Search/><h3>No ingredients found</h3></div>:null}
+    {booking?<ChefStockRequestModal item={booking} user={user} close={()=>setBooking(null)} refresh={refresh} toast={toast}/>:null}
+  </>;
+}
+
+function ChefStockRequestModal({ item,user,close,refresh,toast }) {
+  const suggested=Math.max(item.min*2-item.quantity,item.min||1),[quantity,setQuantity]=useState(String(suggested)),[note,setNote]=useState(""),[busy,setBusy]=useState(false),[error,setError]=useState("");
+  async function submit(event){event.preventDefault();setBusy(true);setError("");try{await api("/stock-requests",{method:"POST",body:JSON.stringify({inventoryId:item.id,requestedQuantity:Number(quantity),note,requestedBy:user.name})});await refresh();toast(`${item.name} stock request sent to Admin`);close()}catch(err){setError(err.message)}finally{setBusy(false)}}
+  return <Modal close={close} hideClose={busy}><div className="master-action-icon"><ShoppingCart/></div><span className="eyebrow">STOCK BOOKING</span><h2>Request {item.name}</h2><p>Current stock is <b>{item.quantity} {item.unit}</b>; the minimum level is <b>{item.min} {item.unit}</b>. Admin will receive this request immediately.</p><form className="modal-form" onSubmit={submit}><label>QUANTITY REQUIRED<input type="number" min="0.01" step="0.01" value={quantity} onChange={(event)=>setQuantity(event.target.value)} required/></label><label>NOTE / REASON<textarea value={note} onChange={(event)=>setNote(event.target.value)} placeholder="Needed for tomorrow's service, supplier preference…"/></label>{error?<div className="form-error">{error}</div>:null}<div className="master-action-buttons"><button type="button" onClick={close} disabled={busy}>Cancel</button><button className="primary" disabled={busy||Number(quantity)<=0}>{busy?"Sending…":"Send request to Admin"}</button></div></form></Modal>;
 }
 
 function Juicer({ data, refresh, user, logout, toast }) {

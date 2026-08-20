@@ -182,7 +182,7 @@ services:
     build: ./backend
     container_name: knockout-master-backend
     restart: unless-stopped
-    command: node src/master-server.js
+    command: npm run start:master
     environment:
       PORT: 5000
       TZ: ${TZ:-Asia/Kolkata}
