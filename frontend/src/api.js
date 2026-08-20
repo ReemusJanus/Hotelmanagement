@@ -1,4 +1,3 @@
-export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:6000/api';
 function portalIdentity(){
   try{
     const sessionUser=JSON.parse(sessionStorage.getItem('knockout-portal-user')||'null');
@@ -6,7 +5,6 @@ function portalIdentity(){
   }catch{}
   return{role:localStorage.getItem('knockout-portal-role')||'admin',companyDatabase:localStorage.getItem('knockout-company-db')||'knockout'};
 }
-export function portalHeaders(){const identity=portalIdentity();return {'X-Company-Database':identity.companyDatabase,'X-Portal-Role':identity.role}}
 export async function api(path, options={}) {
   const identity=portalIdentity(),companyDatabase=identity.companyDatabase;
   const buildRole=import.meta.env.VITE_PORTAL_ROLE||'admin',activeRole=identity.role||buildRole;

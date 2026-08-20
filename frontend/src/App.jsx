@@ -77,41 +77,6 @@ function useLiveUpdates(enabled, database, onChange) {
     return () => { stopped = true; clearTimeout(retryTimer); clearInterval(fallback); socket?.close(); };
   }, [enabled, database, onChange]);
 }
-const loginRoles = [
-  {
-    id: "admin",
-    title: "Admin",
-    desc: "Business, billing and staff",
-    icon: LayoutDashboard,
-    pin: "1234",
-    port: "6100",
-  },
-  {
-    id: "waiter",
-    title: "Waiter",
-    desc: "Tables, orders and service",
-    icon: UtensilsCrossed,
-    pin: "1111",
-    port: "7100",
-  },
-  {
-    id: "chef",
-    title: "Chef",
-    desc: "Kitchen and parcel queues",
-    icon: ChefHat,
-    pin: "2222",
-    port: "8100",
-  },
-  {
-    id: "juicer",
-    title: "Juicer",
-    desc: "Juice preparation queue",
-    icon: CupSoda,
-    pin: "6 digits",
-    port: "5200",
-  },
-];
-
 export default function App() {
   const portalRole = import.meta.env.VITE_PORTAL_ROLE || "admin";
   return portalRole === "superadmin" ? (
@@ -215,48 +180,6 @@ function CompanyApp() {
       )}
       <div className={`toast ${notice ? "show" : ""}`}>{notice}</div>
     </>
-  );
-}
-
-function WebRoleSelect({ choose }) {
-  return (
-    <main className="web-auth role-entry">
-      <header className="web-auth-brand">
-        <span className="logo">K</span>
-        <div>
-          <b>KnockOUT</b>
-          <small>ONE APP · EVERY SERVICE</small>
-        </div>
-      </header>
-      <section className="role-entry-copy">
-        <span className="eyebrow">HOSPITALITY OS</span>
-        <h1>
-          Choose your
-          <br />
-          workspace.
-        </h1>
-        <p>
-          Select your portal and enter your PIN. KnockOUT securely detects your
-          company automatically.
-        </p>
-      </section>
-      <section className="web-role-grid">
-        {loginRoles.map((item, index) => (
-          <button key={item.id} onClick={() => choose(item.id)}>
-            <span className="web-role-icon">
-              <item.icon size={25} />
-            </span>
-            <span>
-              <b>{item.title}</b>
-              <small>{item.desc}</small>
-            </span>
-            <em>0{index + 1}</em>
-            <ArrowRight size={20} />
-          </button>
-        ))}
-      </section>
-      <footer>KnockOUT Hospitality OS · Web, iOS & Android</footer>
-    </main>
   );
 }
 

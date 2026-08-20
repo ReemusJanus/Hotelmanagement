@@ -1,10 +1,3 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const dir = path.dirname(fileURLToPath(import.meta.url));
-const dataFile = path.join(dir, '../data/store.json');
-
 export const initialData = {
   tables: Array.from({length: 18}, (_, index) => ({
     id: index + 1,
@@ -50,12 +43,3 @@ export const initialData = {
   ],
   settings: {hotelName: 'Olive & Oak', taxRate: 5, serviceCharge: 5, currency: 'INR'}
 };
-
-function load() {
-  try { return JSON.parse(fs.readFileSync(dataFile, 'utf8')); }
-  catch { fs.mkdirSync(path.dirname(dataFile), {recursive: true}); fs.writeFileSync(dataFile, JSON.stringify(initialData, null, 2)); return structuredClone(initialData); }
-}
-
-export let db = load();
-export function save() { fs.writeFileSync(dataFile, JSON.stringify(db, null, 2)); }
-export function reset() { db = structuredClone(initialData); save(); return db; }

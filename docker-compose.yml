@@ -204,51 +204,6 @@ services:
       timeout: 4s
       retries: 20
 
-  admin-frontend:
-    build: ./frontend
-    container_name: knockout-admin-frontend
-    restart: unless-stopped
-    environment:
-      VITE_PORTAL_ROLE: admin
-      VITE_API_URL: /api
-      VITE_PROXY_TARGET: http://admin-backend:6001
-    command: npm run dev -- --host 0.0.0.0 --port 6100
-    expose:
-      - "6100"
-    depends_on:
-      admin-backend:
-        condition: service_healthy
-
-  waiter-frontend:
-    build: ./frontend
-    container_name: knockout-waiter-frontend
-    restart: unless-stopped
-    environment:
-      VITE_PORTAL_ROLE: waiter
-      VITE_API_URL: /api
-      VITE_PROXY_TARGET: http://waiter-backend:7000
-    command: npm run dev -- --host 0.0.0.0 --port 7100
-    expose:
-      - "7100"
-    depends_on:
-      waiter-backend:
-        condition: service_healthy
-
-  chef-frontend:
-    build: ./frontend
-    container_name: knockout-chef-frontend
-    restart: unless-stopped
-    environment:
-      VITE_PORTAL_ROLE: chef
-      VITE_API_URL: /api
-      VITE_PROXY_TARGET: http://chef-backend:8000
-    command: npm run dev -- --host 0.0.0.0 --port 8100
-    expose:
-      - "8100"
-    depends_on:
-      chef-backend:
-        condition: service_healthy
-
   superadmin-frontend:
     build: ./frontend
     container_name: knockout-master-frontend

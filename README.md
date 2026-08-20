@@ -1,6 +1,6 @@
 # KnockOUT — Restaurant Management Suite
 
-A yellow-and-dark, full-stack management system with three connected React modules:
+A yellow-and-dark, multi-company hospitality platform with one unified React frontend:
 
 | Module | Demo PIN | Responsibilities |
 |---|---:|---|
@@ -59,13 +59,13 @@ See `mobile/README.md` for simulator, device, and EAS App Store/Play Store build
 
 ## Architecture
 
-- React + Vite frontend
-- Node.js + Express REST API
+- One React + Vite frontend for every role
+- NestJS 11 backend with an Express compatibility adapter
 - MariaDB 11.4 for all operational data
 - MinIO object storage for food photos
 - Docker Compose with persistent MariaDB and MinIO volumes
 
-## Start all three modules
+## Start the platform
 
 ```bash
 docker compose up -d --build
@@ -73,12 +73,10 @@ docker compose up -d --build
 
 ## Addresses
 
-- Admin frontend: <http://localhost:6100>
-- Admin backend: <http://localhost:6000>
-- Waiter frontend: <http://localhost:7100>
-- Waiter backend: port `7000` inside Docker, available to the browser through <http://localhost:7100/api>
-- Chef frontend: <http://localhost:8100>
-- Chef backend: <http://localhost:8000>
+- Unified frontend: <http://localhost:5200>
+- Master NestJS API: <http://localhost:5100>
+- Master framework health: <http://localhost:5100/api/framework>
+- Admin, Waiter, Chef, and Juicer backends remain isolated inside Docker
 - MariaDB: `localhost:3307`
 - MinIO API: <http://localhost:9100>
 - MinIO console: <http://localhost:9101>
@@ -96,7 +94,7 @@ MariaDB credentials:
 
 The API automatically creates the relational schema, seeds demo content on an empty database, creates the `food-images` bucket, and configures public read access for menu photos.
 
-The Waiter backend remains isolated on port `7000` inside Docker because macOS Control Center/AirPlay reserves host port 7000. The Waiter frontend proxies `/api` directly to that backend, so all Waiter features work at port 7100 without exposing or conflicting with the system service.
+The browser connects only to the unified frontend and Master API. The Master API resolves each six-digit PIN and securely routes requests to the correct company and role backend.
 
 ## Persistent data
 
