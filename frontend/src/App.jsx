@@ -207,7 +207,7 @@ function PublicLanding({ login, register }) {
   return <main className="public-landing">
     <nav className="landing-nav">
       <button className="landing-brand" onClick={() => window.scrollTo({top:0,behavior:"smooth"})}><img src="/knockout-logo.png" alt="KnockOUT logo"/><span><b>KnockOUT</b><small>KNOCK YOUR BUDS OUT</small></span></button>
-      <div><a href="#signatures">Signatures</a><a href="#menu">Menu</a><a href="#visit">Visit</a><button className="landing-login" onClick={login}>Staff login <ArrowRight size={15}/></button></div>
+      <div><a href="#signatures">Signatures</a><a href="#menu">Menu</a><a href="#visit">Visit</a><button className="landing-login" onClick={login}>Login <ArrowRight size={15}/></button></div>
     </nav>
     <section className="landing-hero">
       <div className="landing-hero-copy">
@@ -488,16 +488,6 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
             {companies.map((company) => <button key={company.id} className={selectedCompany?.id === company.id ? "active" : ""} onClick={() => { setSelectedCompanyId(company.id); setCompanySection("overview"); }}><Building2 size={17}/><span>{company.companyName}<small>{company.staffCount} users</small></span></button>)}
           </div>
         </nav>
-        <div className="side-user">
-          <span>KM</span>
-          <div>
-            <b>KnockOUT Master</b>
-            <small>Super Admin</small>
-          </div>
-          <button onClick={logoutMaster}>
-            <LogOut size={17} />
-          </button>
-        </div>
       </aside>
       <main>
         <header>
@@ -505,7 +495,14 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
             <span className="eyebrow">MULTI-COMPANY CONTROL</span>
             <h2>KnockOUT Master</h2>
           </div>
-          <div className="master-pending-counter"><Bell size={15}/><span><b>{pendingRegistrations.length}</b><small>Pending registrations</small></span></div>
+          <div className="master-header-actions">
+            <div className="master-pending-counter"><Bell size={15}/><span><b>{pendingRegistrations.length}</b><small>Pending registrations</small></span></div>
+            <div className="header-user">
+              <span className="header-avatar">KM</span>
+              <span className="header-user-copy"><b>KnockOUT Master</b><small>Super Admin</small></span>
+              <button onClick={logoutMaster} title="Logout"><LogOut size={17}/></button>
+            </div>
+          </div>
         </header>
         <div className="page">
           {selectedCompany ? <>
@@ -1103,15 +1100,6 @@ function Shell({ role, user, page, setPage, logout, children, navBadges = {} }) 
             </button>
           ))}
         </nav>
-        <div className="side-user">
-          <button className="side-profile" onClick={openProfile} title="Open my profile">
-            <span className="side-avatar">{profile.profileImageUrl?<img src={profile.profileImageUrl} alt=""/>:profile.name.split(" ").map((x) => x[0]).join("").slice(0, 2)}</span>
-            <span className="side-profile-copy"><b>{profile.name}</b><small>{role} · Edit profile</small></span>
-          </button>
-          <button onClick={logout}>
-            <LogOut size={17} />
-          </button>
-        </div>
       </aside>
       <main>
         <header>
@@ -1123,17 +1111,12 @@ function Shell({ role, user, page, setPage, logout, children, navBadges = {} }) 
             <button>
               <Bell size={17} />
             </button>
-            <div>
-              <b>
-                {new Date().toLocaleDateString("en-IN", { weekday: "long" })}
-              </b>
-              <small>
-                {new Date().toLocaleDateString("en-IN", {
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
-                })}
-              </small>
+            <div className="header-user">
+              <button className="header-profile" onClick={openProfile} title="Open my profile">
+                <span className="header-avatar">{profile.profileImageUrl?<img src={profile.profileImageUrl} alt=""/>:profile.name.split(" ").map((x) => x[0]).join("").slice(0, 2)}</span>
+                <span className="header-user-copy"><b>{profile.name}</b><small>{role} · Edit profile</small></span>
+              </button>
+              <button className="header-logout" onClick={logout} title="Logout"><LogOut size={17}/></button>
             </div>
           </div>
         </header>
@@ -1631,8 +1614,7 @@ function TableCard({ table, order, data, onClick, onBill, onPay }) {
 }
 function AdminTableDetails({ table, order, data, close, refresh, toast, user }) {
   const [billing, setBilling] = useState(false),
-    [paying, setPaying] = useState(false),
-    [ordering, setOrdering] = useState(false);
+    [paying, setPaying] = useState(false);
   const lines =
       order?.items.map((i) => ({
         ...i,
@@ -1710,11 +1692,6 @@ function AdminTableDetails({ table, order, data, close, refresh, toast, user }) 
             <b>{money(subtotal)}</b>
           </div>
           <div className="table-detail-bill-actions">
-            {!['billing_requested', 'completed'].includes(order.status) ? (
-              <button className="primary" onClick={() => setOrdering(true)}>
-                <Plus size={14} /> Add more food
-              </button>
-            ) : null}
             <button className="secondary" onClick={() => setBilling(true)}>
               <Printer size={14} /> Bill / Print
             </button>
@@ -1734,11 +1711,7 @@ function AdminTableDetails({ table, order, data, close, refresh, toast, user }) 
               : "No active order"}
           </h3>
           <p>This status is updated live from the Waiter portal.</p>
-          {table.status !== "cleaning" ? (
-            <button className="primary" onClick={() => setOrdering(true)}>
-              <Plus size={15} /> Take order
-            </button>
-          ) : null}
+          {table.status !== "cleaning" ? <small>Table orders are created from the Waiter portal.</small> : null}
         </div>
       )}
       <button className="delete-table-btn" disabled={!!order} onClick={remove}>
@@ -1761,22 +1734,6 @@ function AdminTableDetails({ table, order, data, close, refresh, toast, user }) 
             close();
           }}
         />
-      ) : null}
-      {ordering ? (
-        <Modal close={() => setOrdering(false)} wide>
-          <OrderBuilder
-            table={table}
-            data={data}
-            user={user}
-            existing={order}
-            refresh={refresh}
-            toast={toast}
-            close={() => {
-              setOrdering(false);
-              close();
-            }}
-          />
-        </Modal>
       ) : null}
     </Modal>
   );
@@ -2292,7 +2249,9 @@ function ParcelPanel({ data, refresh, user, toast }) {
     [paying, setPaying] = useState(null),
     [prepaying, setPrepaying] = useState(null),
     [selectedDate, setSelectedDate] = useState(null);
-  const allParcels = data.orders.filter((o) => o.orderType === "parcel"),
+  const todayKey = dateKey(new Date()),
+    canCreateParcel = selectedDate === todayKey,
+    allParcels = data.orders.filter((o) => o.orderType === "parcel"),
     parcels = selectedDate ? allParcels.filter((order) => dateKey(order.createdAt) === selectedDate) : allParcels;
   async function collect(order, method) {
     try {
@@ -2324,8 +2283,7 @@ function ParcelPanel({ data, refresh, user, toast }) {
     }
   }
   if (!selectedDate) return <>
-    <OperationsCalendar orders={allParcels} kicker="TAKEAWAY OPERATIONS" title="Parcel Orders Calendar" sub="Select a date to open its parcel orders, payment status, bills and kitchen progress." label="PARCEL ORDER HISTORY" onSelect={setSelectedDate} action={<button className="primary" onClick={() => setCreating(true)}><Plus size={15}/> New parcel order</button>}/>
-    {creating ? <ParcelBuilder data={data} user={user} close={() => setCreating(false)} refresh={refresh} toast={toast}/> : null}
+    <OperationsCalendar orders={allParcels} kicker="TAKEAWAY OPERATIONS" title="Parcel Orders Calendar" sub="Select a date to open its parcel orders, payment status, bills and kitchen progress." label="PARCEL ORDER HISTORY" onSelect={setSelectedDate}/>
   </>;
   return (
     <>
@@ -2334,7 +2292,7 @@ function ParcelPanel({ data, refresh, user, toast }) {
         title={new Date(`${selectedDate}T12:00:00`).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
         sub={`${parcels.length} parcel order${parcels.length === 1 ? "" : "s"} created on this date.`}
         action={
-          <div className="booking-head-actions"><button className="secondary" onClick={() => setSelectedDate(null)}><ChevronLeft size={15}/> Calendar</button><button className="primary" onClick={() => setCreating(true)}><Plus size={15}/> New parcel order</button></div>
+          <div className="booking-head-actions"><button className="secondary" onClick={() => setSelectedDate(null)}><ChevronLeft size={15}/> Calendar</button>{canCreateParcel ? <button className="primary" onClick={() => setCreating(true)}><Plus size={15}/> New parcel order</button> : null}</div>
         }
       />
       <div className="parcel-flow">
@@ -2417,7 +2375,7 @@ function ParcelPanel({ data, refresh, user, toast }) {
           <p>Create the first parcel order from this panel.</p>
         </div>
       )}
-      {creating && (
+      {creating && canCreateParcel && (
         <ParcelBuilder
           data={data}
           user={user}
@@ -5215,34 +5173,51 @@ function TableDrawer({ table, data, user, close, refresh, toast }) {
             <Status status={table.status} />
           </p>
         </div>
-        {order && ["received", "served", "billing_requested"].includes(order.status) ? (
+        {order && !["billing_requested", "completed"].includes(order.status) ? (
           <div className="drawer-tabs">
+            <button
+              className={mode === "history" ? "active" : ""}
+              onClick={() => setMode("history")}
+            >
+              View orders
+            </button>
             <button
               className={mode === "order" ? "active" : ""}
               onClick={() => setMode("order")}
             >
-              Add order
+              Add new order
             </button>
-            <button
-              className={mode === "bill" ? "active" : ""}
-              onClick={() => setMode("bill")}
-            >
-              Bill
-            </button>
+            {["received", "served"].includes(order.status) ? (
+              <button
+                className={mode === "bill" ? "active" : ""}
+                onClick={() => setMode("bill")}
+              >
+                Bill
+              </button>
+            ) : null}
           </div>
         ) : null}
       </div>
       <TableStatusControls table={table} refresh={refresh} toast={toast} />
       {mode === "order" ? (
-        <OrderBuilder
-          table={table}
-          data={data}
-          user={user}
-          existing={order}
-          refresh={refresh}
-          toast={toast}
-          close={close}
-        />
+        table.status === "cleaning" && !order ? (
+          <div className="service-handoff table-cleaning-lock">
+            <Clock3 size={34} />
+            <span className="eyebrow">TABLE UNAVAILABLE</span>
+            <h3>Table {table.number} is under cleaning</h3>
+            <p>The food menu is disabled until this table is marked Available or Reserved.</p>
+          </div>
+        ) : <OrderBuilder
+            table={table}
+            data={data}
+            user={user}
+            existing={order}
+            refresh={refresh}
+            toast={toast}
+            close={close}
+          />
+      ) : mode === "history" ? (
+        <WaiterOrderRounds order={order} data={data} />
       ) : mode === "bill" ? (
         <Bill
           table={table}
@@ -5290,6 +5265,41 @@ function TableDrawer({ table, data, user, close, refresh, toast }) {
         </div>
       )}
     </Modal>
+  );
+}
+function WaiterOrderRounds({ order, data }) {
+  const batches = [...new Set(order.items.map((item) => Number(item.batchNo) || 1))]
+    .sort((a, b) => b - a)
+    .map((batchNo) => {
+      const items = order.items.filter((item) => (Number(item.batchNo) || 1) === batchNo);
+      const status = items.every((item) => item.itemStatus === "ready")
+        ? "ready"
+        : items.every((item) => (item.itemStatus || "new") === "new")
+          ? "new"
+          : "preparing";
+      return { batchNo, items, status };
+    });
+  return (
+    <section className="waiter-order-rounds">
+      <header>
+        <div><span className="eyebrow">TABLE ORDER HISTORY</span><h3>Order #{order.id}</h3></div>
+        <small>{batches.length} separate kitchen round{batches.length === 1 ? "" : "s"}</small>
+      </header>
+      <div className="waiter-round-list">
+        {batches.map((batch, index) => (
+          <article key={batch.batchNo} className={`waiter-round-card ${batch.status}`}>
+            <header>
+              <div><b>Round {batch.batchNo}</b><small>{index === 0 ? "Latest order" : "Previous order"}</small></div>
+              <Status status={batch.status}/>
+            </header>
+            {batch.items.map((item, itemIndex) => {
+              const menu = data.menu.find((entry) => entry.id === item.menuId);
+              return <div className="waiter-round-line" key={`${item.menuId}-${itemIndex}`}><span><b>{item.qty}×</b>{menu?.name || "Menu item"}</span><em>{item.itemStatus || "new"}</em></div>;
+            })}
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 function TableStatusControls({ table, refresh, toast }) {
@@ -5807,18 +5817,23 @@ function productionOrders(data, role) {
   const wantsJuice = role === "juicer";
   return data.orders
     .filter((order) => !["completed", "collected", "received", "served", "billing_requested"].includes(order.status))
-    .map((order) => {
+    .flatMap((order) => {
       const items = order.items.filter((line) => {
         const menu = data.menu.find((item) => item.id === line.menuId);
         return (String(menu?.category || "").toLowerCase() === "juices") === wantsJuice;
       });
-      if (!items.length) return null;
-      const status = items.every((line) => line.itemStatus === "ready")
-        ? "ready"
-        : items.every((line) => (line.itemStatus || "new") === "new")
-          ? "new"
-          : "preparing";
-      return { ...order, items, sourceStatus: order.status, status, department: role };
+      if (!items.length) return [];
+      const batchNumbers = [...new Set(items.map((line) => Number(line.batchNo) || 1))].sort((a, b) => a - b);
+      const latestBatch = Math.max(...batchNumbers);
+      return batchNumbers.map((batchNo) => {
+        const batchItems = items.filter((line) => (Number(line.batchNo) || 1) === batchNo);
+        const status = batchItems.every((line) => line.itemStatus === "ready")
+          ? "ready"
+          : batchItems.every((line) => (line.itemStatus || "new") === "new")
+            ? "new"
+            : "preparing";
+        return { ...order, items: batchItems, batchNo, batchKey: `${order.id}-${batchNo}-${role}`, isLatestBatch: batchNo === latestBatch, sourceStatus: order.status, status, department: role };
+      });
     })
     .filter(Boolean);
 }
@@ -5880,10 +5895,10 @@ function Chef({ data, refresh, user, logout, toast }) {
         <ChefDishes data={data} refresh={refresh} toast={toast} />
       </Shell>
     );
-  async function status(id, next) {
+  async function status(id, next, batchNo) {
     await api(`/orders/${id}/items/status`, {
       method: "PATCH",
-      body: JSON.stringify({ status: next }),
+      body: JSON.stringify({ status: next, batchNo }),
     });
     refresh();
     toast(`Order #${id} marked ${next}`);
@@ -5937,7 +5952,7 @@ function Chef({ data, refresh, user, logout, toast }) {
       </div>
       <div className="kitchen-grid">
         {shown.map((o) => (
-          <KitchenTicket key={o.id} order={o} data={data} status={status} collect={collect} />
+          <KitchenTicket key={o.batchKey} order={o} data={data} status={status} collect={collect} />
         ))}
       </div>
       {!shown.length && (
@@ -5986,15 +6001,15 @@ function Juicer({ data, refresh, user, logout, toast }) {
     : page === "parcel-queue"
       ? active.filter(order => order.orderType === "parcel")
       : active.filter(order => order.orderType !== "parcel");
-  async function status(id, next) {
-    await api(`/orders/${id}/items/status`, { method: "PATCH", body: JSON.stringify({ status: next }) });
+  async function status(id, next, batchNo) {
+    await api(`/orders/${id}/items/status`, { method: "PATCH", body: JSON.stringify({ status: next, batchNo }) });
     await refresh();
     toast(`Juice order #${id} marked ${next}`);
   }
   return <Shell role="juicer" user={user} page={page} setPage={setPage} logout={logout} navBadges={navBadges}>
     <PageHead kicker="LIVE JUICE STATION" title={page === "ready" ? "Ready Juices" : page === "parcel-queue" ? "Parcel Queue" : "Table Orders"} sub={`${orders.length} live juice tickets · tracked separately for tables and parcels.`}/>
     <div className="kitchen-summary"><span><i className="new"/><b>{active.filter(o=>o.status==="new").length}</b> New</span><span><i className="preparing"/><b>{active.filter(o=>o.status==="preparing").length}</b> Preparing</span><span><i className="ready"/><b>{active.filter(o=>o.status==="ready").length}</b> Ready</span></div>
-    <div className="kitchen-grid">{orders.map(order=><KitchenTicket key={order.id} order={order} data={data} status={status} departmentLabel="juice items"/>)}</div>
+    <div className="kitchen-grid">{orders.map(order=><KitchenTicket key={order.batchKey} order={order} data={data} status={status} departmentLabel="juice items"/>)}</div>
     {!orders.length?<div className="empty-state"><CupSoda/><h3>Juice station is clear</h3><p>No juice items in this queue right now.</p></div>:null}
   </Shell>;
 }
@@ -6208,7 +6223,7 @@ function KitchenTicket({ order, data, status, collect, departmentLabel = "food i
     <>
       <button className={`chef-order-summary ${order.status} ${isParcel ? "parcel" : ""}`} onClick={() => setExpanded(true)}>
         <span className="chef-summary-table">{isParcel ? "PARCEL" : "TABLE"}<b>{isParcel ? `#${order.id}` : table?.number}</b></span>
-        <span><small>ORDER ID</small><b>#{order.id}</b></span>
+        <span><small>ORDER / ROUND</small><b>#{order.id} · {order.batchNo}</b></span>
         <span><small>TIME</small><b><Clock3 size={13}/>{elapsed(order.createdAt)}</b></span>
         <Status status={order.status}/>
         <ChevronRight size={18}/>
@@ -6217,7 +6232,7 @@ function KitchenTicket({ order, data, status, collect, departmentLabel = "food i
         <Modal close={() => setExpanded(false)} closeLeft>
           <div className="chef-detail-head">
             <span className={isParcel ? "parcel-label" : "chef-table-number"}>{isParcel ? "PARCEL ORDER" : <>TABLE <b>{table?.number}</b></>}</span>
-            <div><small>ORDER ID</small><h2>#{order.id}</h2></div>
+            <div><small>ORDER / KITCHEN ROUND</small><h2>#{order.id} · {order.batchNo}</h2></div>
             <div><small>ELAPSED TIME</small><b><Clock3 size={14}/>{elapsed(order.createdAt)}</b></div>
             <Status status={order.status}/>
           </div>
@@ -6235,10 +6250,10 @@ function KitchenTicket({ order, data, status, collect, departmentLabel = "food i
               </div>;
             })}
           </div>
-          {order.status === "new" ? <button className="primary wide" onClick={() => status(order.id,"preparing")}>Start preparing <ArrowRight size={15}/></button> : null}
-          {order.status === "preparing" ? <button className="ready-btn wide" onClick={() => status(order.id,"ready")}><CheckCircle2 size={16}/> Mark ready for {isParcel?"Admin":"service"}</button> : null}
-          {order.status === "ready" && collect && !isParcel && order.sourceStatus === "ready" ? <button className="ready-btn wide" onClick={() => collect(order.id)}><Package size={16}/> Confirm collected from kitchen</button> : null}
-          {order.status === "ready" && (!collect || isParcel || order.sourceStatus !== "ready") ? <div className="parcel-done"><CheckCircle2 size={16}/> Department items ready · {order.sourceStatus !== "ready" ? "waiting for remaining items" : "waiting for handoff"}</div> : null}
+          {order.status === "new" ? <button className="primary wide" onClick={() => status(order.id,"preparing",order.batchNo)}>Start preparing <ArrowRight size={15}/></button> : null}
+          {order.status === "preparing" ? <button className="ready-btn wide" onClick={() => status(order.id,"ready",order.batchNo)}><CheckCircle2 size={16}/> Mark ready for {isParcel?"Admin":"service"}</button> : null}
+          {order.status === "ready" && collect && !isParcel && order.sourceStatus === "ready" && order.isLatestBatch ? <button className="ready-btn wide" onClick={() => collect(order.id)}><Package size={16}/> Confirm collected from kitchen</button> : null}
+          {order.status === "ready" && (!collect || isParcel || order.sourceStatus !== "ready" || !order.isLatestBatch) ? <div className="parcel-done"><CheckCircle2 size={16}/> Kitchen round ready · {order.sourceStatus !== "ready" ? "waiting for remaining items" : !order.isLatestBatch ? "newer round is tracked separately" : "waiting for handoff"}</div> : null}
         </Modal>
       ) : null}
     </>
