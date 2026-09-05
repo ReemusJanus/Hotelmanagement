@@ -60,21 +60,26 @@ const elapsed = (iso) =>
 function useLiveUpdates(enabled, database, onChange) {
   useEffect(() => {
     if (!enabled || !database) return;
-    let socket, retryTimer, stopped = false, retries = 0;
+    let socket, retryTimer, refreshTimer, stopped = false, retries = 0;
+    const scheduleRefresh = () => {
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(onChange, 80);
+    };
     const connect = () => {
       const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-      socket = new WebSocket(`${protocol}//${location.host}/ws?database=${encodeURIComponent(database)}`);
+      const token = sessionStorage.getItem("knockout-access-token") || "";
+      socket = new WebSocket(`${protocol}//${location.host}/ws?database=${encodeURIComponent(database)}&token=${encodeURIComponent(token)}`);
       socket.onopen = () => { retries = 0; };
       socket.onmessage = (event) => {
-        try { if (JSON.parse(event.data).type === "state.changed") onChange(); } catch {}
+        try { if (JSON.parse(event.data).type === "state.changed") scheduleRefresh(); } catch {}
       };
       socket.onclose = () => {
         if (!stopped) retryTimer = setTimeout(connect, Math.min(1000 * 2 ** retries++, 15000));
       };
     };
     connect();
-    const fallback = setInterval(onChange, 60000);
-    return () => { stopped = true; clearTimeout(retryTimer); clearInterval(fallback); socket?.close(); };
+    const fallback = setInterval(onChange, 120000);
+    return () => { stopped = true; clearTimeout(retryTimer); clearTimeout(refreshTimer); clearInterval(fallback); socket?.close(); };
   }, [enabled, database, onChange]);
 }
 export default function App() {
@@ -183,8 +188,69 @@ function CompanyApp() {
   );
 }
 
+function PublicLanding({ login, register }) {
+  useEffect(() => {
+    const elements = document.querySelectorAll(".landing-signatures, .landing-section-head, .landing-feature-grid article, .landing-visit>div, .landing-visit-details>*");
+    elements.forEach((element, index) => {
+      element.classList.add("landing-reveal");
+      element.style.setProperty("--reveal-delay", `${Math.min(index % 4, 3) * 90}ms`);
+    });
+    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add("is-visible");
+        observer.unobserve(entry.target);
+      }
+    }), { threshold: .14, rootMargin: "0px 0px -45px" });
+    elements.forEach((element) => observer.observe(element));
+    return () => observer.disconnect();
+  }, []);
+  return <main className="public-landing">
+    <nav className="landing-nav">
+      <button className="landing-brand" onClick={() => window.scrollTo({top:0,behavior:"smooth"})}><img src="/knockout-logo.png" alt="KnockOUT logo"/><span><b>KnockOUT</b><small>KNOCK YOUR BUDS OUT</small></span></button>
+      <div><a href="#signatures">Signatures</a><a href="#menu">Menu</a><a href="#visit">Visit</a><button className="landing-login" onClick={login}>Staff login <ArrowRight size={15}/></button></div>
+    </nav>
+    <section className="landing-hero">
+      <div className="landing-hero-copy">
+        <span className="landing-pill"><i/> Azhagiyamandabam · Tamil Nadu</span>
+        <h1>Flavour that makes an <em>entrance.</em></h1>
+        <p>Golden broasted chicken, smoky alfaham and bold comfort food—made fresh for cravings that refuse to be ordinary.</p>
+        <blockquote className="landing-hero-quote">“Great food begins the story. Remarkable service makes it unforgettable.”</blockquote>
+        <div className="landing-hero-actions"><a className="landing-explore" href="#menu">Explore our food <ArrowRight/></a><a className="secondary landing-call" href="tel:+917904951736">Call to order</a></div>
+      </div>
+      <div className="landing-food-visual">
+        <img src="/knockout-signature-chicken-v1.png" alt="KnockOUT broasted chicken and alfaham chicken"/>
+        <div className="landing-food-shine"/>
+        <span className="landing-food-edition">FIRE · FLAVOUR · HOSPITALITY</span>
+        <div className="landing-dish-label broasted"><small>SIGNATURE 01</small><b>Broasted Chicken</b><span>Golden · crisp · tender</span></div>
+        <div className="landing-dish-label alfaham"><small>SIGNATURE 02</small><b>Alfaham Chicken</b><span>Charcoal · smoky · juicy</span></div>
+        <div className="landing-food-seal"><ChefHat/><span><b>House signatures</b><small>Made to be remembered</small></span></div>
+      </div>
+    </section>
+    <section className="landing-signatures" id="signatures">
+      <div><span className="eyebrow">OUR SIGNATURE TABLE</span><h2>Golden crunch. Charcoal fire. Pure indulgence.</h2></div>
+      <div className="landing-signature-copy"><p>Our broasted chicken arrives crisp and succulent. Our alfaham carries the depth of open flame. Behind both is a seamless service flow that keeps every table beautifully cared for.</p><blockquote>“Come for the flavour. Return for the feeling.”</blockquote></div>
+      <span className="landing-signature-mark">K<span>O</span></span>
+    </section>
+    <section className="landing-platform" id="menu">
+      <div className="landing-section-head"><span className="eyebrow">WHAT WE SERVE</span><h2>Big flavour, whatever the mood</h2><p>From crisp chicken and charcoal grills to saucy noodles and comforting curries.</p></div>
+      <div className="landing-feature-grid">
+        <article><ChefHat/><span>01</span><h3>Broasted Chicken</h3><p>Deep golden crunch outside, tender and juicy at the centre—our crowd favourite.</p></article>
+        <article><UtensilsCrossed/><span>02</span><h3>Alfaham &amp; Grills</h3><p>Flame-kissed chicken layered with smoky spice and the unmistakable taste of charcoal.</p></article>
+        <article><CupSoda/><span>03</span><h3>Noodles &amp; More</h3><p>Wok-tossed favourites and satisfying sides built for sharing around the table.</p></article>
+        <article><Package/><span>04</span><h3>Curry Favourites</h3><p>Warm, richly spiced comfort food for an easy dine-in evening or parcel order.</p></article>
+      </div>
+    </section>
+    <section className="landing-visit" id="visit">
+      <div><span className="eyebrow">COME HUNGRY</span><h2>Your next favourite meal is waiting.</h2><p>Opposite CSI Church, Azhagiyamandabam</p></div>
+      <div className="landing-visit-details"><span><Clock3/><b>Open daily</b><small>2:30 PM — 11:00 PM</small></span><a href="tel:+917904951736"><span>☎</span><b>Call us</b><small>79049 51736</small></a><a href="https://www.instagram.com/knock_out_azhagiyamandabam/" target="_blank" rel="noreferrer"><span>◎</span><b>Follow on Instagram</b><small>@knock_out_azhagiyamandabam</small></a></div>
+    </section>
+    <footer className="landing-footer"><span><img src="/knockout-logo.png" alt=""/><b>KnockOUT</b></span><p>“Knock your buds out.”</p><small>© 2026 KnockOUT · Azhagiyamandabam</small></footer>
+  </main>;
+}
+
 function Login({ onLogin }) {
-  const [mode,setMode]=useState("login"),[pin, setPin] = useState(""),
+  const routeFromPath = () => location.pathname === "/login" ? "login" : location.pathname === "/register" ? "register" : "landing";
+  const [mode,setMode]=useState(routeFromPath),[pin, setPin] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [verified, setVerified] = useState(false),
@@ -192,6 +258,11 @@ function Login({ onLogin }) {
   useEffect(() => {
     if(mode==="login")input.current?.focus();
   }, [mode]);
+  useEffect(() => {
+    const update = () => setMode(routeFromPath());
+    addEventListener("popstate", update);
+    return () => removeEventListener("popstate", update);
+  }, []);
   useEffect(() => {
     if (pin.length === 6 && !busy) submit();
   }, [pin]);
@@ -203,7 +274,7 @@ function Login({ onLogin }) {
     try {
       const user = await resolvePortalLogin(pin);
       setVerified(true);
-      setTimeout(() => onLogin(user), 500);
+      setTimeout(() => { history.replaceState({}, "", "/"); onLogin(user); }, 500);
     } catch (e) {
       setError(e.message);
       setPin("");
@@ -212,7 +283,13 @@ function Login({ onLogin }) {
       setBusy(false);
     }
   }
-  if(mode==="register")return <PublicCompanyRegistration back={()=>setMode("login")}/>;
+  function navigate(next) {
+    const path = next === "login" ? "/login" : next === "register" ? "/register" : "/";
+    history.pushState({}, "", path);
+    setMode(next);
+  }
+  if(mode==="landing")return <PublicLanding login={()=>navigate("login")} register={()=>navigate("register")}/>;
+  if(mode==="register")return <PublicCompanyRegistration back={()=>navigate("login")}/>;
   return (
     <main className="web-auth otp-entry">
       <header className="otp-web-brand">
@@ -260,7 +337,7 @@ function Login({ onLogin }) {
           Forgot your PIN? Ask KnockOUT Master to change it.
         </small>
         <div className="public-auth-divider"><span>NEW COMPANY?</span></div>
-        <button className="public-register-link" onClick={()=>setMode("register")}><Building2/><span><b>Register your company</b><small>Submit an application for Master approval</small></span><ArrowRight/></button>
+        <button className="public-register-link" onClick={()=>navigate("register")}><Building2/><span><b>Register your company</b><small>Submit an application for Master approval</small></span><ArrowRight/></button>
       </section>
     </main>
   );
@@ -985,7 +1062,7 @@ const portalNav = {
     ["team", "Chef Management", Users],
     ["stock-booking", "Book Kitchen Stock", Boxes],
     ["dishes", "Dishes", UtensilsCrossed],
-    ["kitchen", "Dine-in Kitchen", ChefHat],
+    ["kitchen", "Table Orders", ChefHat],
     ["parcels", "Parcel Queue", Package],
     ["ready", "Ready to Serve", CheckCircle2],
   ],
@@ -993,11 +1070,12 @@ const portalNav = {
     ["overview", "Overview", LayoutDashboard],
     // ["attendance", "Check In / Out", Clock3], // Temporarily disabled; retain for later.
     ["juices", "Juices", CupSoda],
-    ["queue", "Juice Queue", ReceiptText],
+    ["queue", "Table Orders", Armchair],
+    ["parcel-queue", "Parcel Queue", Package],
     ["ready", "Ready Juices", CheckCircle2],
   ],
 };
-function Shell({ role, user, page, setPage, logout, children }) {
+function Shell({ role, user, page, setPage, logout, children, navBadges = {} }) {
   const [profileOpen,setProfileOpen]=useState(false),[profile,setProfile]=useState(user);
   async function openProfile(){setProfileOpen(true);try{setProfile(await api("/profile"))}catch{/* Keep the signed-in identity visible if loading fails. */}}
   return (
@@ -1019,6 +1097,9 @@ function Shell({ role, user, page, setPage, logout, children }) {
             >
               <Icon size={18} />
               {label}
+              {navBadges[id] > 0 ? (
+                <span className="nav-count-badge">{navBadges[id]}</span>
+              ) : null}
             </button>
           ))}
         </nav>
@@ -1439,6 +1520,8 @@ function TableCard({ table, order, data, onClick, onBill, onPay }) {
           new: { key: "kitchen-new", label: "New order" },
           preparing: { key: "kitchen-preparing", label: "Preparing" },
           ready: { key: "kitchen-ready", label: "Ready to serve" },
+          collected: { key: "kitchen-collected", label: "Collected" },
+          received: { key: "kitchen-received", label: "Order received" },
           served: { key: "kitchen-served", label: "Served" },
           billing_requested: {
             key: "payment-requested",
@@ -4829,14 +4912,26 @@ function SettingsPanel({ data, refresh, toast }) {
             Currency
             <input value={s.currency} disabled />
           </label>
+          {/* GST settings are temporarily disabled; retain for later use.
           <label>
-            GST / Tax rate (%)
+            GST rate (%)
             <input
               type="number"
               value={s.taxRate}
               onChange={(e) => setS({ ...s, taxRate: +e.target.value })}
             />
           </label>
+          <label>
+            CGST rate (%)
+            <input type="number" value={s.cgstRate} onChange={(e) => setS({ ...s, cgstRate: +e.target.value })} />
+          </label>
+          */}
+          {/* Service tax setting is temporarily disabled; retain for later use.
+          <label>
+            Service tax (%)
+            <input type="number" value={s.serviceCharge} onChange={(e) => setS({ ...s, serviceCharge: +e.target.value })} />
+          </label>
+          */}
         </div>
       </section>
     </>
@@ -4862,18 +4957,18 @@ function RoleOverview({ role, data, user, setPage }) {
     metrics: [
       [Armchair, "Occupied tables", `${occupied}/${data.tables.length}`, `${data.tables.filter(t => t.status === "available").length} ready for guests`, "gold"],
       [ReceiptText, "My orders today", mine.length, `${mine.filter(o => o.paymentStatus === "paid").length} paid`, "blue"],
-      [CheckCircle2, "Ready to serve", mine.filter(o => o.status === "ready").length, "Collect from kitchen", "green"],
+      [CheckCircle2, "Ready to serve", mine.filter(o => o.status === "ready").length, "Awaiting Chef handoff", "green"],
       [Clock3, "Awaiting progress", mine.filter(o => ["new", "preparing"].includes(o.status)).length, "Live kitchen status", "orange"],
     ],
     primary: ["floor", "Open floor", "Take orders and manage tables", Armchair], secondary: ["orders", "My order history", "Review today's service", ReceiptText],
   } : role === "chef" ? {
     kicker: "KITCHEN INTELLIGENCE", title: `Good service, Chef ${firstName}`, sub: "Prioritize tickets, balance dine-in and parcel demand, and keep service moving.",
     metrics: [[ReceiptText,"New tickets",fresh,"Waiting to be started","orange"],[ChefHat,"In preparation",preparing,"Currently cooking","blue"],[CheckCircle2,"Ready",ready,"Awaiting handoff","green"],[UtensilsCrossed,"Available dishes",availableMenu.length,`${data.menu.filter(i=>String(i.category).toLowerCase()!=="juices"&&!i.isCombo&&!i.available).length} unavailable`,"gold"]],
-    primary: ["kitchen", "Open dine-in queue", "Prioritize table tickets", ChefHat], secondary: ["parcels", "Open parcel queue", "Manage takeaway demand", Package],
+    primary: ["kitchen", "Open table orders", "Prioritize table tickets", ChefHat], secondary: ["parcels", "Open parcel queue", "Manage takeaway demand", Package],
   } : {
     kicker: "BEVERAGE STATION", title: `Fresh start, ${firstName}`, sub: "See every juice ticket, preparation state, and menu availability at a glance.",
     metrics: [[ReceiptText,"New juice tickets",fresh,"Waiting to start","orange"],[CupSoda,"Being prepared",preparing,"Active drinks","blue"],[CheckCircle2,"Ready juices",ready,"Ready for pickup","green"],[Gauge,"Available juices",availableMenu.length,`${data.menu.filter(i=>String(i.category).toLowerCase()==="juices"&&!i.available).length} unavailable`,"gold"]],
-    primary: ["queue", "Open juice queue", "Start the next drinks", CupSoda], secondary: ["juices", "Manage juice menu", "Update availability", Gauge],
+    primary: ["queue", "Open table orders", "Prepare table drinks", Armchair], secondary: ["parcel-queue", "Open parcel queue", "Prepare parcel drinks", Package],
   };
   const recent = [...mine].sort((a,b) => new Date(b.createdAt)-new Date(a.createdAt)).slice(0,4);
   return <div className={`portal-overview ${role}-overview`}>
@@ -5090,7 +5185,25 @@ function Modal({ close, children, wide = false, hideClose = false, closeLeft = f
 }
 function TableDrawer({ table, data, user, close, refresh, toast }) {
   const order = data.orders.find((o) => o.id === table.orderId),
-    [mode, setMode] = useState(order ? "bill" : "order");
+    [mode, setMode] = useState(order ? "service" : "order"),
+    [handoffBusy, setHandoffBusy] = useState(false);
+  async function updateHandoff(status) {
+    setHandoffBusy(true);
+    try {
+      await api(`/orders/${order.id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      });
+      await refresh();
+      toast(
+        `Order #${order.id} received at Table ${table.number}`,
+      );
+    } catch (e) {
+      toast(e.message);
+    } finally {
+      setHandoffBusy(false);
+    }
+  }
   return (
     <Modal close={close} wide>
       <div className="drawer-head">
@@ -5102,7 +5215,7 @@ function TableDrawer({ table, data, user, close, refresh, toast }) {
             <Status status={table.status} />
           </p>
         </div>
-        {order ? (
+        {order && ["received", "served", "billing_requested"].includes(order.status) ? (
           <div className="drawer-tabs">
             <button
               className={mode === "order" ? "active" : ""}
@@ -5130,7 +5243,7 @@ function TableDrawer({ table, data, user, close, refresh, toast }) {
           toast={toast}
           close={close}
         />
-      ) : (
+      ) : mode === "bill" ? (
         <Bill
           table={table}
           order={order}
@@ -5139,6 +5252,42 @@ function TableDrawer({ table, data, user, close, refresh, toast }) {
           toast={toast}
           close={close}
         />
+      ) : (
+        <div className="service-handoff">
+          <span className="eyebrow">ORDER HANDOFF</span>
+          {order.status === "ready" ? (
+            <>
+              <ChefHat size={34} />
+              <h3>Waiting for kitchen handoff</h3>
+              <p>The order is ready. The Chef must confirm that it was collected from the kitchen.</p>
+            </>
+          ) : order.status === "collected" ? (
+            <>
+              <Armchair size={34} />
+              <h3>Deliver to Table {table.number}</h3>
+              <p>The Chef confirmed collection. Confirm after the complete order reaches the guest.</p>
+              <button className="primary" disabled={handoffBusy} onClick={() => updateHandoff("received")}>
+                {handoffBusy ? "Updating…" : "Order received at table"}
+              </button>
+            </>
+          ) : order.status === "received" ? (
+            <>
+              <CheckCircle2 size={34} />
+              <h3>Order received</h3>
+              <p>Would the guest like another order, or is the table ready for billing?</p>
+              <div className="service-handoff-actions">
+                <button className="secondary" onClick={() => setMode("order")}><Plus size={16} /> More order</button>
+                <button className="primary" onClick={() => setMode("bill")}><ReceiptText size={16} /> Complete & billing</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <Clock3 size={34} />
+              <h3>Kitchen is preparing this order</h3>
+              <p>The collect action will appear as soon as the chef marks every item ready.</p>
+            </>
+          )}
+        </div>
       )}
     </Modal>
   );
@@ -5352,8 +5501,14 @@ function calculateBill(order, data) {
       menu: data.menu.find((m) => m.id === i.menuId),
     })),
     subtotal = items.reduce((s, i) => s + (i.menu?.price || 0) * i.qty, 0),
-    tax = (subtotal * data.settings.taxRate) / 100;
-  return { items, subtotal, tax, service: 0, total: subtotal + tax };
+    // GST charges are temporarily disabled. Retain for later use.
+    // tax = (subtotal * data.settings.taxRate) / 100,
+    // cgst = (subtotal * data.settings.cgstRate) / 100,
+    tax = 0,
+    cgst = 0,
+    // service = (subtotal * data.settings.serviceCharge) / 100,
+    service = 0;
+  return { items, subtotal, tax, cgst, service, total: subtotal };
 }
 function billNumber(order) {
   return order?.dailyNumber ?? order?.id;
@@ -5477,10 +5632,16 @@ function BillReceipt({ table, order, data, bill }) {
           <span>Subtotal</span>
           <b>{money(bill.subtotal)}</b>
         </p>
+        {/* GST and CGST receipt rows are temporarily disabled; retain for later use.
+        <p><span>GST ({data.settings.taxRate}%)</span><b>{money(bill.tax)}</b></p>
+        <p><span>CGST ({data.settings.cgstRate}%)</span><b>{money(bill.cgst)}</b></p>
+        */}
+        {/* Service tax receipt row is temporarily disabled; retain for later use.
         <p>
-          <span>GST ({data.settings.taxRate}%)</span>
-          <b>{money(bill.tax)}</b>
+          <span>Service tax ({data.settings.serviceCharge}%)</span>
+          <b>{money(bill.service)}</b>
         </p>
+        */}
         <p className="grand">
           <span>Total bill</span>
           <b>{money(bill.total)}</b>
@@ -5508,7 +5669,7 @@ function Bill({ table, order, data, refresh, toast, close }) {
         <p>Create an order for this table first.</p>
       </div>
     );
-  const ready = ["ready", "served", "billing_requested"].includes(order.status);
+  const ready = ["received", "served", "billing_requested"].includes(order.status);
   async function requestBill() {
     setSending(true);
     try {
@@ -5645,7 +5806,7 @@ function AdminBillPopup({ order, table, data, refresh, toast, close }) {
 function productionOrders(data, role) {
   const wantsJuice = role === "juicer";
   return data.orders
-    .filter((order) => !["completed", "served", "billing_requested"].includes(order.status))
+    .filter((order) => !["completed", "collected", "received", "served", "billing_requested"].includes(order.status))
     .map((order) => {
       const items = order.items.filter((line) => {
         const menu = data.menu.find((item) => item.id === line.menuId);
@@ -5657,7 +5818,7 @@ function productionOrders(data, role) {
         : items.every((line) => (line.itemStatus || "new") === "new")
           ? "new"
           : "preparing";
-      return { ...order, items, status, department: role };
+      return { ...order, items, sourceStatus: order.status, status, department: role };
     })
     .filter(Boolean);
 }
@@ -5665,6 +5826,10 @@ function productionOrders(data, role) {
 function Chef({ data, refresh, user, logout, toast }) {
   const [page, setPage] = useState("overview");
   const active = productionOrders(data, "chef");
+  const navBadges = {
+    kitchen: active.filter((order) => order.orderType !== "parcel").length,
+    parcels: active.filter((order) => order.orderType === "parcel").length,
+  };
   const orders =
     page === "parcels"
       ? active.filter((o) => o.orderType === "parcel")
@@ -5673,7 +5838,7 @@ function Chef({ data, refresh, user, logout, toast }) {
         : active;
   const shown =
     page === "ready" ? orders.filter((o) => o.status === "ready") : orders;
-  if (page === "overview") return <Shell role="chef" user={user} page={page} setPage={setPage} logout={logout}><RoleOverview role="chef" data={data} user={user} setPage={setPage}/></Shell>;
+  if (page === "overview") return <Shell role="chef" user={user} page={page} setPage={setPage} logout={logout} navBadges={navBadges}><RoleOverview role="chef" data={data} user={user} setPage={setPage}/></Shell>;
   /* Temporarily disabled; retain the Chef attendance screen for later.
   if (page === "attendance")
     return (
@@ -5683,6 +5848,7 @@ function Chef({ data, refresh, user, logout, toast }) {
         page={page}
         setPage={setPage}
         logout={logout}
+        navBadges={navBadges}
       >
         <AttendancePanel user={user} toast={toast} />
       </Shell>
@@ -5696,6 +5862,7 @@ function Chef({ data, refresh, user, logout, toast }) {
         page={page}
         setPage={setPage}
         logout={logout}
+        navBadges={navBadges}
       >
         <ChefManagement
           data={data}
@@ -5706,10 +5873,10 @@ function Chef({ data, refresh, user, logout, toast }) {
       </Shell>
     );
   if (page === "stock-booking")
-    return <Shell role="chef" user={user} page={page} setPage={setPage} logout={logout}><ChefStockBooking data={data} refresh={refresh} user={user} toast={toast}/></Shell>;
+    return <Shell role="chef" user={user} page={page} setPage={setPage} logout={logout} navBadges={navBadges}><ChefStockBooking data={data} refresh={refresh} user={user} toast={toast}/></Shell>;
   if (page === "dishes")
     return (
-      <Shell role="chef" user={user} page={page} setPage={setPage} logout={logout}>
+      <Shell role="chef" user={user} page={page} setPage={setPage} logout={logout} navBadges={navBadges}>
         <ChefDishes data={data} refresh={refresh} toast={toast} />
       </Shell>
     );
@@ -5721,6 +5888,18 @@ function Chef({ data, refresh, user, logout, toast }) {
     refresh();
     toast(`Order #${id} marked ${next}`);
   }
+  async function collect(id) {
+    try {
+      await api(`/orders/${id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "collected" }),
+      });
+      await refresh();
+      toast(`Order #${id} collected from the kitchen`);
+    } catch (error) {
+      toast(error.message);
+    }
+  }
   return (
     <Shell
       role="chef"
@@ -5728,6 +5907,7 @@ function Chef({ data, refresh, user, logout, toast }) {
       page={page}
       setPage={setPage}
       logout={logout}
+      navBadges={navBadges}
     >
       <PageHead
         kicker="LIVE KITCHEN DISPLAY"
@@ -5736,9 +5916,9 @@ function Chef({ data, refresh, user, logout, toast }) {
             ? "Ready to Serve"
             : page === "parcels"
               ? "Parcel Queue"
-              : "Dine-in Kitchen"
+              : "Table Orders"
         }
-        sub={`${orders.length} active orders · updates automatically every 5 seconds.`}
+        sub={`${orders.length} active orders · live socket tracking enabled.`}
       />
       <div className="kitchen-summary">
         <span>
@@ -5757,7 +5937,7 @@ function Chef({ data, refresh, user, logout, toast }) {
       </div>
       <div className="kitchen-grid">
         {shown.map((o) => (
-          <KitchenTicket key={o.id} order={o} data={data} status={status} />
+          <KitchenTicket key={o.id} order={o} data={data} status={status} collect={collect} />
         ))}
       </div>
       {!shown.length && (
@@ -5793,18 +5973,26 @@ function ChefStockRequestModal({ item,user,close,refresh,toast }) {
 function Juicer({ data, refresh, user, logout, toast }) {
   const [page, setPage] = useState("overview");
   const active = productionOrders(data, "juicer");
-  if (page === "overview") return <Shell role="juicer" user={user} page={page} setPage={setPage} logout={logout}><RoleOverview role="juicer" data={data} user={user} setPage={setPage}/></Shell>;
+  const navBadges = {
+    queue: active.filter((order) => order.orderType !== "parcel").length,
+    "parcel-queue": active.filter((order) => order.orderType === "parcel").length,
+  };
+  if (page === "overview") return <Shell role="juicer" user={user} page={page} setPage={setPage} logout={logout} navBadges={navBadges}><RoleOverview role="juicer" data={data} user={user} setPage={setPage}/></Shell>;
   // Temporarily disabled; retain the Juicer attendance screen for later:
   // if (page === "attendance") return <Shell role="juicer" user={user} page={page} setPage={setPage} logout={logout}><AttendancePanel user={user} toast={toast}/></Shell>;
-  if (page === "juices") return <Shell role="juicer" user={user} page={page} setPage={setPage} logout={logout}><ChefDishes data={{...data,menu:data.menu.filter(item=>String(item.category).toLowerCase()==="juices")}} refresh={refresh} toast={toast} juicer/></Shell>;
-  const orders = page === "ready" ? active.filter(order => order.status === "ready") : active.filter(order => order.status !== "ready");
+  if (page === "juices") return <Shell role="juicer" user={user} page={page} setPage={setPage} logout={logout} navBadges={navBadges}><ChefDishes data={{...data,menu:data.menu.filter(item=>String(item.category).toLowerCase()==="juices")}} refresh={refresh} toast={toast} juicer/></Shell>;
+  const orders = page === "ready"
+    ? active.filter(order => order.status === "ready")
+    : page === "parcel-queue"
+      ? active.filter(order => order.orderType === "parcel")
+      : active.filter(order => order.orderType !== "parcel");
   async function status(id, next) {
     await api(`/orders/${id}/items/status`, { method: "PATCH", body: JSON.stringify({ status: next }) });
     await refresh();
     toast(`Juice order #${id} marked ${next}`);
   }
-  return <Shell role="juicer" user={user} page={page} setPage={setPage} logout={logout}>
-    <PageHead kicker="LIVE JUICE STATION" title={page === "ready" ? "Ready Juices" : "Juice Queue"} sub={`${orders.length} juice tickets · food items remain in the Chef portal.`}/>
+  return <Shell role="juicer" user={user} page={page} setPage={setPage} logout={logout} navBadges={navBadges}>
+    <PageHead kicker="LIVE JUICE STATION" title={page === "ready" ? "Ready Juices" : page === "parcel-queue" ? "Parcel Queue" : "Table Orders"} sub={`${orders.length} live juice tickets · tracked separately for tables and parcels.`}/>
     <div className="kitchen-summary"><span><i className="new"/><b>{active.filter(o=>o.status==="new").length}</b> New</span><span><i className="preparing"/><b>{active.filter(o=>o.status==="preparing").length}</b> Preparing</span><span><i className="ready"/><b>{active.filter(o=>o.status==="ready").length}</b> Ready</span></div>
     <div className="kitchen-grid">{orders.map(order=><KitchenTicket key={order.id} order={order} data={data} status={status} departmentLabel="juice items"/>)}</div>
     {!orders.length?<div className="empty-state"><CupSoda/><h3>Juice station is clear</h3><p>No juice items in this queue right now.</p></div>:null}
@@ -6012,7 +6200,7 @@ function KitchenStaffEditor({ member, user, close, refresh, toast }) {
     </Modal>
   );
 }
-function KitchenTicket({ order, data, status, departmentLabel = "food items" }) {
+function KitchenTicket({ order, data, status, collect, departmentLabel = "food items" }) {
   const table = data.tables.find((t) => t.id === order.tableId),
     isParcel = order.orderType === "parcel",
     [expanded, setExpanded] = useState(false);
@@ -6049,7 +6237,8 @@ function KitchenTicket({ order, data, status, departmentLabel = "food items" }) 
           </div>
           {order.status === "new" ? <button className="primary wide" onClick={() => status(order.id,"preparing")}>Start preparing <ArrowRight size={15}/></button> : null}
           {order.status === "preparing" ? <button className="ready-btn wide" onClick={() => status(order.id,"ready")}><CheckCircle2 size={16}/> Mark ready for {isParcel?"Admin":"service"}</button> : null}
-          {order.status === "ready" ? <div className="parcel-done"><CheckCircle2 size={16}/> Department items ready · waiting for remaining service flow</div> : null}
+          {order.status === "ready" && collect && !isParcel && order.sourceStatus === "ready" ? <button className="ready-btn wide" onClick={() => collect(order.id)}><Package size={16}/> Confirm collected from kitchen</button> : null}
+          {order.status === "ready" && (!collect || isParcel || order.sourceStatus !== "ready") ? <div className="parcel-done"><CheckCircle2 size={16}/> Department items ready · {order.sourceStatus !== "ready" ? "waiting for remaining items" : "waiting for handoff"}</div> : null}
         </Modal>
       ) : null}
     </>

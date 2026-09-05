@@ -26,14 +26,14 @@ export const pool={
 
 export async function migrate() {
   const sql = [
-    `CREATE TABLE IF NOT EXISTS settings (id INT PRIMARY KEY DEFAULT 1, hotel_name VARCHAR(120) NOT NULL, tax_rate DECIMAL(5,2) NOT NULL DEFAULT 5, service_charge DECIMAL(5,2) NOT NULL DEFAULT 5, currency VARCHAR(8) NOT NULL DEFAULT 'INR', updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)`,
+    `CREATE TABLE IF NOT EXISTS settings (id INT PRIMARY KEY DEFAULT 1, hotel_name VARCHAR(120) NOT NULL, tax_rate DECIMAL(5,2) NOT NULL DEFAULT 2.5, cgst_rate DECIMAL(5,2) NOT NULL DEFAULT 2.5, service_charge DECIMAL(5,2) NOT NULL DEFAULT 18, currency VARCHAR(8) NOT NULL DEFAULT 'INR', updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)`,
     `CREATE TABLE IF NOT EXISTS users (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(120) NOT NULL, role ENUM('admin','waiter','chef','juicer') NOT NULL, pin VARCHAR(80) NOT NULL, phone VARCHAR(30) DEFAULT '', email VARCHAR(160) DEFAULT '', profile_image_url VARCHAR(500) NULL, profile_image_object VARCHAR(255) NULL, pay_type ENUM('daily','monthly') DEFAULT 'monthly', pay_rate DECIMAL(10,2) DEFAULT 0, active BOOLEAN DEFAULT TRUE, deleted_at DATETIME NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`,
     `CREATE TABLE IF NOT EXISTS kitchen_staff (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(120) NOT NULL, designation VARCHAR(100) NOT NULL DEFAULT 'Chef', phone VARCHAR(30) DEFAULT '', specialization VARCHAR(120) DEFAULT '', pay_type ENUM('daily','monthly') DEFAULT 'monthly', pay_rate DECIMAL(10,2) DEFAULT 0, joined_on DATE NULL, notes VARCHAR(255) DEFAULT '', active BOOLEAN DEFAULT TRUE, created_by VARCHAR(120) DEFAULT 'Head Chef', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)`,
     `CREATE TABLE IF NOT EXISTS staff_attendance (id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, check_in DATETIME NOT NULL, check_out DATETIME NULL, notes VARCHAR(255) DEFAULT '', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id))`,
     `CREATE TABLE IF NOT EXISTS restaurant_tables (id INT AUTO_INCREMENT PRIMARY KEY, table_number INT NOT NULL UNIQUE, seats INT NOT NULL, area VARCHAR(80) NOT NULL, status ENUM('available','occupied','reserved','cleaning') DEFAULT 'available', guest_name VARCHAR(120) DEFAULT '', booking_time VARCHAR(10) DEFAULT '', order_id INT NULL, active BOOLEAN DEFAULT TRUE)`,
     `CREATE TABLE IF NOT EXISTS menu_items (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(160) NOT NULL, category VARCHAR(80) NOT NULL, description VARCHAR(500) DEFAULT '', price DECIMAL(10,2) NOT NULL, icon VARCHAR(20) DEFAULT '🍽️', image_url VARCHAR(500) NULL, image_object VARCHAR(255) NULL, is_combo BOOLEAN DEFAULT FALSE, available BOOLEAN DEFAULT TRUE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`,
     `CREATE TABLE IF NOT EXISTS combo_components (id INT AUTO_INCREMENT PRIMARY KEY, combo_id INT NOT NULL, menu_id INT NOT NULL, quantity INT NOT NULL DEFAULT 1, FOREIGN KEY (combo_id) REFERENCES menu_items(id) ON DELETE CASCADE, FOREIGN KEY (menu_id) REFERENCES menu_items(id))`,
-    `CREATE TABLE IF NOT EXISTS orders (id INT AUTO_INCREMENT PRIMARY KEY, table_id INT NULL, order_type ENUM('dine_in','parcel') NOT NULL DEFAULT 'dine_in', guest_name VARCHAR(120), customer_phone VARCHAR(30) DEFAULT '', waiter VARCHAR(120), status ENUM('new','preparing','ready','served','billing_requested','completed') DEFAULT 'new', payment_status ENUM('unpaid','paid') DEFAULT 'unpaid', payment_method VARCHAR(30) NULL, subtotal DECIMAL(10,2) NULL, tax DECIMAL(10,2) NULL, service_charge DECIMAL(10,2) NULL, total DECIMAL(10,2) NULL, created_at DATETIME NOT NULL, completed_at DATETIME NULL, FOREIGN KEY (table_id) REFERENCES restaurant_tables(id))`,
+    `CREATE TABLE IF NOT EXISTS orders (id INT AUTO_INCREMENT PRIMARY KEY, table_id INT NULL, order_type ENUM('dine_in','parcel') NOT NULL DEFAULT 'dine_in', guest_name VARCHAR(120), customer_phone VARCHAR(30) DEFAULT '', waiter VARCHAR(120), status ENUM('new','preparing','ready','collected','received','served','billing_requested','completed') DEFAULT 'new', payment_status ENUM('unpaid','paid') DEFAULT 'unpaid', payment_method VARCHAR(30) NULL, subtotal DECIMAL(10,2) NULL, tax DECIMAL(10,2) NULL, service_charge DECIMAL(10,2) NULL, total DECIMAL(10,2) NULL, created_at DATETIME NOT NULL, completed_at DATETIME NULL, FOREIGN KEY (table_id) REFERENCES restaurant_tables(id))`,
     `CREATE TABLE IF NOT EXISTS order_items (id INT AUTO_INCREMENT PRIMARY KEY, order_id INT NOT NULL, menu_id INT NOT NULL, quantity INT NOT NULL, note VARCHAR(255) DEFAULT '', price DECIMAL(10,2) NOT NULL, production_status ENUM('new','preparing','ready') NOT NULL DEFAULT 'new', FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE, FOREIGN KEY (menu_id) REFERENCES menu_items(id))`,
     `CREATE TABLE IF NOT EXISTS inventory (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(160) NOT NULL, category VARCHAR(80), quantity DECIMAL(10,2) NOT NULL, unit VARCHAR(20) NOT NULL, min_quantity DECIMAL(10,2) NOT NULL, cost DECIMAL(10,2) NOT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)`,
     `CREATE TABLE IF NOT EXISTS inventory_transactions (id INT AUTO_INCREMENT PRIMARY KEY, inventory_id INT NOT NULL, movement_type ENUM('purchase','usage','adjustment','waste') NOT NULL, quantity DECIMAL(10,2) NOT NULL, unit_cost DECIMAL(10,2) NULL, note VARCHAR(255) DEFAULT '', created_by VARCHAR(120) DEFAULT 'Admin', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (inventory_id) REFERENCES inventory(id))`,
@@ -55,7 +55,7 @@ export async function migrate() {
     ,`ALTER TABLE users ADD COLUMN pay_rate DECIMAL(10,2) DEFAULT 0 AFTER pay_type`
     ,`ALTER TABLE restaurant_tables MODIFY status ENUM('available','occupied','reserved','cleaning') DEFAULT 'available'`
     ,`ALTER TABLE restaurant_tables ADD COLUMN active BOOLEAN DEFAULT TRUE AFTER order_id`
-    ,`ALTER TABLE orders MODIFY status ENUM('new','preparing','ready','served','billing_requested','completed') DEFAULT 'new'`
+    ,`ALTER TABLE orders MODIFY status ENUM('new','preparing','ready','collected','received','served','billing_requested','completed') DEFAULT 'new'`
     ,`ALTER TABLE users MODIFY role ENUM('admin','waiter','chef','juicer') NOT NULL`
     ,`ALTER TABLE order_items ADD COLUMN production_status ENUM('new','preparing','ready') NOT NULL DEFAULT 'new' AFTER price`
     ,`ALTER TABLE users MODIFY pin VARCHAR(80) NOT NULL`
@@ -63,6 +63,7 @@ export async function migrate() {
     ,`ALTER TABLE users ADD COLUMN email VARCHAR(160) DEFAULT '' AFTER phone`
     ,`ALTER TABLE users ADD COLUMN profile_image_url VARCHAR(500) NULL AFTER email`
     ,`ALTER TABLE users ADD COLUMN profile_image_object VARCHAR(255) NULL AFTER profile_image_url`
+    ,`ALTER TABLE settings ADD COLUMN cgst_rate DECIMAL(5,2) NOT NULL DEFAULT 2.5 AFTER tax_rate`
   ];
   for (const statement of upgrades) { try { await pool.query(statement); } catch (error) { if (error.code !== 'ER_DUP_FIELDNAME') throw error; } }
   const salaryUpgrades = [
@@ -81,8 +82,11 @@ export async function migrate() {
       `CREATE TABLE IF NOT EXISTS \`${databaseName}\`.stock_requests (id INT AUTO_INCREMENT PRIMARY KEY, inventory_id INT NOT NULL, requested_quantity DECIMAL(10,2) NOT NULL, note VARCHAR(255) DEFAULT '', requested_by VARCHAR(120) NOT NULL, status ENUM('pending','ordered','resolved') NOT NULL DEFAULT 'pending', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, resolved_at DATETIME NULL, FOREIGN KEY (inventory_id) REFERENCES \`${databaseName}\`.inventory(id), INDEX request_status (status,created_at))`,
       `ALTER TABLE \`${databaseName}\`.users MODIFY role ENUM('admin','waiter','chef','juicer') NOT NULL`,
       `ALTER TABLE \`${databaseName}\`.users MODIFY pin VARCHAR(80) NOT NULL`,
+      `ALTER TABLE \`${databaseName}\`.settings ADD COLUMN cgst_rate DECIMAL(5,2) NOT NULL DEFAULT 2.5 AFTER tax_rate`,
+      `UPDATE \`${databaseName}\`.settings SET tax_rate=2.5,cgst_rate=2.5,service_charge=18 WHERE id=1`,
       `ALTER TABLE \`${databaseName}\`.users ADD COLUMN deleted_at DATETIME NULL AFTER active`,
       `ALTER TABLE \`${databaseName}\`.order_items ADD COLUMN production_status ENUM('new','preparing','ready') NOT NULL DEFAULT 'new' AFTER price`,
+      `ALTER TABLE \`${databaseName}\`.orders MODIFY status ENUM('new','preparing','ready','collected','received','served','billing_requested','completed') DEFAULT 'new'`,
       `ALTER TABLE \`${databaseName}\`.bookings ADD COLUMN customer_phone VARCHAR(30) NOT NULL DEFAULT '' AFTER guest_name`,
       `ALTER TABLE \`${databaseName}\`.bookings ADD COLUMN booking_date DATE NULL AFTER customer_phone`,
       `ALTER TABLE \`${databaseName}\`.bookings ADD COLUMN duration_minutes INT NOT NULL DEFAULT 90 AFTER booking_time`,
@@ -107,7 +111,7 @@ async function seed() {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    await conn.query(`INSERT INTO settings (id,hotel_name,tax_rate,service_charge,currency) VALUES (1,'KnockOUT',5,5,'INR')`);
+    await conn.query(`INSERT INTO settings (id,hotel_name,tax_rate,cgst_rate,service_charge,currency) VALUES (1,'KnockOUT',2.5,2.5,18,'INR')`);
     for (const u of initialData.users) await conn.query('INSERT INTO users (name,role,pin) VALUES (?,?,?)',[u.name,u.role,u.pin]);
     for (const t of initialData.tables) await conn.query('INSERT INTO restaurant_tables (table_number,seats,area,status,guest_name,booking_time) VALUES (?,?,?,?,?,?)',[t.number,t.seats,t.area,t.status,t.guestName,t.bookingTime]);
     for (const m of initialData.menu) await conn.query('INSERT INTO menu_items (name,category,price,icon,available) VALUES (?,?,?,?,?)',[m.name,m.category,m.price,m.icon,m.available]);
@@ -123,7 +127,7 @@ async function seed() {
 
 export async function getState() {
   const [[settings], [users], [attendance], [kitchenStaff], [tables], [bookings], [menu], [comboComponents], [orders], [orderItems], [inventory], [inventoryTransactions], [stockRequests], [financeEntries], [supplierPurchases], [supplierPayments]] = await Promise.all([
-    pool.query('SELECT hotel_name hotelName,tax_rate taxRate,service_charge serviceCharge,currency FROM settings WHERE id=1'),
+    pool.query('SELECT hotel_name hotelName,tax_rate taxRate,cgst_rate cgstRate,service_charge serviceCharge,currency FROM settings WHERE id=1'),
     pool.query('SELECT id,name,role,pin,phone,pay_type payType,pay_rate payRate,active,created_at createdAt FROM users WHERE deleted_at IS NULL ORDER BY active DESC,name'),
     pool.query('SELECT a.id,a.user_id userId,a.check_in checkIn,a.check_out checkOut,a.notes,u.name,u.role FROM staff_attendance a JOIN users u ON u.id=a.user_id ORDER BY a.check_in DESC LIMIT 300'),
     pool.query('SELECT id,name,designation,phone,specialization,pay_type payType,pay_rate payRate,joined_on joinedOn,notes,active,created_by createdBy,created_at createdAt FROM kitchen_staff ORDER BY active DESC,name'),

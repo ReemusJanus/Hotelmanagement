@@ -24,8 +24,9 @@ function broadcastChange(database,resource='state'){
  for(const client of socketServer.clients)if(client.readyState===WebSocket.OPEN&&(client.database===database||client.database==='master'))client.send(message);
 }
 socketServer.on('connection',(socket,request)=>{
- const database=socketDatabase(new URL(request.url,'http://localhost').searchParams.get('database'));
- if(!database)return socket.close(1008,'Invalid company database');
+ const params=new URL(request.url,'http://localhost').searchParams,database=socketDatabase(params.get('database')),session=verifyPortalToken(params.get('token'));
+ const authorized=database==='master'?session?.role==='superadmin':session?.companyDatabase===database&&['admin','waiter','chef','juicer'].includes(session?.role);
+ if(!database||!authorized)return socket.close(1008,'Unauthorized live tracking channel');
  socket.database=database;socket.isAlive=true;
  socket.on('pong',()=>{socket.isAlive=true});
  socket.send(JSON.stringify({type:'connected',database,at:new Date().toISOString()}));
@@ -109,7 +110,7 @@ async function provisionCompany({companyName,adminName,adminPin,email='',phone='
   await adminPool.query(`CREATE DATABASE \`${databaseName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
   const[tables]=await adminPool.query("SELECT TABLE_NAME tableName FROM information_schema.TABLES WHERE TABLE_SCHEMA='knockout' AND TABLE_TYPE='BASE TABLE'");
   for(const {tableName} of tables)await adminPool.query(`CREATE TABLE \`${databaseName}\`.\`${tableName}\` LIKE \`knockout\`.\`${tableName}\``);
-  await adminPool.query(`INSERT INTO \`${databaseName}\`.settings (id,hotel_name,tax_rate,service_charge,currency) VALUES (1,?,5,5,'INR')`,[companyName]);
+  await adminPool.query(`INSERT INTO \`${databaseName}\`.settings (id,hotel_name,tax_rate,cgst_rate,service_charge,currency) VALUES (1,?,2.5,2.5,18,'INR')`,[companyName]);
   await adminPool.query(`INSERT INTO \`${databaseName}\`.users (name,role,pin,phone,active) VALUES (?,'admin',?,?,TRUE)`,[adminName,String(adminPin),phone]);
   await adminPool.query(`INSERT INTO \`${databaseName}\`.menu_items (id,name,category,description,price,icon,image_url,image_object,is_combo,available) SELECT id,name,category,description,price,icon,image_url,image_object,is_combo,available FROM knockout.menu_items WHERE available=TRUE`);
   await adminPool.query(`INSERT INTO \`${databaseName}\`.combo_components (combo_id,menu_id,quantity) SELECT combo_id,menu_id,quantity FROM knockout.combo_components`);

@@ -41,5 +41,5 @@ export const initialData = {
     {id: 2, name: 'Ravi Sharma', role: 'waiter', pin: '1111'},
     {id: 3, name: 'Chef Kabir', role: 'chef', pin: '2222'}
   ],
-  settings: {hotelName: 'Olive & Oak', taxRate: 5, serviceCharge: 5, currency: 'INR'}
+  settings: {hotelName: 'Olive & Oak', taxRate: 2.5, cgstRate: 2.5, serviceCharge: 18, currency: 'INR'}
 };
