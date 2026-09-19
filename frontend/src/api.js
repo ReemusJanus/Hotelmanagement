@@ -45,12 +45,12 @@ export async function apiForm(path, form, options={}) {
   return data;
 }
 
-export async function resolvePortalLogin(pin) {
+export async function resolvePortalLogin(hotelId, pin) {
   const masterBase=`${location.protocol}//${location.hostname}:5100/api`;
-  const response=await fetch(`${masterBase}/public/resolve-login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})});
+  const response=await fetch(`${masterBase}/public/resolve-login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hotelId,pin})});
   const data=await response.json().catch(()=>({message:'Login service returned an invalid response'}));
   if(!response.ok)throw new Error(data.message||'Unable to verify this PIN');
-  localStorage.setItem('knockout-company-db',data.companyDatabase);
+  if(data.companyDatabase)localStorage.setItem('knockout-company-db',data.companyDatabase);
   localStorage.setItem('knockout-portal-role',data.role);
   if(data.accessToken)sessionStorage.setItem('knockout-access-token',data.accessToken);else sessionStorage.removeItem('knockout-access-token');
   return data;
@@ -62,4 +62,24 @@ export async function submitCompanyRegistration(form) {
   const data=await response.json().catch(()=>({message:'Registration service returned an invalid response'}));
   if(!response.ok)throw new Error(data.message||'Unable to submit company registration');
   return data;
+}
+
+export async function getOnboardingStatus(id, pin) {
+  const base=`${location.protocol}//${location.hostname}:5100/api`;
+  const response=await fetch(`${base}/public/onboarding-status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,pin})});
+  const data=await response.json().catch(()=>({message:'Unable to read onboarding status'}));
+  if(!response.ok)throw new Error(data.message||'Unable to read onboarding status');
+  return data;
+}
+
+export async function completeCompanyRegistration(form) {
+  const base=`${location.protocol}//${location.hostname}:5100/api`;
+  const response=await fetch(`${base}/public/complete-registration`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)});
+  const data=await response.json().catch(()=>({message:'Unable to complete registration'}));
+  if(!response.ok)throw new Error(data.message||'Unable to complete registration');
+  return data;
+}
+
+export async function saveReport(filename,content,contentType='text/csv;charset=utf-8'){
+  return api('/reports',{method:'POST',body:JSON.stringify({filename,content,contentType})});
 }

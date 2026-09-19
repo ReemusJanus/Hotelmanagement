@@ -1,0 +1,4 @@
+services:
+  superadmin-backend:
+    ports: !override
+      - "${BACKEND_PORT_RANGE:-5100-5102}:5000"

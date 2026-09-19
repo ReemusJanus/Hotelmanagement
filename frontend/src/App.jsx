@@ -36,7 +36,7 @@ import {
   PieChart,
   CupSoda,
 } from "lucide-react";
-import { api, apiForm, resolvePortalLogin, submitCompanyRegistration } from "./api";
+import { api, apiForm, resolvePortalLogin, submitCompanyRegistration, getOnboardingStatus, completeCompanyRegistration, saveReport } from "./api";
 import AttendancePanel from "./AttendancePanel";
 
 const money = (n) =>
@@ -54,6 +54,7 @@ const exportCsv = (name, rows) => {
   link.download = name;
   link.click();
   URL.revokeObjectURL(link.href);
+  saveReport(name,"\ufeff"+csv).catch(error=>console.error("Report storage failed",error));
 };
 const elapsed = (iso) =>
   `${Math.max(1, Math.floor((Date.now() - new Date(iso)) / 60000))} min`;
@@ -61,9 +62,9 @@ function useLiveUpdates(enabled, database, onChange) {
   useEffect(() => {
     if (!enabled || !database) return;
     let socket, retryTimer, refreshTimer, stopped = false, retries = 0;
-    const scheduleRefresh = () => {
+    const scheduleRefresh = (message) => {
       clearTimeout(refreshTimer);
-      refreshTimer = setTimeout(onChange, 80);
+      refreshTimer = setTimeout(() => onChange(message), 80);
     };
     const connect = () => {
       const protocol = location.protocol === "https:" ? "wss:" : "ws:";
@@ -71,14 +72,14 @@ function useLiveUpdates(enabled, database, onChange) {
       socket = new WebSocket(`${protocol}//${location.host}/ws?database=${encodeURIComponent(database)}&token=${encodeURIComponent(token)}`);
       socket.onopen = () => { retries = 0; };
       socket.onmessage = (event) => {
-        try { if (JSON.parse(event.data).type === "state.changed") scheduleRefresh(); } catch {}
+        try { const message = JSON.parse(event.data); if (message.type === "state.changed") scheduleRefresh(message); } catch {}
       };
       socket.onclose = () => {
         if (!stopped) retryTimer = setTimeout(connect, Math.min(1000 * 2 ** retries++, 15000));
       };
     };
     connect();
-    const fallback = setInterval(onChange, 120000);
+    const fallback = setInterval(() => onChange(), 120000);
     return () => { stopped = true; clearTimeout(retryTimer); clearTimeout(refreshTimer); clearInterval(fallback); socket?.close(); };
   }, [enabled, database, onChange]);
 }
@@ -102,21 +103,41 @@ function CompanyApp() {
   });
   const [data, setData] = useState(null),
     [notice, setNotice] = useState("");
-  const refresh = useCallback(
-    () =>
-      api("/state")
-        .then(setData)
-        .catch((e) => setNotice(e.message)),
-    [],
-  );
+  const refresh = useCallback(() =>
+    Promise.all([api("/state"), api("/session")])
+      .then(([state, session]) => {
+        setData(state);
+        setUser((current) => {
+          if (!current) return current;
+          const updated = {...current, modules: session.modules};
+          sessionStorage.setItem("knockout-portal-user", JSON.stringify(updated));
+          return updated;
+        });
+      })
+      .catch((e) => setNotice(e.message)), []);
   useEffect(() => {
-    if (user && user.role !== "superadmin") {
+    if (user && !["superadmin","applicant"].includes(user.role)) {
       refresh();
     }
-  }, [user, refresh]);
-  useLiveUpdates(Boolean(user && user.role !== "superadmin"), user?.companyDatabase || "knockout", refresh);
+  }, [user?.id, user?.role, refresh]);
+  const handleLiveChange = useCallback((message) => {
+    if (message?.resource === "company.modules" && message.modules) {
+      setUser((current) => {
+        if (!current) return current;
+        const updated = {...current, modules: message.modules};
+        sessionStorage.setItem("knockout-portal-user", JSON.stringify(updated));
+        return updated;
+      });
+      if ((user?.role === "chef" && message.modules.kitchen === false) || (user?.role === "juicer" && message.modules.juicer === false)) {
+        window.dispatchEvent(new CustomEvent("knockout:session-revoked", {detail:{message:"This portal was disabled by KnockOUT Master."}}));
+        return;
+      }
+    }
+    refresh();
+  }, [refresh, user?.role]);
+  useLiveUpdates(Boolean(user && !["superadmin","applicant"].includes(user.role)), user?.companyDatabase || "knockout", handleLiveChange);
   const login = (u) => {
-    localStorage.setItem("knockout-company-db", u.companyDatabase);
+    if(u.companyDatabase)localStorage.setItem("knockout-company-db", u.companyDatabase);
     localStorage.setItem("knockout-portal-role", u.role);
     sessionStorage.setItem("knockout-portal-user", JSON.stringify(u));
     setUser(u);
@@ -145,6 +166,7 @@ function CompanyApp() {
     setTimeout(() => setNotice(""), 2800);
   };
   if (!user) return <Login onLogin={login} />;
+  if (user.role === "applicant") return <ApplicantOnboarding user={user} logout={logout}/>;
   if (user.role === "superadmin")
     return <SuperAdminApp authenticatedUser={user} onLogout={logout} />;
   if (!data)
@@ -206,51 +228,52 @@ function PublicLanding({ login, register }) {
   }, []);
   return <main className="public-landing">
     <nav className="landing-nav">
-      <button className="landing-brand" onClick={() => window.scrollTo({top:0,behavior:"smooth"})}><img src="/knockout-logo.png" alt="KnockOUT logo"/><span><b>KnockOUT</b><small>KNOCK YOUR BUDS OUT</small></span></button>
-      <div><a href="#signatures">Signatures</a><a href="#menu">Menu</a><a href="#visit">Visit</a><button className="landing-login" onClick={login}>Login <ArrowRight size={15}/></button></div>
+      <button className="landing-brand" onClick={() => window.scrollTo({top:0,behavior:"smooth"})}><img src="/knockout-logo.png" alt="KnockOUT logo"/><span><b>KnockOUT</b><small>HOSPITALITY OPERATING SYSTEM</small></span></button>
+      <div><a href="#platform">Platform</a><a href="#businesses">Businesses</a><a href="#operations">Operations</a><button className="landing-register-nav" onClick={register}>Register</button><button className="landing-login" onClick={login}>Login <ArrowRight size={15}/></button></div>
     </nav>
     <section className="landing-hero">
       <div className="landing-hero-copy">
-        <span className="landing-pill"><i/> Azhagiyamandabam · Tamil Nadu</span>
-        <h1>Flavour that makes an <em>entrance.</em></h1>
-        <p>Golden broasted chicken, smoky alfaham and bold comfort food—made fresh for cravings that refuse to be ordinary.</p>
-        <blockquote className="landing-hero-quote">“Great food begins the story. Remarkable service makes it unforgettable.”</blockquote>
-        <div className="landing-hero-actions"><a className="landing-explore" href="#menu">Explore our food <ArrowRight/></a><a className="secondary landing-call" href="tel:+917904951736">Call to order</a></div>
+        <span className="landing-pill"><i/> ONE PLATFORM · EVERY LOCATION</span>
+        <h1>Run hospitality <em>beautifully.</em></h1>
+        <p>A modular SaaS operating system for restaurants, cafés, hotels, food courts, and cloud kitchens. Connect every order, table, kitchen station, employee, stock item, and bill in one live workspace.</p>
+        <blockquote className="landing-hero-quote">“Less operational noise. More time for exceptional hospitality.”</blockquote>
+        <div className="landing-hero-actions"><a className="landing-explore" href="#platform">Explore the platform <ArrowRight/></a></div>
+        <div className="landing-trust"><span><CheckCircle2/> Isolated hotel workspaces</span><span><CheckCircle2/> Live order tracking</span><span><CheckCircle2/> Role-based access</span></div>
       </div>
       <div className="landing-food-visual">
-        <img src="/knockout-signature-chicken-v1.png" alt="KnockOUT broasted chicken and alfaham chicken"/>
+        <img src="/hospitality-platform-hero-v1.png" alt="Café, restaurant and hotel businesses managed with KnockOUT"/>
         <div className="landing-food-shine"/>
-        <span className="landing-food-edition">FIRE · FLAVOUR · HOSPITALITY</span>
-        <div className="landing-dish-label broasted"><small>SIGNATURE 01</small><b>Broasted Chicken</b><span>Golden · crisp · tender</span></div>
-        <div className="landing-dish-label alfaham"><small>SIGNATURE 02</small><b>Alfaham Chicken</b><span>Charcoal · smoky · juicy</span></div>
-        <div className="landing-food-seal"><ChefHat/><span><b>House signatures</b><small>Made to be remembered</small></span></div>
+        <span className="landing-food-edition">CAFÉ · RESTAURANT · HOTEL</span>
+        <div className="landing-dish-label broasted"><small>LIVE OPERATIONS</small><b>Orders to service</b><span>Every round tracked in real time</span></div>
+        <div className="landing-dish-label alfaham"><small>BUSINESS CONTROL</small><b>One clear overview</b><span>Revenue · stock · teams · billing</span></div>
+        <div className="landing-food-seal"><Gauge/><span><b>Always in sync</b><small>Web and mobile workspaces</small></span></div>
       </div>
     </section>
-    <section className="landing-signatures" id="signatures">
-      <div><span className="eyebrow">OUR SIGNATURE TABLE</span><h2>Golden crunch. Charcoal fire. Pure indulgence.</h2></div>
-      <div className="landing-signature-copy"><p>Our broasted chicken arrives crisp and succulent. Our alfaham carries the depth of open flame. Behind both is a seamless service flow that keeps every table beautifully cared for.</p><blockquote>“Come for the flavour. Return for the feeling.”</blockquote></div>
-      <span className="landing-signature-mark">K<span>O</span></span>
+    <section className="landing-signatures" id="businesses">
+      <div><span className="eyebrow">BUILT FOR HOSPITALITY</span><h2>One system that adapts to your business.</h2></div>
+      <div className="landing-signature-copy"><p>Start with the modules you need and enable more as you grow. Each property receives its own Hotel ID, isolated data, staff access, configuration, and operating dashboard.</p><blockquote>Restaurants · Cafés · Hotels · Cloud kitchens · Multi-location groups</blockquote></div>
+      <span className="landing-signature-mark">S<span>A</span></span>
     </section>
-    <section className="landing-platform" id="menu">
-      <div className="landing-section-head"><span className="eyebrow">WHAT WE SERVE</span><h2>Big flavour, whatever the mood</h2><p>From crisp chicken and charcoal grills to saucy noodles and comforting curries.</p></div>
+    <section className="landing-platform" id="platform">
+      <div className="landing-section-head"><span className="eyebrow">THE COMPLETE PLATFORM</span><h2>Everything your service team needs</h2><p>Purpose-built portals keep every role focused while sharing the same live operational truth.</p></div>
       <div className="landing-feature-grid">
-        <article><ChefHat/><span>01</span><h3>Broasted Chicken</h3><p>Deep golden crunch outside, tender and juicy at the centre—our crowd favourite.</p></article>
-        <article><UtensilsCrossed/><span>02</span><h3>Alfaham &amp; Grills</h3><p>Flame-kissed chicken layered with smoky spice and the unmistakable taste of charcoal.</p></article>
-        <article><CupSoda/><span>03</span><h3>Noodles &amp; More</h3><p>Wok-tossed favourites and satisfying sides built for sharing around the table.</p></article>
-        <article><Package/><span>04</span><h3>Curry Favourites</h3><p>Warm, richly spiced comfort food for an easy dine-in evening or parcel order.</p></article>
+        <article><Armchair/><span>01</span><h3>Tables &amp; Waiters</h3><p>Take orders by service round, follow each handoff, add more items, and send completed tables to billing.</p></article>
+        <article><ChefHat/><span>02</span><h3>Kitchen Display</h3><p>Separate table and parcel queues with live ticket counts, preparation timers, and individual round status.</p></article>
+        <article><Package/><span>03</span><h3>Parcel Operations</h3><p>Manage takeaway orders, scheduled collections, kitchen progress, handoff, payment, and order history.</p></article>
+        <article><TrendingUp/><span>04</span><h3>Business Intelligence</h3><p>See revenue, bills, stock alerts, staff attendance, and live service health from the admin dashboard.</p></article>
       </div>
     </section>
-    <section className="landing-visit" id="visit">
-      <div><span className="eyebrow">COME HUNGRY</span><h2>Your next favourite meal is waiting.</h2><p>Opposite CSI Church, Azhagiyamandabam</p></div>
-      <div className="landing-visit-details"><span><Clock3/><b>Open daily</b><small>2:30 PM — 11:00 PM</small></span><a href="tel:+917904951736"><span>☎</span><b>Call us</b><small>79049 51736</small></a><a href="https://www.instagram.com/knock_out_azhagiyamandabam/" target="_blank" rel="noreferrer"><span>◎</span><b>Follow on Instagram</b><small>@knock_out_azhagiyamandabam</small></a></div>
+    <section className="landing-visit" id="operations">
+      <div><span className="eyebrow">CONTROL WITHOUT COMPLEXITY</span><h2>From first order to final bill.</h2><p>Every status change reaches the right portal through live socket updates.</p></div>
+      <div className="landing-visit-details"><span><ShoppingCart/><b>Capture every order</b><small>New rounds remain separate and easy to audit</small></span><span><Clock3/><b>Track every handoff</b><small>Preparing, ready, collected, received, and complete</small></span><span><Settings/><b>Choose every module</b><small>Super Admin controls access for each business</small></span></div>
     </section>
-    <footer className="landing-footer"><span><img src="/knockout-logo.png" alt=""/><b>KnockOUT</b></span><p>“Knock your buds out.”</p><small>© 2026 KnockOUT · Azhagiyamandabam</small></footer>
+    <footer className="landing-footer"><span><img src="/knockout-logo.png" alt=""/><b>KnockOUT</b></span><p>Powered by KnockOUT</p><small>© 2026 KnockOUT SaaS</small></footer>
   </main>;
 }
 
 function Login({ onLogin }) {
   const routeFromPath = () => location.pathname === "/login" ? "login" : location.pathname === "/register" ? "register" : "landing";
-  const [mode,setMode]=useState(routeFromPath),[pin, setPin] = useState(""),
+  const [mode,setMode]=useState(routeFromPath),[hotelId,setHotelId]=useState(""),[pin, setPin] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [verified, setVerified] = useState(false),
@@ -264,18 +287,24 @@ function Login({ onLogin }) {
     return () => removeEventListener("popstate", update);
   }, []);
   useEffect(() => {
-    if (pin.length === 6 && !busy) submit();
-  }, [pin]);
+    if (hotelId.length === 4 && pin.length === 6 && !busy) { submit(); return; }
+    if (!hotelId && pin.length >= 4 && pin.length <= 6 && !busy) {
+      const timer = setTimeout(() => submit(), 550);
+      return () => clearTimeout(timer);
+    }
+  }, [hotelId, pin]);
   async function submit(e) {
     e?.preventDefault();
-    if (pin.length !== 6 || busy) return;
+    const masterAttempt = !hotelId && pin.length >= 4 && pin.length <= 6;
+    if ((!masterAttempt && (hotelId.length !== 4 || pin.length !== 6)) || busy) return;
     setBusy(true);
     setError("");
     try {
-      const user = await resolvePortalLogin(pin);
+      const user = await resolvePortalLogin(hotelId, pin);
       setVerified(true);
       setTimeout(() => { history.replaceState({}, "", "/"); onLogin(user); }, 500);
     } catch (e) {
+      if (!hotelId && pin.length < 6) return;
       setError(e.message);
       setPin("");
       setTimeout(() => input.current?.focus(), 100);
@@ -289,7 +318,7 @@ function Login({ onLogin }) {
     setMode(next);
   }
   if(mode==="landing")return <PublicLanding login={()=>navigate("login")} register={()=>navigate("register")}/>;
-  if(mode==="register")return <PublicCompanyRegistration back={()=>navigate("login")}/>;
+  if(mode==="register")return <PublicCompanyRegistration back={()=>navigate("landing")}/>;
   return (
     <main className="web-auth otp-entry">
       <header className="otp-web-brand">
@@ -299,13 +328,15 @@ function Login({ onLogin }) {
       </header>
       <section className={`web-otp-card ${verified ? "verified" : ""}`}>
         <i />
-        <span className="eyebrow">6-DIGIT PIN VERIFICATION</span>
-        <h1>{verified ? "Access verified" : "Enter your access PIN"}</h1>
+        <div className="otp-premium-mark"><span>K</span><div><b>KnockOUT Access</b><small>Secure multi-tenant gateway</small></div><em>ENCRYPTED</em></div>
+        <span className="eyebrow">SAAS HOTEL ACCESS</span>
+        <h1>{verified ? "Access verified" : "Enter Hotel ID & PIN"}</h1>
         <p>
           {verified
             ? "Opening your correct workspace…"
-            : "One unique PIN identifies Super Admin, Admin, Waiter, or Chef and the correct company."}
+            : "Your Hotel ID selects the correct company. Your PIN opens your assigned portal."}
         </p>
+        <label className="hotel-id-field"><span>4-DIGIT HOTEL ID <em>NOT REQUIRED FOR SUPER ADMIN</em></span><input value={hotelId} onChange={(e)=>setHotelId(e.target.value.replace(/\D/g,"").slice(0,4))} inputMode="numeric" maxLength="4" placeholder="Hotel staff: 1234" autoFocus/></label>
         <div
           className="web-otp-grid six-digit"
           onClick={() => input.current?.focus()}
@@ -334,19 +365,28 @@ function Login({ onLogin }) {
         {busy ? <div className="otp-spinner" /> : null}
         {error ? <div className="web-otp-error">{error}</div> : null}
         <small className="otp-demo">
-          Forgot your PIN? Ask KnockOUT Master to change it.
+          Super Admin: enter only your Master PIN. Hotel staff: enter Hotel ID and six-digit PIN.
         </small>
-        <div className="public-auth-divider"><span>NEW COMPANY?</span></div>
-        <button className="public-register-link" onClick={()=>navigate("register")}><Building2/><span><b>Register your company</b><small>Submit an application for Master approval</small></span><ArrowRight/></button>
       </section>
     </main>
   );
 }
 
 function PublicCompanyRegistration({ back }) {
-  const[form,setForm]=useState({companyName:"",adminName:"",adminPin:"",email:"",phone:""}),[busy,setBusy]=useState(false),[error,setError]=useState(""),[submitted,setSubmitted]=useState(null);
+  const[form,setForm]=useState({companyName:"",adminName:"",email:"",phone:"",packageCode:"starter",periodMonths:1}),[busy,setBusy]=useState(false),[error,setError]=useState(""),[submitted,setSubmitted]=useState(null);
   async function submit(event){event.preventDefault();setBusy(true);setError("");try{setSubmitted(await submitCompanyRegistration(form))}catch(err){setError(err.message)}finally{setBusy(false)}}
-  return <main className="web-auth public-registration-page"><header className="otp-web-brand"><span className="logo">K</span><b>KnockOUT</b><small>NEW COMPANY APPLICATION</small></header><section className="public-registration-card">{submitted?<div className="registration-success"><span><CheckCircle2/></span><span className="eyebrow">APPLICATION #{submitted.id}</span><h1>Sent for Master approval</h1><p>Your database has <b>not</b> been created yet. KnockOUT Master will review the application. After approval, the company database and first Admin login will be created automatically.</p><div><i/><span><b>Current status: Pending</b><small>Use your Admin PIN only after approval.</small></span></div><button className="primary wide" onClick={back}>Return to login</button></div>:<><button className="web-back registration-back" onClick={back}><ChevronLeft/>Back to login</button><span className="eyebrow">COMPANY REGISTRATION</span><h1>Apply to join KnockOUT</h1><p>Submit the company and first Administrator details. Database creation requires Master approval.</p><form className="public-registration-form" onSubmit={submit}><label>COMPANY NAME<input value={form.companyName} onChange={(e)=>setForm({...form,companyName:e.target.value})} placeholder="Example: KnockOUT 2" required/></label><label>ADMINISTRATOR NAME<input value={form.adminName} onChange={(e)=>setForm({...form,adminName:e.target.value})} placeholder="Full name" required/></label><label>ADMIN EMAIL<input type="email" value={form.email} onChange={(e)=>setForm({...form,email:e.target.value})} placeholder="admin@company.com" required/></label><label>PHONE NUMBER<input value={form.phone} onChange={(e)=>setForm({...form,phone:e.target.value})} placeholder="9876543210" inputMode="tel" required/></label><label className="full">REQUESTED 6-DIGIT ADMIN PIN<input type="password" value={form.adminPin} onChange={(e)=>setForm({...form,adminPin:e.target.value.replace(/\D/g,"").slice(0,6)})} placeholder="••••••" inputMode="numeric" required/></label><div className="registration-process full"><span><b>1</b>Submit</span><i/><span><b>2</b>Master review</span><i/><span><b>3</b>Database created</span></div>{error?<div className="form-error full">{error}</div>:null}<button className="primary wide full" disabled={busy||form.adminPin.length!==6}>{busy?"Sending application…":"Send for Master approval"}</button></form></>}</section></main>;
+  const plans={starter:{name:"Starter",copy:"Tables, billing, menu and kitchen"},growth:{name:"Growth",copy:"Adds bookings, parcels and stock"},complete:{name:"Complete",copy:"Every KnockOUT module"}};
+  return <main className="web-auth public-registration-page"><header className="otp-web-brand"><span className="logo">K</span><b>KnockOUT</b><small>NEW TENANT APPLICATION</small></header><section className="public-registration-card">{submitted?<div className="registration-success"><span><CheckCircle2/></span><span className="eyebrow">APPLICATION #{submitted.id}</span><h1>Sent for approval</h1><p>Your request is saved in the Master waiting list. We sent a temporary onboarding PIN to your email and mobile. Use it <b>without a Hotel ID</b> to follow approval and finish setup.</p><div className="temporary-pin-card"><small>TEMPORARY ONBOARDING PIN</small><strong>{submitted.temporaryPin}</strong><span>Development preview · delivery is recorded in the notification outbox</span></div><button className="primary wide" onClick={()=>{history.pushState({},"","/login");location.reload()}}>Continue to temporary login</button><button className="secondary wide" onClick={back}>Return to landing page</button></div>:<><button className="web-back registration-back" onClick={back}><ChevronLeft/>Back to landing page</button><span className="eyebrow">TENANT REGISTRATION · STEP 1</span><h1>Choose how your business runs</h1><p>Tell us who you are, select a package and subscription period. No tenant database is created until approval, completed setup and payment.</p><form className="public-registration-form" onSubmit={submit}><label>HOTEL / BUSINESS NAME<input value={form.companyName} onChange={(e)=>setForm({...form,companyName:e.target.value})} placeholder="Example: Grand Palm Café" required/></label><label>ADMINISTRATOR NAME<input value={form.adminName} onChange={(e)=>setForm({...form,adminName:e.target.value})} placeholder="Full name" required/></label><label>ADMIN EMAIL<input type="email" value={form.email} onChange={(e)=>setForm({...form,email:e.target.value})} placeholder="admin@business.com" required/></label><label>PHONE NUMBER<input value={form.phone} onChange={(e)=>setForm({...form,phone:e.target.value})} placeholder="9876543210" inputMode="tel" required/></label><fieldset className="registration-packages full"><legend>SELECT PACKAGE</legend>{Object.entries(plans).map(([key,plan])=><button type="button" key={key} className={form.packageCode===key?"selected":""} onClick={()=>setForm({...form,packageCode:key})}><b>{plan.name}</b><small>{plan.copy}</small>{form.packageCode===key?<CheckCircle2/>:null}</button>)}</fieldset><fieldset className="registration-period full"><legend>SUBSCRIPTION PERIOD</legend>{[[1,"1 month"],[6,"6 months · 5% saving"],[12,"1 year · 10% saving"]].map(([months,label])=><button type="button" key={months} className={form.periodMonths===months?"selected":""} onClick={()=>setForm({...form,periodMonths:months})}>{label}</button>)}</fieldset><div className="registration-process full"><span><b>1</b>Waiting list</span><i/><span><b>2</b>Master approval</span><i/><span><b>3</b>Setup & payment</span><i/><span><b>4</b>Workspace</span></div>{error?<div className="form-error full">{error}</div>:null}<button className="primary wide full" disabled={busy}>{busy?"Sending application…":"Submit for approval"}</button></form></>}</section></main>;
+}
+
+function ApplicantOnboarding({user,logout}){
+  const[status,setStatus]=useState(null),[form,setForm]=useState({businessType:"Restaurant",address:"",gstNumber:"",paymentReference:""}),[busy,setBusy]=useState(false),[error,setError]=useState(""),[complete,setComplete]=useState(null);
+  const moduleNames={tables:"Tables & Waiters",bookings:"Table Bookings",billing:"Orders & Billing",parcels:"Parcel Orders",menu:"Food & Photos",stock:"Stock Management",finance:"Finance Management",staff:"Staff Management",kitchen:"Chef Portal",juicer:"Juicer Portal"};
+  const refresh=useCallback(()=>getOnboardingStatus(user.id,user.temporaryPin).then(setStatus).catch(err=>setError(err.message)),[user.id,user.temporaryPin]);
+  useEffect(()=>{refresh();const timer=setInterval(refresh,10000);return()=>clearInterval(timer)},[refresh]);
+  async function finish(event){event.preventDefault();setBusy(true);setError("");try{setComplete(await completeCompanyRegistration({...form,id:user.id,pin:user.temporaryPin}))}catch(err){setError(err.message)}finally{setBusy(false)}}
+  if(complete)return <main className="web-auth public-registration-page"><section className="public-registration-card registration-success"><span><CheckCircle2/></span><span className="eyebrow">WORKSPACE ACTIVATED</span><h1>Welcome to KnockOUT</h1><p>Your isolated tenant database and first Administrator account have now been created.</p><div className="credential-result"><span>HOTEL ID <b>{complete.hotelId}</b></span><span>NEW ADMIN PIN <b>{complete.adminPin}</b></span></div><p>Permanent credentials were queued to your email and mobile. Your temporary PIN is now disabled.</p><button className="primary wide" onClick={logout}>Login with permanent credentials</button></section></main>;
+  return <main className="web-auth public-registration-page"><header className="otp-web-brand"><span className="logo">K</span><b>KnockOUT</b><small>SECURE ONBOARDING</small></header><section className="public-registration-card onboarding-card">{!status?<div className="approval-wait"><span className="otp-spinner"/><h1>Opening your application</h1>{error?<div className="form-error">{error}</div>:null}</div>:status.status==='pending'?<div className="approval-wait applicant-waiting-view"><span className="approval-pulse"><Clock3/></span><span className="eyebrow">APPLICATION #{user.id}</span><h1>Waiting for approval</h1><p>Your application has reached KnockOUT Master. This page updates automatically after it is reviewed.</p><div className="applicant-details"><span><small>BUSINESS</small><b>{status.companyName}</b></span><span><small>ADMINISTRATOR</small><b>{status.adminName}</b></span><span><small>EMAIL</small><b>{status.email}</b></span><span><small>MOBILE</small><b>{status.phone}</b></span><span><small>PACKAGE</small><b>{status.packageCode}</b></span><span><small>SUBSCRIPTION</small><b>{status.periodMonths} month{status.periodMonths>1?'s':''}</b></span></div><div className="applicant-module-list"><small>SELECTED MODULES</small><div>{(status.selectedModules||[]).map(key=><span key={key}><CheckCircle2/>{moduleNames[key]||key}</span>)}</div></div>{error?<div className="form-error">{error}</div>:null}</div>:status.status==='rejected'?<div className="approval-wait"><AlertTriangle/><h1>Application not approved</h1><p>{status.reviewNote||"Contact KnockOUT support for more information."}</p></div>:<><button className="web-back registration-back" onClick={logout}><ChevronLeft/>Exit onboarding</button><span className="eyebrow">APPROVED · COMPLETE REGISTRATION</span><h1>Set up {status.companyName}</h1><p>Complete the company profile and confirm payment. Your tenant database is created only after this step succeeds.</p><div className="onboarding-summary"><span><small>PACKAGE</small><b>{status.packageCode}</b></span><span><small>PERIOD</small><b>{status.periodMonths} month{status.periodMonths>1?'s':''}</b></span><span><small>MODULES</small><b>{status.selectedModules.length}</b></span><span><small>TOTAL WITH GST</small><b>{money(status.total)}</b></span></div><form className="public-registration-form" onSubmit={finish}><label>BUSINESS TYPE<select value={form.businessType} onChange={e=>setForm({...form,businessType:e.target.value})}><option>Restaurant</option><option>Café</option><option>Hotel</option><option>Cloud Kitchen</option><option>Food Court</option></select></label><label>GST NUMBER (OPTIONAL)<input value={form.gstNumber} onChange={e=>setForm({...form,gstNumber:e.target.value})}/></label><label className="full">BUSINESS ADDRESS<textarea value={form.address} onChange={e=>setForm({...form,address:e.target.value})} required/></label><label className="full">PAYMENT REFERENCE<input value={form.paymentReference} onChange={e=>setForm({...form,paymentReference:e.target.value})} placeholder="Transaction / payment reference" required/><small>Payment gateway reference confirms the selected package purchase.</small></label>{error?<div className="form-error full">{error}</div>:null}<button className="primary wide full" disabled={busy}>{busy?"Creating secure workspace…":`Pay ${money(status.total)} & activate workspace`}</button></form></>}</section></main>;
 }
 
 function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
@@ -367,6 +407,7 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
     [masterAction, setMasterAction] = useState(null),
     [pinUser, setPinUser] = useState(null),
     [selectedCompanyId, setSelectedCompanyId] = useState(null),
+    [selectedRegistrationId,setSelectedRegistrationId]=useState(null),
     [companySection, setCompanySection] = useState("overview"),
     [companySearch, setCompanySearch] = useState(""),
     [companyFilter, setCompanyFilter] = useState("all"),
@@ -406,22 +447,26 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
       toast(e.message);
     }
   }
+  async function toggleModule(company, module, enabled) {
+    try {
+      await api(`/companies/${company.id}/modules`, {method:"PATCH",body:JSON.stringify({module,enabled})});
+      await refresh();
+      toast(`${module} module ${enabled ? "enabled" : "disabled"} for ${company.companyName}`);
+    } catch (e) { toast(e.message); }
+  }
+  async function setInvoiceStatus(invoice, status) {
+    try {
+      await api(`/saas-invoices/${invoice.id}/status`, {method:"PATCH",body:JSON.stringify({status})});
+      await refresh();
+      toast(`${invoice.companyName} invoice marked ${status}`);
+    } catch (e) { toast(e.message); }
+  }
   async function confirmMasterAction(typed = "") {
     const action = masterAction;
     if (!action || actionBusy) return;
     setActionBusy(true);
     try {
-      if (action.type === "admin") {
-        const result = await api(
-          `/companies/${action.company.id}/admin-login`,
-          { method: "DELETE" },
-        );
-        toast(
-          result.disabled
-            ? `${action.company.companyName} Admin login deleted`
-            : `${action.company.companyName} has no active Admin login`,
-        );
-      } else {
+      {
         await api(`/companies/${action.company.id}`, {
           method: "DELETE",
           body: JSON.stringify({ companyName: typed }),
@@ -436,7 +481,7 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
       setActionBusy(false);
     }
   }
-  async function reviewRegistration(request,status){setReviewBusy(request.id);try{await api(`/company-registrations/${request.id}/${status}`,{method:"POST",body:JSON.stringify({reviewNote:status==="reject"?"Application declined by KnockOUT Master":"Approved by KnockOUT Master"})});await refresh();toast(status==="approve"?`${request.companyName} approved · database and Admin created`:`${request.companyName} registration rejected`)}catch(error){toast(error.message)}finally{setReviewBusy(null)}}
+  async function reviewRegistration(request,status){setReviewBusy(request.id);try{await api(`/company-registrations/${request.id}/${status}`,{method:"POST",body:JSON.stringify({reviewNote:status==="reject"?"Application declined by KnockOUT Master":"Approved by KnockOUT Master"})});await refresh();toast(status==="approve"?`${request.companyName} approved · applicant can now complete setup and payment`:`${request.companyName} registration rejected`)}catch(error){toast(error.message)}finally{setReviewBusy(null)}}
   if (!user)
     return (
       <MasterLogin
@@ -456,6 +501,7 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
     );
   const companies = data.companies || [],
     registrationRequests=data.registrationRequests||[],pendingRegistrations=registrationRequests.filter((request)=>request.status==="pending"),
+    selectedRegistration=registrationRequests.find(request=>request.id===selectedRegistrationId)||null,
     selectedCompany = companies.find((company) => company.id === selectedCompanyId) || null,
     visibleCompanies = companies.filter((company) => {
       const matchesStatus = companyFilter === "all" || company.status === companyFilter || (companyFilter === "attention" && (!company.online || company.lowStock > 0));
@@ -479,13 +525,13 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
           </div>
         </div>
         <nav>
-          <button className={!selectedCompany ? "active" : ""} onClick={() => { setSelectedCompanyId(null); setCompanySection("overview"); }}>
+          <button className={!selectedCompany&&!selectedRegistration ? "active" : ""} onClick={() => { setSelectedCompanyId(null);setSelectedRegistrationId(null); setCompanySection("overview"); }}>
             <LayoutDashboard size={18} />
             Companies
           </button>
           <div className="master-company-nav">
             <small>COMPANY USERS</small>
-            {companies.map((company) => <button key={company.id} className={selectedCompany?.id === company.id ? "active" : ""} onClick={() => { setSelectedCompanyId(company.id); setCompanySection("overview"); }}><Building2 size={17}/><span>{company.companyName}<small>{company.staffCount} users</small></span></button>)}
+            {companies.map((company) => <button key={company.id} className={selectedCompany?.id === company.id ? "active" : ""} onClick={() => { setSelectedRegistrationId(null);setSelectedCompanyId(company.id); setCompanySection("overview"); }}><Building2 size={17}/><span>{company.companyName}<small>{company.staffCount} users</small></span></button>)}
           </div>
         </nav>
       </aside>
@@ -496,7 +542,7 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
             <h2>KnockOUT Master</h2>
           </div>
           <div className="master-header-actions">
-            <div className="master-pending-counter"><Bell size={15}/><span><b>{pendingRegistrations.length}</b><small>Pending registrations</small></span></div>
+            <button className="master-pending-counter" onClick={()=>{setSelectedCompanyId(null);setSelectedRegistrationId(pendingRegistrations[0]?.id||null)}}><Bell size={15}/><span><b>{pendingRegistrations.length}</b><small>Pending registrations</small></span></button>
             <div className="header-user">
               <span className="header-avatar">KM</span>
               <span className="header-user-copy"><b>KnockOUT Master</b><small>Super Admin</small></span>
@@ -505,17 +551,17 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
           </div>
         </header>
         <div className="page">
-          {selectedCompany ? <>
+          {selectedRegistration ? <MasterRegistrationDetail request={selectedRegistration} busy={reviewBusy} review={reviewRegistration} back={()=>setSelectedRegistrationId(null)}/> : selectedCompany ? <>
             <PageHead kicker="COMPANY WORKSPACE" title={selectedCompany.companyName} sub={`All details and controls for the isolated ${selectedCompany.databaseName} database.`} action={<button className="secondary" onClick={() => setSelectedCompanyId(null)}><ChevronLeft size={15}/> All companies</button>}/>
-            <div className="company-detail-tabs"><div>{[["overview","Overview",LayoutDashboard],["users","Users",Users],["revenue","Revenue",TrendingUp],["controls","Controls",Settings]].map(([id,label,Icon])=><button key={id} className={companySection===id?"active":""} onClick={()=>setCompanySection(id)}><Icon size={15}/>{label}{id==="users"?<b>{selectedCompany.users?.length||0}</b>:null}</button>)}</div><span><i className={selectedCompany.online ? "online" : ""}/>{selectedCompany.online ? "Database online" : "Database unavailable"}</span></div>
-            {companySection === "overview" ? <CompanyWorkspaceOverview company={selectedCompany} openUsers={()=>setCompanySection("users")} openRevenue={()=>setCompanySection("revenue")}/> : null}
+            <div className="company-detail-tabs"><div>{[["overview","Overview",LayoutDashboard],["users","Users",Users],["revenue","SaaS Billing",CreditCard],["controls","Controls",Settings]].map(([id,label,Icon])=><button key={id} className={companySection===id?"active":""} onClick={()=>setCompanySection(id)}><Icon size={15}/>{label}{id==="users"?<b>{selectedCompany.users?.length||0}</b>:null}</button>)}</div><span><i className={selectedCompany.online ? "online" : ""}/>{selectedCompany.online ? "Database online" : "Database unavailable"}</span></div>
+            {companySection === "overview" ? <CompanyWorkspaceOverview company={selectedCompany} invoice={(data.invoices||[]).find((invoice)=>invoice.companyId===selectedCompany.id)} subscription={(data.subscriptions||[]).find((item)=>item.companyId===selectedCompany.id)} usage={(data.usage||[]).find((item)=>item.companyId===selectedCompany.id)} openUsers={()=>setCompanySection("users")} openRevenue={()=>setCompanySection("revenue")}/> : null}
             {companySection === "users" ? <MasterUsers company={selectedCompany} changePin={setPinUser}/> : null}
-            {companySection === "revenue" ? <MasterRevenue companies={[selectedCompany]}/> : null}
-            {companySection === "controls" ? <CompanyControls company={selectedCompany} status={status} setMasterAction={setMasterAction}/> : null}
+            {companySection === "revenue" ? <MasterBilling invoices={(data.invoices||[]).filter((invoice)=>invoice.companyId===selectedCompany.id)} companies={[selectedCompany]} setStatus={setInvoiceStatus}/> : null}
+            {companySection === "controls" ? <CompanyControls company={selectedCompany} status={status} toggleModule={toggleModule} setMasterAction={setMasterAction}/> : null}
           </> : <>
           <PageHead kicker="EXECUTIVE COMMAND" title="Company Network" sub="A live operational view of every company in the KnockOUT group." />
-          <MasterRegistrationRequests requests={registrationRequests} busy={reviewBusy} review={reviewRegistration}/>
-          <MasterNetworkOverview companies={companies}/>
+          <MasterRegistrationRequests requests={registrationRequests} open={request=>setSelectedRegistrationId(request.id)}/>
+          <MasterNetworkOverview companies={companies} invoices={data.invoices||[]} usage={data.usage||[]}/>
           <div className="master-directory-toolbar">
             <div><span className="eyebrow">COMPANY DIRECTORY</span><b>{visibleCompanies.length} of {companies.length} companies</b></div>
             <label><Search size={15}/><input value={companySearch} onChange={(event)=>setCompanySearch(event.target.value)} placeholder="Search company, database or admin"/></label>
@@ -534,18 +580,19 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
                   <Status status={company.status} />
                 </header>
                 <h2>{company.companyName}</h2>
-                <code>{company.databaseName}</code>
+                <code>CY-DB · {company.cyDb||company.databaseName}</code>
                 <p>{company.adminName} · {company.staffCount} active users</p>
-                <div className="company-card-metrics"><span><b>{money(company.revenue)}</b><small>Total revenue</small></span><span><b>{company.activeOrders}</b><small>Live orders</small></span><span className={company.lowStock?"warning":""}><b>{company.lowStock}</b><small>Low stock</small></span></div>
-                <footer className="company-health"><span><i className={company.online?"online":""}/>{company.online?"Database online":"Database offline"}</span><small>{company.adminLoginActive?"Admin enabled":"Admin disabled"}</small></footer>
-                <button className="company-users-button" onClick={() => { setSelectedCompanyId(company.id); setCompanySection("overview"); }}><LayoutDashboard size={15}/><span>Open company workspace<small>All details and controls</small></span><ArrowRight size={16}/></button>
+                <div className="company-card-metrics"><span><b>{money((data.invoices||[]).find((invoice)=>invoice.companyId===company.id)?.total||0)}</b><small>Monthly SaaS bill</small></span><span><b>{company.activeOrders}</b><small>Live orders</small></span><span className={company.lowStock?"warning":""}><b>{company.lowStock}</b><small>Low stock</small></span></div>
+                <footer className="company-health"><span><i className={company.online?"online":""}/>{company.online?"Database online":"Database offline"}</span><small>{(data.usage||[]).find(item=>item.companyId===company.id)?.totalLogins||0} logins tracked</small></footer>
+                <button className="company-users-button" onClick={() => { setSelectedRegistrationId(null);setSelectedCompanyId(company.id); setCompanySection("overview"); }}><LayoutDashboard size={15}/><span>Open company workspace<small>All details and controls</small></span><ArrowRight size={16}/></button>
               </article>
             ))}
           </div>
           {!visibleCompanies.length?<div className="master-directory-empty"><Search/><b>No companies found</b><small>Change the search or status filter.</small></div>:null}
-          <MasterRevenue companies={companies}/>
+          <MasterBilling invoices={data.invoices||[]} companies={companies} setStatus={setInvoiceStatus}/>
           </>}
         </div>
+        <footer className="powered-by-knockout">Powered by <b>KnockOUT</b></footer>
       </main>
       {masterAction ? (
         <MasterActionModal
@@ -568,24 +615,28 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
   );
 }
 
-function MasterRegistrationRequests({ requests,busy,review }) {
+function MasterRegistrationRequests({ requests,open }) {
   const pending=requests.filter((request)=>request.status==="pending"),history=requests.filter((request)=>request.status!=="pending").slice(0,5);
-  return <section className="panel master-registration-queue"><header><div><span className="eyebrow">MASTER APPROVAL REQUIRED</span><h2>Company registration requests</h2><p>No database is created until you approve an application.</p></div><span className={pending.length?"has-pending":""}><b>{pending.length}</b><small>Awaiting review</small></span></header>{pending.length?<div className="registration-request-list">{pending.map((request)=><article key={request.id}><span className="registration-company-icon"><Building2/></span><div><h3>{request.companyName}</h3><code>{request.companyName.toLowerCase().trim().replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"")}</code><p>Requested {new Date(request.createdAt).toLocaleString("en-IN")}</p></div><div className="registration-admin-details"><small>FIRST ADMINISTRATOR</small><b>{request.adminName}</b><span>{request.email} · {request.phone}</span></div><div className="registration-review-actions"><button disabled={busy===request.id} onClick={()=>review(request,"reject")}>Reject</button><button className="primary" disabled={busy===request.id} onClick={()=>review(request,"approve")}><CheckCircle2/>{busy===request.id?"Processing…":"Approve & create DB"}</button></div></article>)}</div>:<div className="registration-empty"><CheckCircle2/><span><b>No registrations awaiting approval</b><small>New public applications will appear here automatically.</small></span></div>}{history.length?<details><summary>Recent decisions ({history.length})</summary><div className="registration-history">{history.map((request)=><span key={request.id}><Status status={request.status}/><b>{request.companyName}</b><small>{request.adminName} · {request.reviewedAt?new Date(request.reviewedAt).toLocaleDateString("en-IN"):"Reviewed"}</small></span>)}</div></details>:null}</section>;
+  return <section className="panel master-registration-queue"><header><div><span className="eyebrow">MASTER APPROVAL REQUIRED</span><h2>Tenant waiting list</h2><p>Select an application to open its complete review page.</p></div><span className={pending.length?"has-pending":""}><b>{pending.length}</b><small>Awaiting review</small></span></header>{pending.length?<div className="registration-request-list">{pending.map((request)=><button className="registration-request-row" key={request.id} onClick={()=>open(request)}><span className="registration-company-icon"><Building2/></span><span><h3>{request.companyName}</h3><code>{request.packageCode} · {request.periodMonths} month{request.periodMonths>1?'s':''}</code><p>Requested {new Date(request.createdAt).toLocaleString("en-IN")}</p></span><span className="registration-admin-details"><small>FIRST ADMINISTRATOR</small><b>{request.adminName}</b><span>{request.email} · {request.phone}</span></span><span className="registration-open-action">Review details<ArrowRight/></span></button>)}</div>:<div className="registration-empty"><CheckCircle2/><span><b>No registrations awaiting approval</b><small>New public applications appear here automatically.</small></span></div>}{history.length?<details><summary>Recent decisions ({history.length})</summary><div className="registration-history">{history.map((request)=><button key={request.id} onClick={()=>open(request)}><Status status={request.status}/><b>{request.companyName}</b><small>{request.packageCode} · {request.completedAt?'Registration complete':request.status==='approved'?'Waiting for setup/payment':'Reviewed'}</small></button>)}</div></details>:null}</section>;
 }
 
-function MasterNetworkOverview({ companies }) {
-  const totalRevenue = companies.reduce((sum, company) => sum + Number(company.revenue || 0), 0),
+function MasterRegistrationDetail({request,busy,review,back}){
+  const names={tables:"Tables & Waiters",bookings:"Table Bookings",billing:"Orders & Billing",parcels:"Parcel Orders",menu:"Food & Photos",stock:"Stock Management",finance:"Finance Management",staff:"Staff Management",kitchen:"Chef Portal",juicer:"Juicer Portal"};
+  return <div className="registration-detail-page"><PageHead kicker="TENANT APPLICATION" title={request.companyName} sub={`Application #${request.id} · submitted ${new Date(request.createdAt).toLocaleString('en-IN')}`} action={<button className="secondary" onClick={back}><ChevronLeft/>Waiting list</button>}/><section className="panel registration-detail-card"><header><div><span className="registration-company-icon"><Building2/></span><div><small>APPLICATION STATUS</small><Status status={request.status}/></div></div><span>{request.periodMonths} month subscription</span></header><div className="registration-detail-grid"><article><small>BUSINESS DETAILS</small><p><span>Business name</span><b>{request.companyName}</b></p><p><span>Application ID</span><b>#{request.id}</b></p><p><span>Submitted</span><b>{new Date(request.createdAt).toLocaleString('en-IN')}</b></p></article><article><small>FIRST ADMINISTRATOR</small><p><span>Name</span><b>{request.adminName}</b></p><p><span>Email</span><b>{request.email}</b></p><p><span>Mobile</span><b>{request.phone}</b></p></article><article><small>SELECTED PACKAGE</small><p><span>Package</span><b className="capitalize">{request.packageCode}</b></p><p><span>Billing period</span><b>{request.periodMonths} month{request.periodMonths>1?'s':''}</b></p><p><span>Tenant database</span><b>Not created yet</b></p></article></div><div className="registration-detail-modules"><small>PACKAGE MODULES</small><div>{(request.selectedModules||[]).map(key=><span key={key}><CheckCircle2/>{names[key]||key}</span>)}</div></div>{request.reviewNote?<div className="registration-review-note"><small>MASTER REVIEW NOTE</small><p>{request.reviewNote}</p></div>:null}{request.status==='pending'?<footer><button disabled={busy===request.id} onClick={()=>review(request,'reject')}>Reject application</button><button className="primary" disabled={busy===request.id} onClick={()=>review(request,'approve')}><CheckCircle2/>{busy===request.id?'Processing…':'Approve application'}</button></footer>:<footer><Status status={request.status}/><span>{request.completedAt?'Tenant registration completed':request.status==='approved'?'Applicant can now continue setup and payment':'Application review completed'}</span></footer>}</section></div>;
+}
+
+function MasterNetworkOverview({ companies, invoices, usage }) {
+  const currentMonth=new Date().toISOString().slice(0,7),currentInvoices=(invoices||[]).filter((invoice)=>invoice.billingMonth===currentMonth),totalRevenue=currentInvoices.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0),
     activeOrders = companies.reduce((sum, company) => sum + Number(company.activeOrders || 0), 0),
-    staff = companies.reduce((sum, company) => sum + Number(company.staffCount || 0), 0),
+    activeUsers = (usage||[]).reduce((sum, item) => sum + Number(item.uniqueUsers || 0), 0), totalLogins=(usage||[]).reduce((sum,item)=>sum+Number(item.totalLogins||0),0),
     alerts = companies.filter((company) => !company.online || company.lowStock > 0 || !company.adminLoginActive),
-    today = dateKey(new Date()),
-    todayRevenue = companies.reduce((sum, company) => sum + Number((company.dailyRevenue || []).find((day) => dateKey(day.date) === today)?.total || 0), 0);
+    collectedRevenue=currentInvoices.filter((invoice)=>invoice.status==='paid').reduce((sum,invoice)=>sum+Number(invoice.total||0),0);
   return <>
     <div className="stats master-stats master-network-stats">
       <Stat icon={Building2} label="Companies" value={companies.length} note={`${companies.filter((company)=>company.status==="active").length} active tenants`}/>
-      <Stat icon={TrendingUp} label="Group revenue" value={money(totalRevenue)} note={`${money(todayRevenue)} collected today`}/>
+      <Stat icon={TrendingUp} label="KnockOUT monthly revenue" value={money(totalRevenue)} note={`${money(collectedRevenue)} subscription fees collected`}/>
       <Stat icon={ReceiptText} label="Live orders" value={activeOrders} note="Across the company network"/>
-      <Stat icon={Users} label="Active workforce" value={staff} note="Declared company users"/>
+      <Stat icon={Users} label="Software users" value={activeUsers} note={`${totalLogins} successful logins tracked`}/>
     </div>
     <section className={`master-command-strip ${alerts.length?"has-alerts":"healthy"}`}>
       <Gauge/><div><span className="eyebrow">NETWORK HEALTH</span><b>{alerts.length?`${alerts.length} compan${alerts.length===1?"y needs":"ies need"} attention`:"All companies operating normally"}</b><small>{alerts.length?alerts.map((company)=>company.companyName).join(" · "):"Databases, administrators, and stock levels are healthy."}</small></div><span>{companies.filter((company)=>company.online).length}/{companies.length}<small>online</small></span>
@@ -596,46 +647,31 @@ function MasterNetworkOverview({ companies }) {
 function MasterActionModal({ action, busy, close, confirm }) {
   const [typed, setTyped] = useState(""),
     company = action.company,
-    isCompany = action.type === "company",
     matches = typed === company.companyName;
   return (
     <Modal close={close} hideClose={busy}>
-      <div className={`master-action-icon ${isCompany ? "danger" : ""}`}>
-        {isCompany ? <Trash2 size={24} /> : <Users size={24} />}
+      <div className="master-action-icon danger">
+        <Trash2 size={24} />
       </div>
       <span className="eyebrow">
-        {isCompany ? "PERMANENT COMPANY DELETION" : "ADMIN ACCESS CONTROL"}
+        PERMANENT COMPANY DELETION
       </span>
       <h2>
-        {isCompany ? `Delete ${company.companyName}?` : `Delete Admin login?`}
+        Delete {company.companyName}?
       </h2>
       <p>
-        {isCompany ? (
-          <>
-            This permanently removes <b>{company.companyName}</b>, database{" "}
-            <code>{company.databaseName}</code>, and all company data. This
-            cannot be undone.
-          </>
-        ) : (
-          <>
-            The Admin login for <b>{company.companyName}</b> will stop working.
-            Waiter and Chef accounts and historical records will remain
-            available.
-          </>
-        )}
+        This permanently removes <b>{company.companyName}</b>, database{" "}
+        <code>{company.databaseName}</code>, and all company data. This cannot be undone.
       </p>
-      {isCompany ? (
-        <label className="master-confirm-input">
+      <label className="master-confirm-input">
           TYPE <b>{company.companyName}</b> TO CONFIRM
           <input
             value={typed}
             onChange={(e) => setTyped(e.target.value)}
             placeholder={company.companyName}
-            autoFocus
             disabled={busy}
           />
-        </label>
-      ) : null}
+      </label>
       <div className="master-action-buttons">
         <button onClick={close} disabled={busy}>
           Cancel
@@ -643,37 +679,35 @@ function MasterActionModal({ action, busy, close, confirm }) {
         <button
           className="danger"
           onClick={() => confirm(typed)}
-          disabled={busy || (isCompany && !matches)}
+          disabled={busy || !matches}
         >
           {busy
             ? "Please wait…"
-            : isCompany
-              ? "Delete company"
-              : "Delete Admin login"}
+            : "Delete company"}
         </button>
       </div>
     </Modal>
   );
 }
 
-function CompanyWorkspaceOverview({ company, openUsers, openRevenue }) {
-  const todayRevenue = (company.dailyRevenue || []).find((day) => dateKey(day.date) === dateKey(new Date()));
+function CompanyWorkspaceOverview({ company, invoice, subscription, usage, openUsers, openRevenue }) {
   return <div className="company-workspace-overview">
     <div className="stats master-stats">
-      <Stat icon={TrendingUp} label="Total revenue" value={money(company.revenue)} note="Completed and paid bills"/>
+      <Stat icon={TrendingUp} label="Monthly SaaS bill" value={money(invoice?.total||0)} note={`${invoice?.status==='paid'?'Subscription collected':'Subscription payment due'}`}/>
       <Stat icon={ReceiptText} label="Active orders" value={company.activeOrders} note="Current live workload"/>
-      <Stat icon={Users} label="Declared users" value={company.users?.length || 0} note={`${company.staffCount} active staff accounts`}/>
+      <Stat icon={Users} label="Users logged in" value={usage?.uniqueUsers||0} note={`${usage?.totalLogins||0} successful logins tracked`}/>
       <Stat icon={AlertTriangle} label="Low stock" value={company.lowStock} note="Items requiring attention" tone="warning"/>
     </div>
     <div className="company-workspace-grid">
-      <section className="panel company-profile-panel"><PanelHead title="Company profile" sub="Tenant identity and database isolation"/><div className="company-profile-facts"><p><span>Company</span><b>{company.companyName}</b></p><p><span>Database</span><code>{company.databaseName}</code></p><p><span>Administrator</span><b>{company.adminName}</b></p><p><span>Admin access</span><b className={company.adminLoginActive?"admin-enabled":"admin-disabled"}>{company.adminLoginActive?"Login active":"Login disabled"}</b></p><p><span>Status</span><Status status={company.status}/></p><p><span>Today</span><b>{money(todayRevenue?.total || 0)} · {todayRevenue?.bills || 0} bills</b></p></div></section>
-      <aside className="company-workspace-actions"><button onClick={openUsers}><Users/><span><b>Company users</b><small>Manage {company.users?.length || 0} declared accounts</small></span><ArrowRight/></button><button onClick={openRevenue}><TrendingUp/><span><b>Revenue history</b><small>Open daily bill performance</small></span><ArrowRight/></button></aside>
+      <section className="panel company-profile-panel"><PanelHead title="Company profile" sub="Tenant identity, usage and subscription"/><div className="company-profile-facts"><p><span>Company</span><b>{company.companyName}</b></p><p><span>Hotel ID</span><code>{company.hotelId}</code></p><p><span>CY-DB</span><code>{company.cyDb||company.databaseName}</code></p><p><span>Administrator</span><b>{company.adminName}</b></p><p><span>Last login</span><b>{usage?.lastLogin?new Date(usage.lastLogin).toLocaleString('en-IN'):'No login recorded'}</b></p><p><span>Status</span><Status status={company.status}/></p><p><span>Subscription</span><b>{subscription?`${subscription.packageCode} · ${subscription.status}`:'Legacy tenant'}</b></p><p><span>Expires</span><b>{subscription?new Date(subscription.expiresAt).toLocaleDateString('en-IN'):'—'}</b></p></div></section>
+      <aside className="company-workspace-actions"><button onClick={openUsers}><Users/><span><b>Company users</b><small>Manage {company.users?.length || 0} declared accounts</small></span><ArrowRight/></button><button onClick={openRevenue}><CreditCard/><span><b>SaaS billing</b><small>Open module invoice and monthly report</small></span><ArrowRight/></button></aside>
     </div>
   </div>;
 }
 
-function CompanyControls({ company, status, setMasterAction }) {
-  return <section className="panel company-controls-panel"><span className="eyebrow">COMPANY ADMINISTRATION</span><h2>Access and lifecycle controls</h2><p>These actions affect only <b>{company.companyName}</b> and its isolated database.</p><div className="company-control-grid"><article><Building2/><div><b>Company status</b><small>{company.status === "active" ? "Suspend all company portal access" : "Restore company portal access"}</small></div><button onClick={()=>status(company)}>{company.status === "active" ? "Suspend company" : "Activate company"}</button></article><article><Users/><div><b>Administrator login</b><small>{company.adminLoginActive ? `${company.adminName} can currently sign in` : "The Admin login has been deleted"}</small></div><button disabled={!company.adminLoginActive} onClick={()=>setMasterAction({type:"admin",company})}>{company.adminLoginActive?"Delete Admin login":"Login deleted"}</button></article><article className="danger"><Trash2/><div><b>Delete company</b><small>Remove the company and its isolated database permanently</small></div>{company.databaseName==="knockout"?<span>Primary company protected</span>:<button onClick={()=>setMasterAction({type:"company",company})}>Delete company</button>}</article></div></section>;
+function CompanyControls({ company, status, toggleModule, setMasterAction }) {
+  const labels={tables:"Tables",bookings:"Table Bookings",billing:"Orders & Billing",parcels:"Parcel Orders",menu:"Food & Photos",stock:"Stock Management",finance:"Finance Management",staff:"Staff Management",kitchen:"Chef Portal",juicer:"Juicer Portal"};
+  return <section className="panel company-controls-panel"><span className="eyebrow">COMPANY ADMINISTRATION</span><h2>Access and lifecycle controls</h2><p>Module changes are delivered live by socket to <b>{company.companyName}</b> · Hotel ID <b>{company.hotelId}</b>.</p><div className="company-module-grid">{Object.entries(labels).map(([key,label])=><label key={key}><span><b>{label}</b><small>{company.modules?.[key]!==false?"Module available":"Module disabled"}</small></span><input type="checkbox" checked={company.modules?.[key]!==false} onChange={(event)=>toggleModule(company,key,event.target.checked)}/><i/></label>)}</div><div className="company-control-grid"><article><Building2/><div><b>Company status</b><small>{company.status === "active" ? "Suspend all company portal access" : "Restore company portal access"}</small></div><button onClick={()=>status(company)}>{company.status === "active" ? "Suspend company" : "Activate company"}</button></article><article className="danger"><Trash2/><div><b>Delete company</b><small>Remove the company and its isolated database permanently</small></div>{company.databaseName==="knockout"?<span>Primary company protected</span>:<button onClick={()=>setMasterAction({type:"company",company})}>Delete company</button>}</article></div></section>;
 }
 
 function MasterUsers({ company, changePin }) {
@@ -685,7 +719,7 @@ function MasterUsers({ company, changePin }) {
         <h2>{company.companyName} users</h2>
         <p>
           Admin, Waiter, Chef, and Juicer accounts declared under this company only.
-          Every six-digit PIN remains unique across the KnockOUT network.
+          Six-digit PINs are unique inside this hotel. The same PIN may be reused by another Hotel ID.
         </p>
       </div>
       <div className="table-scroll">
@@ -809,70 +843,22 @@ function MasterPinModal({ entry, close, refresh, toast }) {
   );
 }
 
-function MasterRevenue({ companies }) {
-  const dates = [
-    ...new Set(
-      companies.flatMap((company) =>
-        (company.dailyRevenue || []).map((item) => item.date),
-      ),
-    ),
-  ]
-    .sort()
-    .reverse()
-    .slice(0, 10);
-  return (
-    <section className="master-revenue-panel">
-      <div>
-        <span className="eyebrow">DAILY PERFORMANCE</span>
-        <h2>Day-by-day company revenue</h2>
-        <p>
-          Completed and paid bills are grouped by completion date for every
-          company.
-        </p>
-      </div>
-      {dates.length ? (
-        <div className="master-revenue-scroll">
-          <table className="master-revenue-table">
-            <thead>
-              <tr>
-                <th>Company</th>
-                {dates.map((date) => (
-                  <th key={date}>
-                    {new Date(`${date}T00:00:00`).toLocaleDateString("en-IN", {
-                      day: "2-digit",
-                      month: "short",
-                    })}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {companies.map((company) => (
-                <tr key={company.id}>
-                  <th>{company.companyName}</th>
-                  {dates.map((date) => {
-                    const day = (company.dailyRevenue || []).find(
-                      (item) => item.date === date,
-                    );
-                    return (
-                      <td key={date}>
-                        <b>{money(day?.total || 0)}</b>
-                        <small>{day?.bills || 0} bills</small>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="master-revenue-empty">
-          Daily revenue will appear after paid orders are completed.
-        </div>
-      )}
-    </section>
-  );
+function MasterBilling({ invoices, companies, setStatus }) {
+  const months=[...new Set((invoices||[]).map((invoice)=>invoice.billingMonth))].sort().reverse(),[month,setMonth]=useState(months[0]||new Date().toISOString().slice(0,7)),rows=(invoices||[]).filter((invoice)=>invoice.billingMonth===month&&companies.some((company)=>company.id===invoice.companyId)),subtotal=rows.reduce((sum,row)=>sum+row.subtotal,0),tax=rows.reduce((sum,row)=>sum+row.tax,0),total=rows.reduce((sum,row)=>sum+row.total,0),paid=rows.filter((row)=>row.status==='paid').reduce((sum,row)=>sum+row.total,0);
+  const exportReport=()=>exportCsv(`knockout-saas-billing-${month}.csv`,[["KnockOUT SaaS monthly billing report",month],["Company","Hotel ID","Enabled modules","Subtotal","GST","Total","Status"],...rows.map((row)=>[row.companyName,row.hotelId,(row.lineItems||[]).map((item)=>item.name).join(" + "),row.subtotal,row.tax,row.total,row.status]),[],["Summary"],["Subtotal",subtotal],["GST",tax],["Invoiced",total],["Collected",paid],["Outstanding",total-paid]]);
+  return <section className="master-revenue-panel master-billing-panel">
+    <header className="master-billing-head"><div><span className="eyebrow">KNOCKOUT COMPANY REVENUE</span><h2>Monthly SaaS billing</h2><p>Subscription invoices are generated from each tenant’s activated KnockOUT modules. Hotel food sales are not included.</p></div><div><label>Billing month<select value={month} onChange={(event)=>setMonth(event.target.value)}>{months.map((value)=><option key={value} value={value}>{new Date(`${value}-01T12:00:00`).toLocaleDateString("en-IN",{month:"long",year:"numeric"})}</option>)}</select></label><button className="secondary" onClick={exportReport} disabled={!rows.length}><FileDown size={15}/> Export monthly report</button></div></header>
+    <MasterPricingSlab/>
+    <div className="stats master-stats master-billing-stats"><Stat icon={ReceiptText} label="Invoices" value={rows.length} note={`${rows.filter((row)=>row.status==='due').length} awaiting payment`}/><Stat icon={TrendingUp} label="SaaS revenue" value={money(total)} note="Module fees including GST"/><Stat icon={CheckCircle2} label="Collected" value={money(paid)} note="Paid tenant invoices"/><Stat icon={Wallet} label="Outstanding" value={money(total-paid)} note="Subscription fees due" tone={total-paid>0?"warning":""}/></div>
+    {rows.length?<div className="master-revenue-scroll"><table className="master-revenue-table master-billing-table"><thead><tr><th>Tenant</th><th>Activated modules</th><th>Subtotal</th><th>GST</th><th>Total</th><th>Payment</th></tr></thead><tbody>{rows.map((invoice)=><tr key={invoice.id}><th>{invoice.companyName}<small>Hotel ID {invoice.hotelId}</small></th><td><div className="invoice-module-chips">{(invoice.lineItems||[]).map((item)=><span key={item.key}>{item.name}<b>{money(item.price)}</b></span>)}</div></td><td><b>{money(invoice.subtotal)}</b></td><td><b>{money(invoice.tax)}</b><small>{invoice.taxRate}% GST</small></td><td><strong>{money(invoice.total)}</strong></td><td><button className={`invoice-status ${invoice.status}`} onClick={()=>setStatus(invoice,invoice.status==='paid'?'due':'paid')}>{invoice.status==='paid'?<CheckCircle2 size={14}/>:<Clock3 size={14}/>} {invoice.status==='paid'?'Paid':'Mark paid'}</button></td></tr>)}</tbody><tfoot><tr><th colSpan="4">Monthly KnockOUT revenue</th><td><strong>{money(total)}</strong><small>{money(paid)} collected</small></td><td><b>{money(total-paid)} due</b></td></tr></tfoot></table></div>:<div className="master-revenue-empty">No subscription invoices are available for this month.</div>}
+  </section>;
+}
+function MasterPricingSlab(){
+  const[pricing,setPricing]=useState(null),[editing,setEditing]=useState(false),[busy,setBusy]=useState("");
+  useEffect(()=>{api('/module-pricing').then(setPricing).catch(()=>{})},[]);
+  async function save(key){setBusy(key);try{await api(`/module-pricing/${key}`,{method:'PATCH',body:JSON.stringify({price:Number(pricing[key].price)})});setEditing(false)}finally{setBusy("")}}
+  if(!pricing)return null;
+  return <section className="master-pricing-slab"><header><div><span className="eyebrow">MASTER PRICING</span><h3>Module pricing slab</h3><p>Monthly prices used for new packages and unpaid SaaS invoices.</p></div><button className="secondary" onClick={()=>setEditing(value=>!value)}>{editing?'Finish editing':'Edit pricing'}</button></header><div>{Object.entries(pricing).map(([key,item])=><label key={key}><span><b>{item.name}</b><small>Per tenant / month</small></span>{editing?<span className="pricing-input">₹<input type="number" min="0" step="1" value={item.price} onChange={event=>setPricing({...pricing,[key]:{...item,price:event.target.value}})}/><button disabled={busy===key} onClick={()=>save(key)}>{busy===key?'Saving…':'Save'}</button></span>:<strong>{money(item.price)}</strong>}</label>)}</div></section>;
 }
 function MasterLogin({ login }) {
   const [pin, setPin] = useState(""),
@@ -925,19 +911,18 @@ function MasterLogin({ login }) {
 }
 function CompanyRegistration({ close, refresh, toast }) {
   const [form, setForm] = useState({
-      companyName: "KnockOUT 2",
+      companyName: "",
       adminName: "",
-      adminPin: "",
       email: "",
       phone: "",
     }),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
-  const database = form.companyName
+  const database = `tenant_${form.companyName
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
+    .replace(/^_+|_+$/g, "")}`;
   async function register(e) {
     e.preventDefault();
     setBusy(true);
@@ -949,7 +934,7 @@ function CompanyRegistration({ close, refresh, toast }) {
       });
       await refresh();
       toast(
-        `${result.companyName} registered with database ${result.databaseName}`,
+        `${result.companyName} created · Hotel ID ${result.hotelId} · Admin PIN ${result.adminPin}`,
       );
       close();
     } catch (e) {
@@ -961,14 +946,14 @@ function CompanyRegistration({ close, refresh, toast }) {
   return (
     <Modal close={close}>
       <span className="eyebrow">NEW TENANT REGISTRATION</span>
-      <h2>Register a company</h2>
+      <h2>Register a hotel or café</h2>
       <p>
         A separate MariaDB database and initial Admin account will be created
         automatically.
       </p>
       <form className="modal-form" onSubmit={register}>
         <label>
-          Company name
+          Hotel / business name
           <input
             value={form.companyName}
             onChange={(e) => setForm({ ...form, companyName: e.target.value })}
@@ -978,8 +963,9 @@ function CompanyRegistration({ close, refresh, toast }) {
         <div className="database-preview">
           <Building2 size={17} />
           <span>Database to create</span>
-          <code>{database || "—"}</code>
+          <code>{form.companyName.trim() ? database : "—"}</code>
         </div>
+        <div className="database-preview"><Settings size={17}/><span>Login credentials</span><code>Generated automatically</code></div>
         <label>
           Admin name
           <input
@@ -989,23 +975,6 @@ function CompanyRegistration({ close, refresh, toast }) {
           />
         </label>
         <div className="form-grid">
-          <label>
-            Unique 6-digit Admin PIN
-            <input
-              value={form.adminPin}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  adminPin: e.target.value.replace(/\D/g, "").slice(0, 6),
-                })
-              }
-              pattern="[0-9]{6}"
-              maxLength="6"
-              inputMode="numeric"
-              type="password"
-              required
-            />
-          </label>
           <label>
             Phone
             <input
@@ -1025,7 +994,7 @@ function CompanyRegistration({ close, refresh, toast }) {
         {error ? <div className="form-error">{error}</div> : null}
         <button
           className="primary wide"
-          disabled={busy || form.adminPin.length !== 6}
+          disabled={busy}
         >
           {busy ? "Creating database…" : "Register & create database"}
         </button>
@@ -1074,6 +1043,11 @@ const portalNav = {
 };
 function Shell({ role, user, page, setPage, logout, children, navBadges = {} }) {
   const [profileOpen,setProfileOpen]=useState(false),[profile,setProfile]=useState(user);
+  const navModule={tables:"tables",floor:"tables",bookings:"bookings",orders:"billing",parcels:"parcels",menu:"menu",stock:"stock",finance:"finance",staff:"staff",team:"staff","stock-booking":"stock",dishes:"menu",kitchen:"kitchen",ready:"kitchen",juices:"juicer",queue:"juicer","parcel-queue":"juicer"};
+  const visibleNav=portalNav[role].filter(([id])=>!navModule[id]||user.modules?.[navModule[id]]!==false);
+  useEffect(() => {
+    if (!visibleNav.some(([id]) => id === page)) setPage("overview");
+  }, [page, setPage, user.modules]);
   async function openProfile(){setProfileOpen(true);try{setProfile(await api("/profile"))}catch{/* Keep the signed-in identity visible if loading fails. */}}
   return (
     <div className="shell">
@@ -1081,12 +1055,12 @@ function Shell({ role, user, page, setPage, logout, children, navBadges = {} }) 
         <div className="brand">
           <span className="logo">K</span>
           <div>
-            <b>KnockOUT</b>
+            <b>{user.companyName || "Your hotel"}</b>
             <small>{role} portal</small>
           </div>
         </div>
         <nav>
-          {portalNav[role].map(([id, label, Icon]) => (
+          {visibleNav.map(([id, label, Icon]) => (
             <button
               key={id}
               className={page === id ? "active" : ""}
@@ -1121,6 +1095,7 @@ function Shell({ role, user, page, setPage, logout, children, navBadges = {} }) 
           </div>
         </header>
         <div className="page">{children}</div>
+        <footer className="powered-by-knockout">Powered by <b>KnockOUT</b></footer>
       </main>
       {profileOpen?<ProfileEditor user={profile} close={()=>setProfileOpen(false)} saved={(updated)=>{const next={...user,...updated};setProfile(next);sessionStorage.setItem("knockout-portal-user",JSON.stringify(next));window.dispatchEvent(new CustomEvent("knockout:profile-updated",{detail:next}));setProfileOpen(false)}}/>:null}
     </div>
@@ -4721,12 +4696,12 @@ function StaffEditor({ staff, users, close, refresh, toast }) {
     e.preventDefault();
     setError("");
     try {
-      await api(staff ? `/staff/${staff.id}` : "/staff", {
+      const result = await api(staff ? `/staff/${staff.id}` : "/staff", {
         method: staff ? "PUT" : "POST",
         body: JSON.stringify(form),
       });
       await refresh();
-      toast(staff ? "Staff login updated" : "Staff login created");
+      toast(staff ? "Staff login updated" : `Staff login created · Generated PIN ${result.pin}`);
       close();
     } catch (e) {
       setError(e.message);
@@ -4751,7 +4726,7 @@ function StaffEditor({ staff, users, close, refresh, toast }) {
     <Modal close={close}>
       <span className="eyebrow">STAFF LOGIN</span>
       <h2>{staff ? "Customize staff" : "Add staff member"}</h2>
-      <p>Every six-digit PIN must be unique across all roles and companies.</p>
+      <p>{staff ? "Update this account and its login access." : "A unique six-digit login PIN will be generated automatically."}</p>
       <form className="modal-form" onSubmit={save}>
         <label>
           Full name
@@ -4776,7 +4751,7 @@ function StaffEditor({ staff, users, close, refresh, toast }) {
               })}
             </div>
           </label>
-          <label>
+          {staff ? <label>
             6-digit login PIN
             <input
               required
@@ -4792,7 +4767,7 @@ function StaffEditor({ staff, users, close, refresh, toast }) {
               }
               placeholder="6 digits"
             />
-          </label>
+          </label> : <div className="database-preview"><Settings size={17}/><span>Login PIN</span><code>Generated after creation</code></div>}
           <label>
             Phone
             <input
@@ -5143,23 +5118,21 @@ function Modal({ close, children, wide = false, hideClose = false, closeLeft = f
 }
 function TableDrawer({ table, data, user, close, refresh, toast }) {
   const order = data.orders.find((o) => o.id === table.orderId),
-    [mode, setMode] = useState(order ? "service" : "order"),
-    [handoffBusy, setHandoffBusy] = useState(false);
-  async function updateHandoff(status) {
-    setHandoffBusy(true);
+    [mode, setMode] = useState(order ? "history" : "order"),
+    [handoffBusy, setHandoffBusy] = useState("");
+  async function updateRoundHandoff(batchNo, status) {
+    setHandoffBusy(`${batchNo}-${status}`);
     try {
-      await api(`/orders/${order.id}/status`, {
+      await api(`/orders/${order.id}/batches/${batchNo}/handoff`, {
         method: "PATCH",
         body: JSON.stringify({ status }),
       });
       await refresh();
-      toast(
-        `Order #${order.id} received at Table ${table.number}`,
-      );
+      toast(`Round ${batchNo} of order #${order.id} received at Table ${table.number}`);
     } catch (e) {
       toast(e.message);
     } finally {
-      setHandoffBusy(false);
+      setHandoffBusy("");
     }
   }
   return (
@@ -5217,7 +5190,7 @@ function TableDrawer({ table, data, user, close, refresh, toast }) {
             close={close}
           />
       ) : mode === "history" ? (
-        <WaiterOrderRounds order={order} data={data} />
+        <WaiterOrderRounds order={order} data={data} table={table} busy={handoffBusy} confirmRoundReceived={(batchNo) => updateRoundHandoff(batchNo, "received")} addOrder={() => setMode("order")} openBill={() => setMode("bill")} />
       ) : mode === "bill" ? (
         <Bill
           table={table}
@@ -5267,7 +5240,7 @@ function TableDrawer({ table, data, user, close, refresh, toast }) {
     </Modal>
   );
 }
-function WaiterOrderRounds({ order, data }) {
+function WaiterOrderRounds({ order, data, table, busy, confirmRoundReceived, addOrder, openBill }) {
   const batches = [...new Set(order.items.map((item) => Number(item.batchNo) || 1))]
     .sort((a, b) => b - a)
     .map((batchNo) => {
@@ -5277,25 +5250,38 @@ function WaiterOrderRounds({ order, data }) {
         : items.every((item) => (item.itemStatus || "new") === "new")
           ? "new"
           : "preparing";
-      return { batchNo, items, status };
+      const handoffStatus = items.every((item) => item.handoffStatus === "received")
+        ? "received"
+        : items.every((item) => ["collected", "received"].includes(item.handoffStatus))
+          ? "collected"
+          : "pending";
+      return { batchNo, items, status, handoffStatus, displayStatus: handoffStatus === "pending" ? status : handoffStatus };
     });
+  const allReceived = batches.length > 0 && batches.every((batch) => batch.handoffStatus === "received");
   return (
     <section className="waiter-order-rounds">
       <header>
         <div><span className="eyebrow">TABLE ORDER HISTORY</span><h3>Order #{order.id}</h3></div>
         <small>{batches.length} separate kitchen round{batches.length === 1 ? "" : "s"}</small>
       </header>
+      {allReceived ? <div className="service-handoff-actions waiter-history-actions"><button className="secondary" onClick={addOrder}><Plus size={16}/> Add new order</button><button className="primary" onClick={openBill}><ReceiptText size={16}/> Complete & billing</button></div> : null}
       <div className="waiter-round-list">
         {batches.map((batch, index) => (
-          <article key={batch.batchNo} className={`waiter-round-card ${batch.status}`}>
+          <article key={batch.batchNo} className={`waiter-round-card ${batch.displayStatus}`}>
             <header>
               <div><b>Round {batch.batchNo}</b><small>{index === 0 ? "Latest order" : "Previous order"}</small></div>
-              <Status status={batch.status}/>
+              <Status status={batch.displayStatus}/>
             </header>
             {batch.items.map((item, itemIndex) => {
               const menu = data.menu.find((entry) => entry.id === item.menuId);
               return <div className="waiter-round-line" key={`${item.menuId}-${itemIndex}`}><span><b>{item.qty}×</b>{menu?.name || "Menu item"}</span><em>{item.itemStatus || "new"}</em></div>;
             })}
+            <div className="waiter-round-handoff">
+              <span className={batch.status === "ready" ? "done" : "active"}><ChefHat size={15}/> {batch.status === "ready" ? "Kitchen ready" : "Preparing"}</span>
+              <span className={["collected", "received"].includes(batch.handoffStatus) ? "done" : ""}><Package size={15}/> {batch.handoffStatus === "pending" ? "Awaiting collection" : "Collected"}</span>
+              <span className={batch.handoffStatus === "received" ? "done" : ""}><Armchair size={15}/> {batch.handoffStatus === "received" ? `Received at Table ${table.number}` : "Awaiting table receipt"}</span>
+            </div>
+            {batch.handoffStatus === "collected" ? <button className="primary waiter-received-action" disabled={!!busy} onClick={() => confirmRoundReceived(batch.batchNo)}><CheckCircle2 size={16}/>{busy === `${batch.batchNo}-received` ? "Updating…" : `Confirm Round ${batch.batchNo} received`}</button> : null}
           </article>
         ))}
       </div>
@@ -5816,7 +5802,7 @@ function AdminBillPopup({ order, table, data, refresh, toast, close }) {
 function productionOrders(data, role) {
   const wantsJuice = role === "juicer";
   return data.orders
-    .filter((order) => !["completed", "collected", "received", "served", "billing_requested"].includes(order.status))
+    .filter((order) => !["completed", "served", "billing_requested"].includes(order.status))
     .flatMap((order) => {
       const items = order.items.filter((line) => {
         const menu = data.menu.find((item) => item.id === line.menuId);
@@ -5824,18 +5810,20 @@ function productionOrders(data, role) {
       });
       if (!items.length) return [];
       const batchNumbers = [...new Set(items.map((line) => Number(line.batchNo) || 1))].sort((a, b) => a - b);
-      const latestBatch = Math.max(...batchNumbers);
       return batchNumbers.map((batchNo) => {
         const batchItems = items.filter((line) => (Number(line.batchNo) || 1) === batchNo);
+        const allBatchItems = order.items.filter((line) => (Number(line.batchNo) || 1) === batchNo);
         const status = batchItems.every((line) => line.itemStatus === "ready")
           ? "ready"
           : batchItems.every((line) => (line.itemStatus || "new") === "new")
             ? "new"
             : "preparing";
-        return { ...order, items: batchItems, batchNo, batchKey: `${order.id}-${batchNo}-${role}`, isLatestBatch: batchNo === latestBatch, sourceStatus: order.status, status, department: role };
+        const handoffStatus = allBatchItems.every((line) => line.handoffStatus === "received") ? "received" : allBatchItems.every((line) => ["collected", "received"].includes(line.handoffStatus)) ? "collected" : "pending";
+        const roundProductionReady = allBatchItems.every((line) => line.itemStatus === "ready");
+        return { ...order, items: batchItems, batchNo, batchKey: `${order.id}-${batchNo}-${role}`, sourceStatus: order.status, productionStatus: status, status: handoffStatus === "pending" ? status : handoffStatus, handoffStatus, roundProductionReady, department: role };
       });
     })
-    .filter(Boolean);
+    .filter((order) => order.handoffStatus !== "received");
 }
 
 function Chef({ data, refresh, user, logout, toast }) {
@@ -5903,14 +5891,14 @@ function Chef({ data, refresh, user, logout, toast }) {
     refresh();
     toast(`Order #${id} marked ${next}`);
   }
-  async function collect(id) {
+  async function collect(id, batchNo) {
     try {
-      await api(`/orders/${id}/status`, {
+      await api(`/orders/${id}/batches/${batchNo}/handoff`, {
         method: "PATCH",
         body: JSON.stringify({ status: "collected" }),
       });
       await refresh();
-      toast(`Order #${id} collected from the kitchen`);
+      toast(`Round ${batchNo} of order #${id} collected from the kitchen`);
     } catch (error) {
       toast(error.message);
     }
@@ -6100,9 +6088,9 @@ function ChefManagement({ data, refresh, user, toast }) {
   );
 }
 function JuicerLoginEditor({ close, done, toast }) {
-  const [form,setForm]=useState({name:"",pin:"",phone:"",payType:"monthly",payRate:0}),[busy,setBusy]=useState(false);
-  async function save(event){event.preventDefault();setBusy(true);try{await api("/juicer-login",{method:"POST",body:JSON.stringify(form)});toast("Juicer login created");await done()}catch(error){toast(error.message)}finally{setBusy(false)}}
-  return <Modal close={close}><span className="eyebrow">JUICE STATION LOGIN</span><h2>Create Juicer login</h2><p>The six-digit PIN is unique across every role and KnockOUT company.</p><form className="modal-form" onSubmit={save}><label>Full name<input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></label><div className="form-grid"><label>6-digit login PIN<input required pattern="[0-9]{6}" maxLength="6" inputMode="numeric" value={form.pin} onChange={e=>setForm({...form,pin:e.target.value.replace(/\D/g,"").slice(0,6)})}/></label><label>Phone<input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})}/></label><label>Salary basis<select value={form.payType} onChange={e=>setForm({...form,payType:e.target.value})}><option value="daily">Daily</option><option value="monthly">Monthly</option></select></label><label>Salary amount<input type="number" min="0" value={form.payRate} onChange={e=>setForm({...form,payRate:e.target.value})}/></label></div><button className="primary wide" disabled={busy||form.pin.length!==6}>{busy?"Creating…":"Create Juicer login"}</button></form></Modal>;
+  const [form,setForm]=useState({name:"",phone:"",payType:"monthly",payRate:0}),[busy,setBusy]=useState(false);
+  async function save(event){event.preventDefault();setBusy(true);try{const result=await api("/juicer-login",{method:"POST",body:JSON.stringify(form)});toast(`Juicer login created · Generated PIN ${result.pin}`);await done()}catch(error){toast(error.message)}finally{setBusy(false)}}
+  return <Modal close={close}><span className="eyebrow">JUICE STATION LOGIN</span><h2>Create Juicer login</h2><p>A unique six-digit PIN will be generated automatically.</p><form className="modal-form" onSubmit={save}><label>Full name<input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></label><div className="database-preview"><Settings size={17}/><span>Login PIN</span><code>Generated after creation</code></div><div className="form-grid"><label>Phone<input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})}/></label><label>Salary basis<select value={form.payType} onChange={e=>setForm({...form,payType:e.target.value})}><option value="daily">Daily</option><option value="monthly">Monthly</option></select></label><label>Salary amount<input type="number" min="0" value={form.payRate} onChange={e=>setForm({...form,payRate:e.target.value})}/></label></div><button className="primary wide" disabled={busy||!form.name.trim()}>{busy?"Creating…":"Create Juicer login"}</button></form></Modal>;
 }
 function KitchenStaffEditor({ member, user, close, refresh, toast }) {
   const [form, setForm] = useState({
@@ -6252,8 +6240,9 @@ function KitchenTicket({ order, data, status, collect, departmentLabel = "food i
           </div>
           {order.status === "new" ? <button className="primary wide" onClick={() => status(order.id,"preparing",order.batchNo)}>Start preparing <ArrowRight size={15}/></button> : null}
           {order.status === "preparing" ? <button className="ready-btn wide" onClick={() => status(order.id,"ready",order.batchNo)}><CheckCircle2 size={16}/> Mark ready for {isParcel?"Admin":"service"}</button> : null}
-          {order.status === "ready" && collect && !isParcel && order.sourceStatus === "ready" && order.isLatestBatch ? <button className="ready-btn wide" onClick={() => collect(order.id)}><Package size={16}/> Confirm collected from kitchen</button> : null}
-          {order.status === "ready" && (!collect || isParcel || order.sourceStatus !== "ready" || !order.isLatestBatch) ? <div className="parcel-done"><CheckCircle2 size={16}/> Kitchen round ready · {order.sourceStatus !== "ready" ? "waiting for remaining items" : !order.isLatestBatch ? "newer round is tracked separately" : "waiting for handoff"}</div> : null}
+          {order.productionStatus === "ready" && collect && !isParcel && order.roundProductionReady && order.handoffStatus === "pending" ? <button className="ready-btn wide" onClick={() => collect(order.id,order.batchNo)}><Package size={16}/> Confirm Round {order.batchNo} collected</button> : null}
+          {order.handoffStatus === "collected" ? <div className="parcel-done"><CheckCircle2 size={16}/> Round {order.batchNo} collected · waiting for waiter confirmation</div> : null}
+          {order.productionStatus === "ready" && order.handoffStatus === "pending" && (!collect || isParcel || !order.roundProductionReady) ? <div className="parcel-done"><CheckCircle2 size={16}/> Kitchen round ready · {!order.roundProductionReady ? "waiting for remaining food or juice items" : "waiting for handoff"}</div> : null}
         </Modal>
       ) : null}
     </>

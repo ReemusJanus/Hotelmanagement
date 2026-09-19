@@ -9,20 +9,30 @@ const config = {
   password: process.env.DB_PASSWORD || 'knockout_pass',
   database: process.env.DB_NAME || 'knockout',
   waitForConnections: true,
-  connectionLimit: 10
+  connectionLimit: Number(process.env.DB_POOL_SIZE||20),
+  maxIdle: Number(process.env.DB_POOL_MAX_IDLE||10),
+  idleTimeout: Number(process.env.DB_POOL_IDLE_TIMEOUT_MS||60000),
+  queueLimit: Number(process.env.DB_QUEUE_LIMIT||500),
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 10000,
+  connectTimeout: Number(process.env.DB_CONNECT_TIMEOUT_MS||10000)
 };
 
 const tenantContext=new AsyncLocalStorage(),pools=new Map();
+const tenantPoolIdleMs=Number(process.env.TENANT_POOL_IDLE_MS||300000);
 function tenantPool(database=config.database){
   if(!/^[a-z0-9_]+$/.test(database))throw new Error('Invalid company database');
-  if(!pools.has(database))pools.set(database,mysql.createPool({...config,database}));
-  return pools.get(database);
+  if(!pools.has(database))pools.set(database,{pool:mysql.createPool({...config,database}),active:0,lastUsed:Date.now()});
+  const record=pools.get(database);record.lastUsed=Date.now();return record;
 }
 export const runWithTenant=(database,next)=>tenantContext.run(database||config.database,next);
 export const pool={
-  query(...args){return tenantPool(tenantContext.getStore()).query(...args)},
-  getConnection(){return tenantPool(tenantContext.getStore()).getConnection()}
+  async query(...args){const record=tenantPool(tenantContext.getStore());record.active++;try{return await record.pool.query(...args)}finally{record.active--;record.lastUsed=Date.now()}},
+  async getConnection(){const record=tenantPool(tenantContext.getStore());record.active++;try{const connection=await record.pool.getConnection();const release=connection.release.bind(connection);let released=false;connection.release=()=>{if(!released){released=true;record.active--;record.lastUsed=Date.now()}return release()};return connection}catch(error){record.active--;record.lastUsed=Date.now();throw error}}
 };
+const poolReaper=setInterval(()=>{const now=Date.now();for(const[database,record]of pools){if(database!==config.database&&record.active===0&&now-record.lastUsed>tenantPoolIdleMs){pools.delete(database);record.pool.end().catch(()=>{})}}},Math.min(tenantPoolIdleMs,60000));
+poolReaper.unref();
+export async function closePools(){clearInterval(poolReaper);await Promise.allSettled([...pools.values()].map(record=>record.pool.end()));pools.clear()}
 
 export async function migrate() {
   const sql = [
@@ -34,7 +44,7 @@ export async function migrate() {
     `CREATE TABLE IF NOT EXISTS menu_items (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(160) NOT NULL, category VARCHAR(80) NOT NULL, description VARCHAR(500) DEFAULT '', price DECIMAL(10,2) NOT NULL, icon VARCHAR(20) DEFAULT '🍽️', image_url VARCHAR(500) NULL, image_object VARCHAR(255) NULL, is_combo BOOLEAN DEFAULT FALSE, available BOOLEAN DEFAULT TRUE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`,
     `CREATE TABLE IF NOT EXISTS combo_components (id INT AUTO_INCREMENT PRIMARY KEY, combo_id INT NOT NULL, menu_id INT NOT NULL, quantity INT NOT NULL DEFAULT 1, FOREIGN KEY (combo_id) REFERENCES menu_items(id) ON DELETE CASCADE, FOREIGN KEY (menu_id) REFERENCES menu_items(id))`,
     `CREATE TABLE IF NOT EXISTS orders (id INT AUTO_INCREMENT PRIMARY KEY, table_id INT NULL, order_type ENUM('dine_in','parcel') NOT NULL DEFAULT 'dine_in', guest_name VARCHAR(120), customer_phone VARCHAR(30) DEFAULT '', waiter VARCHAR(120), status ENUM('new','preparing','ready','collected','received','served','billing_requested','completed') DEFAULT 'new', payment_status ENUM('unpaid','paid') DEFAULT 'unpaid', payment_method VARCHAR(30) NULL, subtotal DECIMAL(10,2) NULL, tax DECIMAL(10,2) NULL, service_charge DECIMAL(10,2) NULL, total DECIMAL(10,2) NULL, created_at DATETIME NOT NULL, completed_at DATETIME NULL, FOREIGN KEY (table_id) REFERENCES restaurant_tables(id))`,
-    `CREATE TABLE IF NOT EXISTS order_items (id INT AUTO_INCREMENT PRIMARY KEY, order_id INT NOT NULL, menu_id INT NOT NULL, quantity INT NOT NULL, note VARCHAR(255) DEFAULT '', price DECIMAL(10,2) NOT NULL, production_status ENUM('new','preparing','ready') NOT NULL DEFAULT 'new', batch_no INT NOT NULL DEFAULT 1, FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE, FOREIGN KEY (menu_id) REFERENCES menu_items(id))`,
+    `CREATE TABLE IF NOT EXISTS order_items (id INT AUTO_INCREMENT PRIMARY KEY, order_id INT NOT NULL, menu_id INT NOT NULL, quantity INT NOT NULL, note VARCHAR(255) DEFAULT '', price DECIMAL(10,2) NOT NULL, production_status ENUM('new','preparing','ready') NOT NULL DEFAULT 'new', batch_no INT NOT NULL DEFAULT 1, handoff_status ENUM('pending','collected','received') NOT NULL DEFAULT 'pending', FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE, FOREIGN KEY (menu_id) REFERENCES menu_items(id))`,
     `CREATE TABLE IF NOT EXISTS inventory (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(160) NOT NULL, category VARCHAR(80), quantity DECIMAL(10,2) NOT NULL, unit VARCHAR(20) NOT NULL, min_quantity DECIMAL(10,2) NOT NULL, cost DECIMAL(10,2) NOT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)`,
     `CREATE TABLE IF NOT EXISTS inventory_transactions (id INT AUTO_INCREMENT PRIMARY KEY, inventory_id INT NOT NULL, movement_type ENUM('purchase','usage','adjustment','waste') NOT NULL, quantity DECIMAL(10,2) NOT NULL, unit_cost DECIMAL(10,2) NULL, note VARCHAR(255) DEFAULT '', created_by VARCHAR(120) DEFAULT 'Admin', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (inventory_id) REFERENCES inventory(id))`,
     `CREATE TABLE IF NOT EXISTS stock_requests (id INT AUTO_INCREMENT PRIMARY KEY, inventory_id INT NOT NULL, requested_quantity DECIMAL(10,2) NOT NULL, note VARCHAR(255) DEFAULT '', requested_by VARCHAR(120) NOT NULL, status ENUM('pending','ordered','resolved') NOT NULL DEFAULT 'pending', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, resolved_at DATETIME NULL, FOREIGN KEY (inventory_id) REFERENCES inventory(id), INDEX request_status (status,created_at))`,
@@ -59,6 +69,8 @@ export async function migrate() {
     ,`ALTER TABLE users MODIFY role ENUM('admin','waiter','chef','juicer') NOT NULL`
     ,`ALTER TABLE order_items ADD COLUMN production_status ENUM('new','preparing','ready') NOT NULL DEFAULT 'new' AFTER price`
     ,`ALTER TABLE order_items ADD COLUMN batch_no INT NOT NULL DEFAULT 1 AFTER production_status`
+    ,`ALTER TABLE order_items ADD COLUMN handoff_status ENUM('pending','collected','received') NOT NULL DEFAULT 'pending' AFTER batch_no`
+    ,`UPDATE order_items oi JOIN orders o ON o.id=oi.order_id SET oi.handoff_status=CASE WHEN o.status IN ('received','served','billing_requested','completed') THEN 'received' WHEN o.status='collected' THEN 'collected' ELSE oi.handoff_status END`
     ,`ALTER TABLE users MODIFY pin VARCHAR(80) NOT NULL`
     ,`ALTER TABLE users ADD COLUMN deleted_at DATETIME NULL AFTER active`
     ,`ALTER TABLE users ADD COLUMN email VARCHAR(160) DEFAULT '' AFTER phone`
@@ -76,7 +88,7 @@ export async function migrate() {
     `ALTER TABLE kitchen_staff MODIFY pay_type ENUM('daily','monthly') DEFAULT 'monthly'`
   ];
   for (const statement of salaryUpgrades) await pool.query(statement);
-  const [companySchemas] = await pool.query("SELECT SCHEMA_NAME databaseName FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='knockout' OR SCHEMA_NAME REGEXP '^knockout_[0-9]+$'");
+  const [companySchemas] = await pool.query("SELECT SCHEMA_NAME databaseName FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='knockout' OR SCHEMA_NAME REGEXP '^knockout_[0-9]+$' OR SCHEMA_NAME REGEXP '^tenant_[a-z][a-z0-9_]+$'");
   for (const {databaseName} of companySchemas) {
     if (!/^[a-z0-9_]+$/.test(databaseName)) continue;
     const bookingUpgrades = [
@@ -87,6 +99,9 @@ export async function migrate() {
       `UPDATE \`${databaseName}\`.settings SET tax_rate=2.5,cgst_rate=2.5,service_charge=18 WHERE id=1`,
       `ALTER TABLE \`${databaseName}\`.users ADD COLUMN deleted_at DATETIME NULL AFTER active`,
       `ALTER TABLE \`${databaseName}\`.order_items ADD COLUMN production_status ENUM('new','preparing','ready') NOT NULL DEFAULT 'new' AFTER price`,
+      `ALTER TABLE \`${databaseName}\`.order_items ADD COLUMN batch_no INT NOT NULL DEFAULT 1 AFTER production_status`,
+      `ALTER TABLE \`${databaseName}\`.order_items ADD COLUMN handoff_status ENUM('pending','collected','received') NOT NULL DEFAULT 'pending' AFTER batch_no`,
+      `UPDATE \`${databaseName}\`.order_items oi JOIN \`${databaseName}\`.orders o ON o.id=oi.order_id SET oi.handoff_status=CASE WHEN o.status IN ('received','served','billing_requested','completed') THEN 'received' WHEN o.status='collected' THEN 'collected' ELSE oi.handoff_status END`,
       `ALTER TABLE \`${databaseName}\`.orders MODIFY status ENUM('new','preparing','ready','collected','received','served','billing_requested','completed') DEFAULT 'new'`,
       `ALTER TABLE \`${databaseName}\`.bookings ADD COLUMN customer_phone VARCHAR(30) NOT NULL DEFAULT '' AFTER guest_name`,
       `ALTER TABLE \`${databaseName}\`.bookings ADD COLUMN booking_date DATE NULL AFTER customer_phone`,
@@ -96,6 +111,10 @@ export async function migrate() {
       `UPDATE \`${databaseName}\`.bookings SET booking_date=CURDATE() WHERE booking_date IS NULL`,
       `ALTER TABLE \`${databaseName}\`.bookings MODIFY booking_date DATE NOT NULL`,
       `ALTER TABLE \`${databaseName}\`.bookings ADD INDEX booking_slot (table_id,booking_date,status)`,
+      `ALTER TABLE \`${databaseName}\`.orders ADD INDEX order_live_history (completed_at,status,id)`,
+      `ALTER TABLE \`${databaseName}\`.orders ADD INDEX order_payment_date (payment_status,completed_at)`,
+      `ALTER TABLE \`${databaseName}\`.order_items ADD INDEX order_round_status (order_id,batch_no,production_status,handoff_status)`,
+      `ALTER TABLE \`${databaseName}\`.users ADD INDEX user_portal_login (role,pin,active,deleted_at)`,
       `UPDATE \`${databaseName}\`.restaurant_tables SET status='available',guest_name='',booking_time='' WHERE status='reserved' AND order_id IS NULL`
     ];
     for (const statement of bookingUpgrades) {
@@ -127,6 +146,7 @@ async function seed() {
 }
 
 export async function getState() {
+  const historyDays=Math.max(7,Math.min(365,Number(process.env.STATE_HISTORY_DAYS||90)));
   const [[settings], [users], [attendance], [kitchenStaff], [tables], [bookings], [menu], [comboComponents], [orders], [orderItems], [inventory], [inventoryTransactions], [stockRequests], [financeEntries], [supplierPurchases], [supplierPayments]] = await Promise.all([
     pool.query('SELECT hotel_name hotelName,tax_rate taxRate,cgst_rate cgstRate,service_charge serviceCharge,currency FROM settings WHERE id=1'),
     pool.query('SELECT id,name,role,pin,phone,pay_type payType,pay_rate payRate,active,created_at createdAt FROM users WHERE deleted_at IS NULL ORDER BY active DESC,name'),
@@ -136,8 +156,8 @@ export async function getState() {
     pool.query("SELECT b.id,b.table_id tableId,t.table_number tableNumber,t.seats,t.area,b.customer_phone customerPhone,DATE_FORMAT(b.booking_date,'%Y-%m-%d') bookingDate,b.booking_time bookingTime,b.duration_minutes durationMinutes,b.status,b.notification_status notificationStatus,b.notification_message notificationMessage,b.created_at createdAt,(NOW() >= TIMESTAMP(b.booking_date,b.booking_time) AND NOW() < DATE_ADD(TIMESTAMP(b.booking_date,b.booking_time),INTERVAL b.duration_minutes MINUTE)) activeNow FROM bookings b JOIN restaurant_tables t ON t.id=b.table_id WHERE t.active=TRUE AND b.status='confirmed' AND DATE_ADD(TIMESTAMP(b.booking_date,b.booking_time),INTERVAL b.duration_minutes MINUTE) >= NOW() ORDER BY b.booking_date,b.booking_time"),
     pool.query('SELECT id,name,category,description,price,icon,image_url imageUrl,image_object imageObject,is_combo isCombo,available FROM menu_items ORDER BY id'),
     pool.query('SELECT cc.combo_id comboId,cc.menu_id menuId,cc.quantity,m.name,m.category FROM combo_components cc JOIN menu_items m ON m.id=cc.menu_id ORDER BY cc.id'),
-    pool.query("SELECT o.id,o.table_id tableId,o.order_type orderType,o.guest_name guestName,o.customer_phone customerPhone,o.waiter,o.status,o.payment_status paymentStatus,o.payment_method paymentMethod,o.total,o.created_at createdAt,o.completed_at completedAt,(SELECT COUNT(*) FROM orders daily WHERE DATE(daily.created_at)=DATE(o.created_at) AND daily.id<=o.id) dailyNumber FROM orders o ORDER BY o.id DESC"),
-    pool.query('SELECT order_id orderId,menu_id menuId,quantity qty,note,production_status itemStatus,batch_no batchNo FROM order_items ORDER BY id'),
+    pool.query(`SELECT o.id,o.table_id tableId,o.order_type orderType,o.guest_name guestName,o.customer_phone customerPhone,o.waiter,o.status,o.payment_status paymentStatus,o.payment_method paymentMethod,o.total,o.created_at createdAt,o.completed_at completedAt,(SELECT COUNT(*) FROM orders daily WHERE daily.created_at>=DATE(o.created_at) AND daily.created_at<DATE(o.created_at)+INTERVAL 1 DAY AND daily.id<=o.id) dailyNumber FROM orders o WHERE o.completed_at IS NULL OR o.completed_at>=DATE_SUB(NOW(),INTERVAL ${historyDays} DAY) ORDER BY o.id DESC LIMIT 5000`),
+    pool.query(`SELECT oi.order_id orderId,oi.menu_id menuId,oi.quantity qty,oi.note,oi.production_status itemStatus,oi.batch_no batchNo,oi.handoff_status handoffStatus FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.completed_at IS NULL OR o.completed_at>=DATE_SUB(NOW(),INTERVAL ${historyDays} DAY) ORDER BY oi.id`),
     pool.query('SELECT id,name,category,quantity,unit,min_quantity min,cost,updated_at updatedAt FROM inventory ORDER BY id'),
     pool.query('SELECT id,inventory_id inventoryId,movement_type movementType,quantity,unit_cost unitCost,note,created_by createdBy,created_at createdAt FROM inventory_transactions ORDER BY id DESC LIMIT 300'),
     pool.query('SELECT r.id,r.inventory_id inventoryId,i.name itemName,i.category,i.quantity currentQuantity,i.unit,i.min_quantity minQuantity,r.requested_quantity requestedQuantity,r.note,r.requested_by requestedBy,r.status,r.created_at createdAt,r.updated_at updatedAt,r.resolved_at resolvedAt FROM stock_requests r JOIN inventory i ON i.id=r.inventory_id ORDER BY FIELD(r.status,"pending","ordered","resolved"),r.id DESC LIMIT 300'),
