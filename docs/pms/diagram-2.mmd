@@ -1,0 +1,14 @@
+sequenceDiagram
+  participant U as Waiter UI
+  participant M as Master API
+  participant A as Waiter API
+  participant D as Tenant DB
+  U->>M: POST /api/orders with bearer token
+  M->>M: Verify signature, expiry and company status
+  M->>A: Forward token-derived tenant and user headers
+  A->>D: BEGIN; lock table and check booking
+  A->>D: Read available menu prices
+  A->>D: Insert order and lines; occupy table; COMMIT
+  A-->>M: 201 with ID and bill
+  M-->>U: Response and change notification
+  U->>M: Refresh GET /api/state

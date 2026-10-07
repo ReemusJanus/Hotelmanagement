@@ -1,0 +1,20 @@
+flowchart TD
+  Browser[React browser] --> Web[Vite frontend :5200]
+  Browser --> Master[Master API :5100]
+  Web --> Master
+  Mobile[Expo mobile] --> Master
+  Master --> Admin[Admin API :6001]
+  Master --> Waiter[Waiter API :7000]
+  Master --> Chef[Chef API :8000]
+  Master --> Juicer[Juicer API :9000]
+  Master --> Catalog[MariaDB master schema]
+  Master --> Tenants[MariaDB tenant schemas]
+  Admin --> Tenants
+  Waiter --> Tenants
+  Chef --> Tenants
+  Juicer --> Tenants
+  Master --> Redis[Redis event relay]
+  Admin --> Objects[MinIO or S3 objects]
+  Master --> Objects
+  Admin --> SMS[Optional SMS webhook]
+  Master --> Notices[Optional notification webhook]

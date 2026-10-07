@@ -1,0 +1,2213 @@
+[
+  {
+    "service": "role",
+    "method": "GET",
+    "path": "/api/live",
+    "file": "backend/src/server.js",
+    "line": 56,
+    "body": [],
+    "query": [],
+    "params": [],
+    "responses": [
+      "{ok: true, service: <computed>}"
+    ],
+    "errors": [],
+    "statuses": [],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "GET",
+    "path": "/api/health",
+    "file": "backend/src/server.js",
+    "line": 57,
+    "body": [],
+    "query": [],
+    "params": [],
+    "responses": [
+      "{ok: true, service: <computed>, portal: <portalRole>, database: \"mariadb\", storage: <storageProvider>}"
+    ],
+    "errors": [],
+    "statuses": [],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "GET",
+    "path": "/api/state",
+    "file": "backend/src/server.js",
+    "line": 58,
+    "body": [],
+    "query": [],
+    "params": [],
+    "responses": [
+      "<state>"
+    ],
+    "errors": [],
+    "statuses": [],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "POST",
+    "path": "/api/login",
+    "file": "backend/src/server.js",
+    "line": 59,
+    "body": [
+      "pin"
+    ],
+    "query": [],
+    "params": [],
+    "responses": [
+      "{message: <computed>}",
+      "<user>"
+    ],
+    "errors": [],
+    "statuses": [
+      401
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "GET",
+    "path": "/api/profile",
+    "file": "backend/src/server.js",
+    "line": 60,
+    "body": [],
+    "query": [],
+    "params": [],
+    "responses": [
+      "{message: \"Your profile could not be found\"}",
+      "<user>"
+    ],
+    "errors": [
+      "Your profile could not be found"
+    ],
+    "statuses": [
+      404
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "PATCH",
+    "path": "/api/profile",
+    "file": "backend/src/server.js",
+    "line": 61,
+    "body": [
+      "name",
+      "phone",
+      "email"
+    ],
+    "query": [],
+    "params": [],
+    "responses": [
+      "{message: \"Your name is required\"}",
+      "{message: \"Enter a valid email address\"}",
+      "{message: \"Your profile could not be found\"}",
+      "{id: <userId>, name: <name>, role: <portalRole>, phone: <phone>, email: <email>, profileImageUrl: <computed>}"
+    ],
+    "errors": [
+      "Your name is required",
+      "Enter a valid email address",
+      "Your profile could not be found"
+    ],
+    "statuses": [
+      400,
+      404
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "POST",
+    "path": "/api/bookings",
+    "file": "backend/src/server.js",
+    "line": 62,
+    "body": [
+      "tableId",
+      "bookingDate",
+      "bookingTime",
+      "durationMinutes",
+      "customerPhone"
+    ],
+    "query": [],
+    "params": [],
+    "responses": [
+      "{message: \"Only Admin can create table bookings\"}",
+      "{message: \"Table, future date, time, 30–240 minute duration, and a valid customer phone are required\"}",
+      "{ok: true, id: <bookingId>, notificationStatus: <computed>, notificationDetail: <computed>}"
+    ],
+    "errors": [
+      "Only Admin can create table bookings",
+      "Table, future date, time, 30–240 minute duration, and a valid customer phone are required",
+      "Table is not available",
+      "Choose a future booking date and time"
+    ],
+    "statuses": [
+      403,
+      400,
+      201
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "DELETE",
+    "path": "/api/bookings/:id",
+    "file": "backend/src/server.js",
+    "line": 85,
+    "body": [],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Only Admin can cancel table bookings\"}",
+      "{message: \"Active booking not found\"}",
+      "{ok: true}"
+    ],
+    "errors": [
+      "Only Admin can cancel table bookings",
+      "Active booking not found"
+    ],
+    "statuses": [
+      403,
+      404
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "POST",
+    "path": "/api/orders",
+    "file": "backend/src/server.js",
+    "line": 86,
+    "body": [
+      "items.length",
+      "items",
+      "tableId",
+      "guestName",
+      "waiter"
+    ],
+    "query": [],
+    "params": [],
+    "responses": [
+      "{message: \"Table orders must be created from the Waiter portal\"}",
+      "{message: \"Add at least one food item\"}",
+      "{id: <computed>, bill: <computed>}"
+    ],
+    "errors": [
+      "Table orders must be created from the Waiter portal",
+      "Add at least one food item",
+      "Table not found",
+      "This table is under cleaning. Mark it Available or Reserved before ordering.",
+      "This table already has an active order",
+      "This table is locked for a confirmed reservation at the current time",
+      "Menu item unavailable"
+    ],
+    "statuses": [
+      403,
+      400,
+      201
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "POST",
+    "path": "/api/orders/:id/items",
+    "file": "backend/src/server.js",
+    "line": 87,
+    "body": [
+      "items.length",
+      "items"
+    ],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Additional table orders must come from the Waiter portal\"}",
+      "{message: \"Add at least one item\"}",
+      "{id: <computed>, batchNo: <batchNo>, bill: <computed>}"
+    ],
+    "errors": [
+      "Additional table orders must come from the Waiter portal",
+      "Add at least one item",
+      "Order not found",
+      "This order is already in billing",
+      "Menu item unavailable"
+    ],
+    "statuses": [
+      403,
+      400,
+      201
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "PATCH",
+    "path": "/api/tables/:id/status",
+    "file": "backend/src/server.js",
+    "line": 88,
+    "body": [
+      "status",
+      "bookingTime"
+    ],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Only Admin or Waiter can update tables\"}",
+      "{message: \"Invalid table status\"}",
+      "{ok: true, status: <status>}"
+    ],
+    "errors": [
+      "Only Admin or Waiter can update tables",
+      "Invalid table status",
+      "Table not found",
+      "Finalize the active bill before changing this table",
+      "Create an order to mark this table occupied"
+    ],
+    "statuses": [
+      403,
+      400
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "POST",
+    "path": "/api/tables",
+    "file": "backend/src/server.js",
+    "line": 89,
+    "body": [
+      "number",
+      "seats",
+      "area"
+    ],
+    "query": [],
+    "params": [],
+    "responses": [
+      "{message: \"Admin access required\"}",
+      "{message: \"Table number, seats, and service area are required\"}",
+      "{message: <computed>}",
+      "{id: <computed>, restored: true}",
+      "{id: <computed>}"
+    ],
+    "errors": [
+      "Admin access required",
+      "Table number, seats, and service area are required"
+    ],
+    "statuses": [
+      403,
+      400,
+      409,
+      201
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "DELETE",
+    "path": "/api/tables/:id",
+    "file": "backend/src/server.js",
+    "line": 90,
+    "body": [],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Admin access required\"}",
+      "{message: \"Table not found\"}",
+      "{message: \"Finalize the active bill before deleting this table\"}",
+      "{ok: true, number: <computed>}"
+    ],
+    "errors": [
+      "Admin access required",
+      "Table not found",
+      "Finalize the active bill before deleting this table"
+    ],
+    "statuses": [
+      403,
+      404,
+      409
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "POST",
+    "path": "/api/parcels",
+    "file": "backend/src/server.js",
+    "line": 91,
+    "body": [
+      "items.length",
+      "items",
+      "paymentMethod",
+      "customerName",
+      "customerPhone",
+      "adminName"
+    ],
+    "query": [],
+    "params": [],
+    "responses": [
+      "{message: \"Parcel orders are created by Admin\"}",
+      "{message: \"Add at least one food item\"}",
+      "{message: \"Invalid payment method\"}",
+      "{id: <computed>, paymentStatus: <computed>, bill: <bill>}"
+    ],
+    "errors": [
+      "Parcel orders are created by Admin",
+      "Add at least one food item",
+      "Invalid payment method",
+      "Menu item unavailable"
+    ],
+    "statuses": [
+      403,
+      400,
+      201
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "POST",
+    "path": "/api/orders/:id/mark-paid",
+    "file": "backend/src/server.js",
+    "line": 92,
+    "body": [
+      "paymentMethod"
+    ],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Only Admin can record parcel payments\"}",
+      "{message: \"Choose Cash or Card / UPI\"}",
+      "{message: \"Order not found\"}",
+      "{message: \"Advance payment is only available for parcel orders\"}",
+      "{message: \"Parcel is already completed\"}",
+      "{id: <computed>, paymentStatus: \"paid\", paymentMethod: <computed>, bill: <bill>}"
+    ],
+    "errors": [
+      "Only Admin can record parcel payments",
+      "Choose Cash or Card / UPI",
+      "Order not found",
+      "Advance payment is only available for parcel orders",
+      "Parcel is already completed"
+    ],
+    "statuses": [
+      403,
+      400,
+      404,
+      409
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "PATCH",
+    "path": "/api/orders/:id/items/status",
+    "file": "backend/src/server.js",
+    "line": 93,
+    "body": [
+      "status",
+      "batchNo"
+    ],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Chef or Juicer access required\"}",
+      "{message: \"Invalid preparation status\"}",
+      "{ok: true, status: <status>, orderStatus: <orderStatus>, batchNo: <batchNo>, updatedItems: <computed>}"
+    ],
+    "errors": [
+      "Chef or Juicer access required",
+      "Invalid preparation status"
+    ],
+    "statuses": [
+      403,
+      400
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "PATCH",
+    "path": "/api/orders/:id/batches/:batchNo/handoff",
+    "file": "backend/src/server.js",
+    "line": 94,
+    "body": [
+      "status"
+    ],
+    "query": [],
+    "params": [
+      "batchNo",
+      "id"
+    ],
+    "responses": [
+      "{message: \"Invalid round handoff status\"}",
+      "{message: <computed>}",
+      "{ok: true, status: <status>, batchNo: <batchNo>, orderStatus: <orderStatus>}"
+    ],
+    "errors": [
+      "Invalid round handoff status",
+      "Order not found",
+      "Parcel orders use the Admin handoff flow",
+      "Kitchen round not found",
+      "Wait until every item in this round is ready",
+      "The Chef must confirm this round was collected first"
+    ],
+    "statuses": [
+      400,
+      403
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "PATCH",
+    "path": "/api/orders/:id/status",
+    "file": "backend/src/server.js",
+    "line": 95,
+    "body": [
+      "status"
+    ],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Invalid service handoff status\"}",
+      "{message: <computed>}",
+      "{message: \"Order not found\"}",
+      "{message: \"Parcel orders use the Admin handoff flow\"}",
+      "{ok: true, status: <next>}"
+    ],
+    "errors": [
+      "Invalid service handoff status",
+      "Order not found",
+      "Parcel orders use the Admin handoff flow"
+    ],
+    "statuses": [
+      400,
+      403,
+      404,
+      409
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "POST",
+    "path": "/api/orders/:id/request-bill",
+    "file": "backend/src/server.js",
+    "line": 96,
+    "body": [],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Billing requests must come from the Waiter portal\"}",
+      "{message: \"Order not found\"}",
+      "{message: \"This order is already completed\"}",
+      "{message: \"Confirm that the order was received at the table first\"}",
+      "{ok: true, orderId: <computed>, tableId: <computed>, bill: <computed>}"
+    ],
+    "errors": [
+      "Billing requests must come from the Waiter portal",
+      "Order not found",
+      "This order is already completed",
+      "Confirm that the order was received at the table first"
+    ],
+    "statuses": [
+      403,
+      404,
+      409
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "GET",
+    "path": "/api/orders/:id/bill",
+    "file": "backend/src/server.js",
+    "line": 97,
+    "body": [],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Order not found\"}",
+      "{spread <computed>, order: <order>}"
+    ],
+    "errors": [
+      "Order not found"
+    ],
+    "statuses": [
+      404
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "POST",
+    "path": "/api/orders/:id/finalize",
+    "file": "backend/src/server.js",
+    "line": 98,
+    "body": [
+      "paymentMethod"
+    ],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Only Admin can finalize payments\"}",
+      "{message: \"Order not found\"}",
+      "{message: \"Record Cash or Card / UPI payment before completing this order\"}",
+      "{id: <computed>, paymentStatus: \"paid\", paymentMethod: <paymentMethod>, bill: <bill>}"
+    ],
+    "errors": [
+      "Only Admin can finalize payments",
+      "Order not found",
+      "Record Cash or Card / UPI payment before completing this order"
+    ],
+    "statuses": [
+      403,
+      404,
+      400
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "POST",
+    "path": "/api/inventory",
+    "file": "backend/src/server.js",
+    "line": 99,
+    "body": [
+      "name",
+      "category",
+      "quantity",
+      "unit",
+      "min",
+      "cost",
+      "createdBy"
+    ],
+    "query": [],
+    "params": [],
+    "responses": [
+      "{message: \"Admin access required\"}",
+      "{message: \"Name, unit, and valid quantities are required\"}",
+      "{id: <computed>}"
+    ],
+    "errors": [
+      "Admin access required",
+      "Name, unit, and valid quantities are required"
+    ],
+    "statuses": [
+      403,
+      400,
+      201
+    ],
+    "defaults": [
+      "category=\"\"",
+      "quantity=0",
+      "min=0",
+      "cost=0"
+    ]
+  },
+  {
+    "service": "role",
+    "method": "PUT",
+    "path": "/api/inventory/:id",
+    "file": "backend/src/server.js",
+    "line": 100,
+    "body": [
+      "name",
+      "category",
+      "unit",
+      "min",
+      "cost"
+    ],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Admin access required\"}",
+      "{ok: true}"
+    ],
+    "errors": [
+      "Admin access required"
+    ],
+    "statuses": [
+      403
+    ],
+    "defaults": [
+      "category=\"\"",
+      "min=0",
+      "cost=0"
+    ]
+  },
+  {
+    "service": "role",
+    "method": "POST",
+    "path": "/api/inventory/:id/movements",
+    "file": "backend/src/server.js",
+    "line": 101,
+    "body": [
+      "movementType",
+      "quantity",
+      "adjustmentDirection",
+      "unitCost",
+      "note",
+      "createdBy"
+    ],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Admin access required\"}",
+      "{message: \"Choose a movement type and enter a positive quantity\"}",
+      "{ok: true, quantity: <newQuantity>}"
+    ],
+    "errors": [
+      "Admin access required",
+      "Choose a movement type and enter a positive quantity",
+      "Stock item not found",
+      "Not enough stock for this movement"
+    ],
+    "statuses": [
+      403,
+      400,
+      201
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "DELETE",
+    "path": "/api/inventory/:id",
+    "file": "backend/src/server.js",
+    "line": 102,
+    "body": [],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Admin access required\"}",
+      "{message: \"Items with stock history cannot be deleted\"}",
+      "{ok: true}"
+    ],
+    "errors": [
+      "Admin access required",
+      "Items with stock history cannot be deleted"
+    ],
+    "statuses": [
+      403,
+      409
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "POST",
+    "path": "/api/stock-requests",
+    "file": "backend/src/server.js",
+    "line": 103,
+    "body": [
+      "inventoryId",
+      "requestedQuantity",
+      "requestedBy",
+      "note"
+    ],
+    "query": [],
+    "params": [],
+    "responses": [
+      "{message: \"Only Chef can request kitchen stock\"}",
+      "{message: \"Choose an item and enter the quantity required\"}",
+      "{message: \"Stock item not found\"}",
+      "{message: <computed>}",
+      "{id: <computed>, itemName: <computed>, currentQuantity: <computed>, unit: <computed>}"
+    ],
+    "errors": [
+      "Only Chef can request kitchen stock",
+      "Choose an item and enter the quantity required",
+      "Stock item not found"
+    ],
+    "statuses": [
+      403,
+      400,
+      404,
+      409,
+      201
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "PATCH",
+    "path": "/api/stock-requests/:id/status",
+    "file": "backend/src/server.js",
+    "line": 104,
+    "body": [
+      "status"
+    ],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Only Admin can manage stock requests\"}",
+      "{message: \"Invalid stock request status\"}",
+      "{message: \"Stock request not found\"}",
+      "{ok: true, status: <status>}"
+    ],
+    "errors": [
+      "Only Admin can manage stock requests",
+      "Invalid stock request status",
+      "Stock request not found"
+    ],
+    "statuses": [
+      403,
+      400,
+      404
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "POST",
+    "path": "/api/finance",
+    "file": "backend/src/server.js",
+    "line": 105,
+    "body": [
+      "entryType",
+      "category",
+      "description",
+      "amount",
+      "paymentMethod",
+      "entryDate",
+      "reference",
+      "createdBy"
+    ],
+    "query": [],
+    "params": [],
+    "responses": [
+      "{message: \"Admin access required\"}",
+      "{message: \"Type, category, description, amount, and date are required\"}",
+      "{id: <computed>}"
+    ],
+    "errors": [
+      "Admin access required",
+      "Type, category, description, amount, and date are required"
+    ],
+    "statuses": [
+      403,
+      400,
+      201
+    ],
+    "defaults": [
+      "paymentMethod=\"Cash\"",
+      "reference=\"\"",
+      "createdBy=\"Admin\""
+    ]
+  },
+  {
+    "service": "role",
+    "method": "DELETE",
+    "path": "/api/finance/:id",
+    "file": "backend/src/server.js",
+    "line": 106,
+    "body": [],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Admin access required\"}",
+      "{ok: true}"
+    ],
+    "errors": [
+      "Admin access required"
+    ],
+    "statuses": [
+      403
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "POST",
+    "path": "/api/supplier-purchases",
+    "file": "backend/src/server.js",
+    "line": 107,
+    "body": [
+      "supplierName",
+      "invoiceNumber",
+      "description",
+      "purchaseDate",
+      "totalAmount",
+      "paidAmount",
+      "paymentMethod",
+      "reference",
+      "notes",
+      "createdBy"
+    ],
+    "query": [],
+    "params": [],
+    "responses": [
+      "{message: \"Admin access required\"}",
+      "{message: \"Supplier, description, date, valid total, and paid amount are required\"}",
+      "{id: <computed>, totalAmount: <total>, paidAmount: <paid>, dueAmount: <computed>}"
+    ],
+    "errors": [
+      "Admin access required",
+      "Supplier, description, date, valid total, and paid amount are required"
+    ],
+    "statuses": [
+      403,
+      400,
+      201
+    ],
+    "defaults": [
+      "invoiceNumber=\"\"",
+      "paidAmount=0",
+      "paymentMethod=\"Cash\"",
+      "reference=\"\"",
+      "notes=\"\"",
+      "createdBy=\"Admin\""
+    ]
+  },
+  {
+    "service": "role",
+    "method": "POST",
+    "path": "/api/supplier-purchases/:id/payments",
+    "file": "backend/src/server.js",
+    "line": 108,
+    "body": [
+      "amount",
+      "paymentDate",
+      "paymentMethod",
+      "reference",
+      "notes",
+      "createdBy"
+    ],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Admin access required\"}",
+      "{message: \"A positive payment amount and payment date are required\"}",
+      "{id: <computed>, paidAmount: <computed>, dueAmount: <computed>}"
+    ],
+    "errors": [
+      "Admin access required",
+      "A positive payment amount and payment date are required",
+      "Supplier purchase not found"
+    ],
+    "statuses": [
+      403,
+      400,
+      201
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "DELETE",
+    "path": "/api/supplier-purchases/:id",
+    "file": "backend/src/server.js",
+    "line": 109,
+    "body": [],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Admin access required\"}",
+      "{ok: true}"
+    ],
+    "errors": [
+      "Admin access required"
+    ],
+    "statuses": [
+      403
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "PUT",
+    "path": "/api/settings",
+    "file": "backend/src/server.js",
+    "line": 110,
+    "body": [
+      "hotelName",
+      "taxRate",
+      "cgstRate",
+      "serviceCharge",
+      "currency"
+    ],
+    "query": [],
+    "params": [],
+    "responses": [
+      "{ok: true}"
+    ],
+    "errors": [],
+    "statuses": [],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "GET",
+    "path": "/api/attendance/:id",
+    "file": "backend/src/server.js",
+    "line": 112,
+    "body": [],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"This staff account does not belong to this portal\"}",
+      "{staff: <staff>, shifts: <shifts>, activeShift: <computed>}"
+    ],
+    "errors": [
+      "This staff account does not belong to this portal"
+    ],
+    "statuses": [
+      403
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "POST",
+    "path": "/api/attendance/:id/check-in",
+    "file": "backend/src/server.js",
+    "line": 113,
+    "body": [
+      "notes"
+    ],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"This staff account does not belong to this portal\"}",
+      "{message: \"Staff must check in from their own portal\"}",
+      "{message: \"You are already checked in\"}",
+      "{id: <computed>, checkIn: <computed>}"
+    ],
+    "errors": [
+      "This staff account does not belong to this portal",
+      "Staff must check in from their own portal",
+      "You are already checked in"
+    ],
+    "statuses": [
+      403,
+      409,
+      201
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "POST",
+    "path": "/api/attendance/:id/check-out",
+    "file": "backend/src/server.js",
+    "line": 114,
+    "body": [
+      "notes"
+    ],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"This staff account does not belong to this portal\"}",
+      "{message: \"Staff must check out from their own portal\"}",
+      "{message: \"You are not currently checked in\"}",
+      "{ok: true, checkOut: <computed>}"
+    ],
+    "errors": [
+      "This staff account does not belong to this portal",
+      "Staff must check out from their own portal",
+      "You are not currently checked in"
+    ],
+    "statuses": [
+      403,
+      409
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "POST",
+    "path": "/api/staff",
+    "file": "backend/src/server.js",
+    "line": 115,
+    "body": [
+      "name",
+      "role",
+      "phone",
+      "payType",
+      "payRate"
+    ],
+    "query": [],
+    "params": [],
+    "responses": [
+      "{message: \"Admin access required\"}",
+      "{message: \"Name, role, and Daily/Monthly salary basis are required\"}",
+      "{message: <computed>}",
+      "{id: <computed>, pin: <pin>}"
+    ],
+    "errors": [
+      "Admin access required",
+      "Name, role, and Daily/Monthly salary basis are required"
+    ],
+    "statuses": [
+      403,
+      400,
+      409,
+      201
+    ],
+    "defaults": [
+      "phone=\"\"",
+      "payType=\"monthly\"",
+      "payRate=0"
+    ]
+  },
+  {
+    "service": "role",
+    "method": "PUT",
+    "path": "/api/staff/:id",
+    "file": "backend/src/server.js",
+    "line": 116,
+    "body": [
+      "name",
+      "role",
+      "pin",
+      "phone",
+      "payType",
+      "payRate",
+      "active"
+    ],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Admin access required\"}",
+      "{message: \"Valid role, unique 6-digit PIN, and Daily/Monthly salary basis are required\"}",
+      "{message: <computed>}",
+      "{message: \"Staff member not found\"}",
+      "{ok: true}"
+    ],
+    "errors": [
+      "Admin access required",
+      "Valid role, unique 6-digit PIN, and Daily/Monthly salary basis are required",
+      "Staff member not found"
+    ],
+    "statuses": [
+      403,
+      400,
+      409,
+      404
+    ],
+    "defaults": [
+      "phone=\"\"",
+      "payType=\"monthly\"",
+      "payRate=0",
+      "active=true"
+    ]
+  },
+  {
+    "service": "role",
+    "method": "DELETE",
+    "path": "/api/staff/:id",
+    "file": "backend/src/server.js",
+    "line": 117,
+    "body": [],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Admin access required\"}",
+      "{message: \"Staff member not found\"}",
+      "{message: \"The company Admin login is protected and cannot be deleted here\"}",
+      "{ok: true, id: <computed>, name: <computed>, attendancePreserved: true}"
+    ],
+    "errors": [
+      "Admin access required",
+      "Staff member not found",
+      "The company Admin login is protected and cannot be deleted here"
+    ],
+    "statuses": [
+      403,
+      404,
+      409
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "GET",
+    "path": "/api/juicer-login",
+    "file": "backend/src/server.js",
+    "line": 118,
+    "body": [],
+    "query": [],
+    "params": [],
+    "responses": [
+      "{message: \"Head Chef access required\"}",
+      "<computed>"
+    ],
+    "errors": [
+      "Head Chef access required"
+    ],
+    "statuses": [
+      403
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "POST",
+    "path": "/api/juicer-login",
+    "file": "backend/src/server.js",
+    "line": 119,
+    "body": [
+      "name",
+      "phone",
+      "payType",
+      "payRate"
+    ],
+    "query": [],
+    "params": [],
+    "responses": [
+      "{message: \"Only the Head Chef can create the Juicer login\"}",
+      "{message: \"Name and salary basis are required\"}",
+      "{message: \"This company already has its single Juicer login. Admin can edit it from Staff Management.\"}",
+      "{id: <computed>, role: \"juicer\", pin: <pin>}"
+    ],
+    "errors": [
+      "Only the Head Chef can create the Juicer login",
+      "Name and salary basis are required",
+      "This company already has its single Juicer login. Admin can edit it from Staff Management."
+    ],
+    "statuses": [
+      403,
+      400,
+      409,
+      201
+    ],
+    "defaults": [
+      "phone=\"\"",
+      "payType=\"monthly\"",
+      "payRate=0"
+    ]
+  },
+  {
+    "service": "role",
+    "method": "POST",
+    "path": "/api/kitchen-staff",
+    "file": "backend/src/server.js",
+    "line": 120,
+    "body": [
+      "name",
+      "designation",
+      "phone",
+      "specialization",
+      "payType",
+      "payRate",
+      "joinedOn",
+      "notes",
+      "createdBy"
+    ],
+    "query": [],
+    "params": [],
+    "responses": [
+      "{message: \"Admin or Head Chef access required\"}",
+      "{message: \"Chef name, designation, and Daily/Monthly salary basis are required\"}",
+      "{id: <computed>}"
+    ],
+    "errors": [
+      "Admin or Head Chef access required",
+      "Chef name, designation, and Daily/Monthly salary basis are required"
+    ],
+    "statuses": [
+      403,
+      400,
+      201
+    ],
+    "defaults": [
+      "designation=\"Chef\"",
+      "phone=\"\"",
+      "specialization=\"\"",
+      "payType=\"monthly\"",
+      "payRate=0",
+      "joinedOn=null",
+      "notes=\"\"",
+      "createdBy=<computed>"
+    ]
+  },
+  {
+    "service": "role",
+    "method": "PUT",
+    "path": "/api/kitchen-staff/:id",
+    "file": "backend/src/server.js",
+    "line": 121,
+    "body": [
+      "name",
+      "designation",
+      "phone",
+      "specialization",
+      "payType",
+      "payRate",
+      "joinedOn",
+      "notes",
+      "active"
+    ],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Admin or Head Chef access required\"}",
+      "{message: \"Chef name, designation, and Daily/Monthly salary basis are required\"}",
+      "{message: \"Kitchen staff member not found\"}",
+      "{ok: true}"
+    ],
+    "errors": [
+      "Admin or Head Chef access required",
+      "Chef name, designation, and Daily/Monthly salary basis are required",
+      "Kitchen staff member not found"
+    ],
+    "statuses": [
+      403,
+      400,
+      404
+    ],
+    "defaults": [
+      "designation=\"Chef\"",
+      "phone=\"\"",
+      "specialization=\"\"",
+      "payType=\"monthly\"",
+      "payRate=0",
+      "joinedOn=null",
+      "notes=\"\"",
+      "active=true"
+    ]
+  },
+  {
+    "service": "role",
+    "method": "DELETE",
+    "path": "/api/kitchen-staff/:id",
+    "file": "backend/src/server.js",
+    "line": 122,
+    "body": [],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Admin or Head Chef access required\"}",
+      "{message: \"Kitchen staff member not found\"}",
+      "{ok: true}"
+    ],
+    "errors": [
+      "Admin or Head Chef access required",
+      "Kitchen staff member not found"
+    ],
+    "statuses": [
+      403,
+      404
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "POST",
+    "path": "/api/staff/:id/check-in",
+    "file": "backend/src/server.js",
+    "line": 123,
+    "body": [
+      "notes"
+    ],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Admin access required\"}",
+      "{message: \"Active staff member not found\"}",
+      "{message: \"Staff member is already checked in\"}",
+      "{id: <computed>}"
+    ],
+    "errors": [
+      "Admin access required",
+      "Active staff member not found",
+      "Staff member is already checked in"
+    ],
+    "statuses": [
+      403,
+      404,
+      409,
+      201
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "POST",
+    "path": "/api/staff/:id/check-out",
+    "file": "backend/src/server.js",
+    "line": 124,
+    "body": [
+      "notes"
+    ],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Admin access required\"}",
+      "{message: \"No active check-in found\"}",
+      "{ok: true}"
+    ],
+    "errors": [
+      "Admin access required",
+      "No active check-in found"
+    ],
+    "statuses": [
+      403,
+      409
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "POST",
+    "path": "/api/menu",
+    "file": "backend/src/server.js",
+    "line": 125,
+    "body": [
+      "name",
+      "category",
+      "description",
+      "price",
+      "icon",
+      "available"
+    ],
+    "query": [],
+    "params": [],
+    "responses": [
+      "{message: \"Admin access required\"}",
+      "{message: \"Name, category, and valid price are required\"}",
+      "{id: <computed>}"
+    ],
+    "errors": [
+      "Admin access required",
+      "Name, category, and valid price are required"
+    ],
+    "statuses": [
+      403,
+      400,
+      201
+    ],
+    "defaults": [
+      "description=\"\"",
+      "icon=\"🍽️\"",
+      "available=true"
+    ]
+  },
+  {
+    "service": "role",
+    "method": "PUT",
+    "path": "/api/menu/:id",
+    "file": "backend/src/server.js",
+    "line": 126,
+    "body": [
+      "name",
+      "category",
+      "description",
+      "price",
+      "icon",
+      "available"
+    ],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Admin access required\"}",
+      "{ok: true}"
+    ],
+    "errors": [
+      "Admin access required"
+    ],
+    "statuses": [
+      403
+    ],
+    "defaults": [
+      "description=\"\"",
+      "icon=\"🍽️\"",
+      "available=true"
+    ]
+  },
+  {
+    "service": "role",
+    "method": "DELETE",
+    "path": "/api/menu/:id",
+    "file": "backend/src/server.js",
+    "line": 127,
+    "body": [],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Admin access required\"}",
+      "{ok: true}"
+    ],
+    "errors": [
+      "Admin access required"
+    ],
+    "statuses": [
+      403
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "PATCH",
+    "path": "/api/menu/:id/availability",
+    "file": "backend/src/server.js",
+    "line": 128,
+    "body": [
+      "available"
+    ],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Admin, Head Chef, or Juicer access required\"}",
+      "{message: \"Availability must be true or false\"}",
+      "{message: \"Juicer can only update juice availability\"}",
+      "{message: \"Dish not found\"}",
+      "{ok: true, id: <computed>, available: <computed>}"
+    ],
+    "errors": [
+      "Admin, Head Chef, or Juicer access required",
+      "Availability must be true or false",
+      "Juicer can only update juice availability",
+      "Dish not found"
+    ],
+    "statuses": [
+      403,
+      400,
+      404
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "POST",
+    "path": "/api/combos",
+    "file": "backend/src/server.js",
+    "line": 129,
+    "body": [
+      "name",
+      "description",
+      "price",
+      "icon",
+      "components"
+    ],
+    "query": [],
+    "params": [],
+    "responses": [
+      "{message: \"Admin access required\"}",
+      "{message: \"Combo name, price, and at least one item are required\"}",
+      "{id: <computed>}"
+    ],
+    "errors": [
+      "Admin access required",
+      "Combo name, price, and at least one item are required",
+      "A selected combo item is invalid"
+    ],
+    "statuses": [
+      403,
+      400,
+      201
+    ],
+    "defaults": [
+      "description=\"\"",
+      "icon=\"🎁\"",
+      "components=[]"
+    ]
+  },
+  {
+    "service": "role",
+    "method": "PUT",
+    "path": "/api/combos/:id",
+    "file": "backend/src/server.js",
+    "line": 130,
+    "body": [
+      "name",
+      "description",
+      "price",
+      "icon",
+      "components"
+    ],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Admin access required\"}",
+      "{ok: true}"
+    ],
+    "errors": [
+      "Admin access required"
+    ],
+    "statuses": [
+      403
+    ],
+    "defaults": [
+      "description=\"\"",
+      "icon=\"🎁\"",
+      "components=[]"
+    ]
+  },
+  {
+    "service": "role",
+    "method": "POST",
+    "path": "/api/menu/:id/image",
+    "file": "backend/src/server.js",
+    "line": 131,
+    "body": [],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Please select an image file\"}",
+      "{message: \"Menu item not found\"}",
+      "{imageUrl: <computed>, objectName: <computed>}"
+    ],
+    "errors": [
+      "Please select an image file",
+      "Menu item not found"
+    ],
+    "statuses": [
+      400,
+      404
+    ],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "DELETE",
+    "path": "/api/menu/:id/image",
+    "file": "backend/src/server.js",
+    "line": 132,
+    "body": [],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{ok: true}"
+    ],
+    "errors": [],
+    "statuses": [],
+    "defaults": []
+  },
+  {
+    "service": "role",
+    "method": "POST",
+    "path": "/api/reports",
+    "file": "backend/src/server.js",
+    "line": 133,
+    "body": [
+      "filename",
+      "content",
+      "contentType"
+    ],
+    "query": [],
+    "params": [],
+    "responses": [
+      "{message: \"Report filename and content are required\"}",
+      "{spread <stored>, provider: <storageProvider>}"
+    ],
+    "errors": [
+      "Report filename and content are required"
+    ],
+    "statuses": [
+      400,
+      201
+    ],
+    "defaults": []
+  },
+  {
+    "service": "master",
+    "method": "GET",
+    "path": "/api/live",
+    "file": "backend/src/master-server.js",
+    "line": 207,
+    "body": [],
+    "query": [],
+    "params": [],
+    "responses": [
+      "{ok: true, service: \"knockout-master-api\"}"
+    ],
+    "errors": [],
+    "statuses": [],
+    "defaults": []
+  },
+  {
+    "service": "master",
+    "method": "GET",
+    "path": "/api/health",
+    "file": "backend/src/master-server.js",
+    "line": 208,
+    "body": [],
+    "query": [],
+    "params": [],
+    "responses": [
+      "{ok: true, service: \"knockout-master-api\", database: <masterDb>, realtime: <computed>}"
+    ],
+    "errors": [],
+    "statuses": [],
+    "defaults": []
+  },
+  {
+    "service": "master",
+    "method": "GET",
+    "path": "/api/public/companies",
+    "file": "backend/src/master-server.js",
+    "line": 209,
+    "body": [],
+    "query": [],
+    "params": [],
+    "responses": [
+      "<rows>"
+    ],
+    "errors": [],
+    "statuses": [],
+    "defaults": []
+  },
+  {
+    "service": "master",
+    "method": "POST",
+    "path": "/api/public/company-registrations",
+    "file": "backend/src/master-server.js",
+    "line": 210,
+    "body": [
+      "companyName",
+      "adminName",
+      "email",
+      "phone",
+      "packageCode",
+      "periodMonths"
+    ],
+    "query": [],
+    "params": [],
+    "responses": [
+      "{message: \"Enter valid business details, package, and subscription period\"}",
+      "{message: \"This hotel/business name is already registered\"}",
+      "{message: \"An active application already uses this business name or email\"}",
+      "{id: <computed>, status: \"pending\", temporaryPin: <temporaryPin>, message: \"Sent for approval. Your temporary onboarding PIN has been queued to your email and mobile.\"}"
+    ],
+    "errors": [
+      "Enter valid business details, package, and subscription period",
+      "This hotel/business name is already registered",
+      "An active application already uses this business name or email",
+      "Sent for approval. Your temporary onboarding PIN has been queued to your email and mobile."
+    ],
+    "statuses": [
+      400,
+      409,
+      201
+    ],
+    "defaults": []
+  },
+  {
+    "service": "master",
+    "method": "POST",
+    "path": "/api/public/resolve-login",
+    "file": "backend/src/master-server.js",
+    "line": 211,
+    "body": [
+      "hotelId",
+      "pin"
+    ],
+    "query": [],
+    "params": [],
+    "responses": [
+      "{spread <user>, accessToken: <computed>}",
+      "{spread <application>, role: \"applicant\", temporaryPin: <pin>}",
+      "{message: \"Invalid Super Admin or temporary onboarding PIN. Hotel staff must enter their Hotel ID.\"}",
+      "{message: \"Invalid Master Hotel ID or PIN\"}",
+      "{message: \"Enter your 4-digit Hotel ID and 6-digit PIN\"}",
+      "{code: \"COMPANY_SUSPENDED\", message: <computed>}",
+      "{message: \"Invalid Hotel ID, PIN, or inactive account\"}"
+    ],
+    "errors": [
+      "Invalid Super Admin or temporary onboarding PIN. Hotel staff must enter their Hotel ID.",
+      "Invalid Master Hotel ID or PIN",
+      "Enter your 4-digit Hotel ID and 6-digit PIN",
+      "Invalid Hotel ID, PIN, or inactive account"
+    ],
+    "statuses": [
+      401,
+      400,
+      403
+    ],
+    "defaults": []
+  },
+  {
+    "service": "master",
+    "method": "POST",
+    "path": "/api/public/onboarding-status",
+    "file": "backend/src/master-server.js",
+    "line": 212,
+    "body": [
+      "id",
+      "pin"
+    ],
+    "query": [],
+    "params": [],
+    "responses": [
+      "{message: \"Temporary onboarding session is invalid\"}",
+      "{spread <row>, monthly: <monthly>, discount: <discount>, subtotal: <subtotal>, tax: <tax>, total: <computed>}"
+    ],
+    "errors": [
+      "Temporary onboarding session is invalid"
+    ],
+    "statuses": [
+      401
+    ],
+    "defaults": []
+  },
+  {
+    "service": "master",
+    "method": "POST",
+    "path": "/api/public/complete-registration",
+    "file": "backend/src/master-server.js",
+    "line": 213,
+    "body": [
+      "pin",
+      "id",
+      "paymentReference",
+      "businessType",
+      "address",
+      "gstNumber"
+    ],
+    "query": [],
+    "params": [],
+    "responses": [
+      "{message: \"Temporary onboarding session is invalid\"}",
+      "{message: \"Master approval is required before completing registration\"}",
+      "{message: \"A valid payment reference is required\"}",
+      "{message: \"Business type and address are required\"}",
+      "{success: true, hotelId: <computed>, adminPin: <computed>, companyName: <computed>, expiresAt: <expires>}"
+    ],
+    "errors": [
+      "Temporary onboarding session is invalid",
+      "Master approval is required before completing registration",
+      "A valid payment reference is required",
+      "Business type and address are required"
+    ],
+    "statuses": [
+      401,
+      409,
+      400,
+      201
+    ],
+    "defaults": []
+  },
+  {
+    "service": "master",
+    "method": "POST",
+    "path": "/api/login",
+    "file": "backend/src/master-server.js",
+    "line": 214,
+    "body": [
+      "pin"
+    ],
+    "query": [],
+    "params": [],
+    "responses": [
+      "{message: \"Invalid KnockOUT Master PIN\"}",
+      "{spread <result>, accessToken: <computed>}"
+    ],
+    "errors": [
+      "Invalid KnockOUT Master PIN"
+    ],
+    "statuses": [
+      401
+    ],
+    "defaults": []
+  },
+  {
+    "service": "master",
+    "method": "GET",
+    "path": "/api/state",
+    "file": "backend/src/master-server.js",
+    "line": 215,
+    "body": [],
+    "query": [],
+    "params": [],
+    "responses": [
+      "{companies: <computed>, masterUsers: <masterUsers>, registrationRequests: <computed>, invoices: <computed>, subscriptions: <subscriptions>, usage: <usage>, moduleCatalog: <computed>, masterName: \"KnockOUT Master\"}"
+    ],
+    "errors": [],
+    "statuses": [],
+    "defaults": []
+  },
+  {
+    "service": "master",
+    "method": "POST",
+    "path": "/api/companies",
+    "file": "backend/src/master-server.js",
+    "line": 216,
+    "body": [
+      "companyName",
+      "adminName",
+      "email",
+      "phone",
+      "selectedModules"
+    ],
+    "query": [],
+    "params": [],
+    "responses": [
+      "<computed>"
+    ],
+    "errors": [],
+    "statuses": [
+      201
+    ],
+    "defaults": []
+  },
+  {
+    "service": "master",
+    "method": "POST",
+    "path": "/api/company-registrations/:id/approve",
+    "file": "backend/src/master-server.js",
+    "line": 217,
+    "body": [
+      "reviewNote"
+    ],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Registration request not found\"}",
+      "{message: <computed>}",
+      "{ok: true, status: \"approved\", request: <request>}"
+    ],
+    "errors": [
+      "Registration request not found"
+    ],
+    "statuses": [
+      404,
+      409
+    ],
+    "defaults": []
+  },
+  {
+    "service": "master",
+    "method": "PATCH",
+    "path": "/api/companies/:id/modules",
+    "file": "backend/src/master-server.js",
+    "line": 218,
+    "body": [
+      "module",
+      "enabled"
+    ],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Invalid module setting\"}",
+      "{message: \"Company not found\"}",
+      "{ok: true, modules: <modules>}"
+    ],
+    "errors": [
+      "Invalid module setting",
+      "Company not found"
+    ],
+    "statuses": [
+      400,
+      404
+    ],
+    "defaults": []
+  },
+  {
+    "service": "master",
+    "method": "PATCH",
+    "path": "/api/saas-invoices/:id/status",
+    "file": "backend/src/master-server.js",
+    "line": 219,
+    "body": [
+      "status"
+    ],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Invalid invoice status\"}",
+      "{message: \"Invoice not found\"}",
+      "{ok: true, status: <computed>}"
+    ],
+    "errors": [
+      "Invalid invoice status",
+      "Invoice not found"
+    ],
+    "statuses": [
+      400,
+      404
+    ],
+    "defaults": []
+  },
+  {
+    "service": "master",
+    "method": "POST",
+    "path": "/api/company-registrations/:id/reject",
+    "file": "backend/src/master-server.js",
+    "line": 220,
+    "body": [
+      "reviewNote"
+    ],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Registration request is missing or already reviewed\"}",
+      "{ok: true, status: \"rejected\"}"
+    ],
+    "errors": [
+      "Registration request is missing or already reviewed"
+    ],
+    "statuses": [
+      409
+    ],
+    "defaults": []
+  },
+  {
+    "service": "master",
+    "method": "PATCH",
+    "path": "/api/companies/:id/status",
+    "file": "backend/src/master-server.js",
+    "line": 221,
+    "body": [
+      "status"
+    ],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Invalid company status\"}",
+      "{message: \"Company not found\"}",
+      "{ok: true, status: <computed>, companyName: <computed>, loginsEnabled: <computed>}"
+    ],
+    "errors": [
+      "Invalid company status",
+      "Company not found"
+    ],
+    "statuses": [
+      400,
+      404
+    ],
+    "defaults": []
+  },
+  {
+    "service": "master",
+    "method": "PATCH",
+    "path": "/api/companies/:companyId/users/:userId/pin",
+    "file": "backend/src/master-server.js",
+    "line": 222,
+    "body": [
+      "pin"
+    ],
+    "query": [],
+    "params": [
+      "companyId",
+      "userId"
+    ],
+    "responses": [
+      "{message: \"PIN must contain exactly 6 digits\"}",
+      "{message: \"Company not found\"}",
+      "{message: \"User not found\"}",
+      "{message: <computed>}",
+      "{ok: true, userId: <computed>, name: <computed>, pin: <pin>}"
+    ],
+    "errors": [
+      "PIN must contain exactly 6 digits",
+      "Company not found",
+      "User not found"
+    ],
+    "statuses": [
+      400,
+      404,
+      409
+    ],
+    "defaults": []
+  },
+  {
+    "service": "master",
+    "method": "PATCH",
+    "path": "/api/master-users/:userId/pin",
+    "file": "backend/src/master-server.js",
+    "line": 223,
+    "body": [
+      "pin"
+    ],
+    "query": [],
+    "params": [
+      "userId"
+    ],
+    "responses": [
+      "{message: \"PIN must contain exactly 6 digits\"}",
+      "{message: \"Master user not found\"}",
+      "{message: <computed>}",
+      "{ok: true, userId: <computed>, name: <computed>, pin: <pin>}"
+    ],
+    "errors": [
+      "PIN must contain exactly 6 digits",
+      "Master user not found"
+    ],
+    "statuses": [
+      400,
+      404,
+      409
+    ],
+    "defaults": []
+  },
+  {
+    "service": "master",
+    "method": "DELETE",
+    "path": "/api/companies/:id",
+    "file": "backend/src/master-server.js",
+    "line": 224,
+    "body": [
+      "companyName"
+    ],
+    "query": [],
+    "params": [
+      "id"
+    ],
+    "responses": [
+      "{message: \"Company not found\"}",
+      "{message: \"The protected primary tenant cannot be deleted\"}",
+      "{message: \"Invalid tenant database\"}",
+      "{message: \"Type the exact hotel name to confirm deletion\"}",
+      "{ok: true, deleted: <computed>}"
+    ],
+    "errors": [
+      "Company not found",
+      "The protected primary tenant cannot be deleted",
+      "Invalid tenant database",
+      "Type the exact hotel name to confirm deletion"
+    ],
+    "statuses": [
+      404,
+      409,
+      400
+    ],
+    "defaults": []
+  },
+  {
+    "service": "master",
+    "method": "GET",
+    "path": "/api/module-pricing",
+    "file": "backend/src/master-server.js",
+    "line": 225,
+    "body": [],
+    "query": [],
+    "params": [],
+    "responses": [
+      "<computed>"
+    ],
+    "errors": [],
+    "statuses": [],
+    "defaults": []
+  },
+  {
+    "service": "master",
+    "method": "PATCH",
+    "path": "/api/module-pricing/:key",
+    "file": "backend/src/master-server.js",
+    "line": 226,
+    "body": [
+      "price"
+    ],
+    "query": [],
+    "params": [
+      "key"
+    ],
+    "responses": [
+      "{message: \"Enter a valid module price\"}",
+      "{ok: true, key: <key>, price: <price>}"
+    ],
+    "errors": [
+      "Enter a valid module price"
+    ],
+    "statuses": [
+      400
+    ],
+    "defaults": []
+  },
+  {
+    "service": "master",
+    "method": "POST",
+    "path": "/api/reports",
+    "file": "backend/src/master-server.js",
+    "line": 227,
+    "body": [
+      "filename",
+      "content",
+      "contentType"
+    ],
+    "query": [],
+    "params": [],
+    "responses": [
+      "{message: \"Report filename and content are required\"}",
+      "{spread <stored>, provider: <storageProvider>}"
+    ],
+    "errors": [
+      "Report filename and content are required"
+    ],
+    "statuses": [
+      400,
+      201
+    ],
+    "defaults": []
+  }
+]

@@ -1,0 +1,586 @@
+{
+  "AWS_ACCESS_KEY_ID": {
+    "purpose": "Fallback S3 access ID",
+    "sources": [
+      "backend/src/storage.js"
+    ]
+  },
+  "AWS_REGION": {
+    "purpose": "Fallback client region; URL region logic differs",
+    "sources": [
+      "backend/src/storage.js"
+    ]
+  },
+  "AWS_SECRET_ACCESS_KEY": {
+    "purpose": "Fallback S3 secret",
+    "sources": [
+      "backend/src/storage.js"
+    ]
+  },
+  "BACKEND_PORT": {
+    "purpose": "Published master API port",
+    "sources": [
+      ".env.example",
+      "docker-compose.yml"
+    ]
+  },
+  "BACKEND_PORT_RANGE": {
+    "purpose": "Scale override host range",
+    "sources": [
+      ".env.example",
+      "docker-compose.scale.yml"
+    ]
+  },
+  "BASE_URL": {
+    "purpose": "k6 target only",
+    "sources": [
+      "load-tests/api-capacity.js"
+    ]
+  },
+  "COMPOSE_PROJECT_NAME": {
+    "purpose": "Compose resource prefix",
+    "sources": [
+      ".env.example"
+    ]
+  },
+  "DB_CONNECT_TIMEOUT_MS": {
+    "purpose": "SQL connection timeout",
+    "sources": [
+      ".env.example",
+      "backend/src/database.js",
+      "backend/src/master-server.js",
+      "docker-compose.yml"
+    ]
+  },
+  "DB_EXTERNAL_PORT": {
+    "purpose": "Published DB host port",
+    "sources": [
+      ".env.example",
+      "docker-compose.yml"
+    ]
+  },
+  "DB_HOST": {
+    "purpose": "SQL hostname",
+    "sources": [
+      ".env.example",
+      "backend/src/database.js",
+      "backend/src/master-server.js",
+      "docker-compose.yml"
+    ]
+  },
+  "DB_NAME": {
+    "purpose": "Primary tenant database",
+    "sources": [
+      ".env.example",
+      "backend/src/database.js",
+      "backend/src/server.js",
+      "docker-compose.yml"
+    ]
+  },
+  "DB_PASSWORD": {
+    "purpose": "Role SQL password",
+    "sources": [
+      ".env.example",
+      "backend/src/database.js",
+      "docker-compose.yml"
+    ]
+  },
+  "DB_POOL_IDLE_TIMEOUT_MS": {
+    "purpose": "Idle connection timeout",
+    "sources": [
+      ".env.example",
+      "backend/src/database.js",
+      "backend/src/master-server.js",
+      "docker-compose.yml"
+    ]
+  },
+  "DB_POOL_MAX_IDLE": {
+    "purpose": "Pool idle connection maximum",
+    "sources": [
+      ".env.example",
+      "backend/src/database.js",
+      "backend/src/master-server.js",
+      "docker-compose.yml"
+    ]
+  },
+  "DB_POOL_SIZE": {
+    "purpose": "Per-tenant role connection maximum",
+    "sources": [
+      ".env.example",
+      "backend/src/database.js",
+      "docker-compose.yml"
+    ]
+  },
+  "DB_PORT": {
+    "purpose": "SQL port; role direct default 3307, master 3306",
+    "sources": [
+      ".env.example",
+      "backend/src/database.js",
+      "backend/src/master-server.js",
+      "docker-compose.yml"
+    ]
+  },
+  "DB_QUEUE_LIMIT": {
+    "purpose": "Maximum queued connection requests",
+    "sources": [
+      ".env.example",
+      "backend/src/database.js",
+      "backend/src/master-server.js",
+      "docker-compose.yml"
+    ]
+  },
+  "DB_ROOT_PASSWORD": {
+    "purpose": "Master/root SQL password",
+    "sources": [
+      ".env.example",
+      "backend/src/master-server.js",
+      "docker-compose.yml"
+    ]
+  },
+  "DB_ROOT_USER": {
+    "purpose": "Provisioning SQL administrator",
+    "sources": [
+      ".env.example",
+      "backend/src/master-server.js",
+      "docker-compose.yml"
+    ]
+  },
+  "DB_USER": {
+    "purpose": "Role database account; grants hardcode knockout",
+    "sources": [
+      ".env.example",
+      "backend/src/database.js",
+      "docker-compose.yml"
+    ]
+  },
+  "EXPO_PUBLIC_API_HOST": {
+    "purpose": "Phone-reachable API hostname",
+    "sources": [
+      "mobile/.env.example",
+      "mobile/App.js"
+    ]
+  },
+  "EXPO_PUBLIC_API_PORT": {
+    "purpose": "Mobile unified API port",
+    "sources": [
+      "mobile/App.js"
+    ]
+  },
+  "FRONTEND_PORT": {
+    "purpose": "Published frontend port",
+    "sources": [
+      ".env.example",
+      "docker-compose.yml"
+    ]
+  },
+  "HOTEL_ID": {
+    "purpose": "k6 disposable tenant identity",
+    "sources": [
+      "load-tests/api-capacity.js"
+    ]
+  },
+  "INSTANCE_ID": {
+    "purpose": "Publisher identity for echo suppression",
+    "sources": [
+      "backend/src/realtime.js"
+    ]
+  },
+  "MARIADB_DATABASE": {
+    "purpose": "Image initial schema from DB_NAME",
+    "sources": [
+      "docker-compose.yml (container setting)"
+    ]
+  },
+  "MARIADB_PASSWORD": {
+    "purpose": "Image role password from DB_PASSWORD",
+    "sources": [
+      "docker-compose.yml (container setting)"
+    ]
+  },
+  "MARIADB_ROOT_HOST": {
+    "purpose": "Allowed root host pattern",
+    "sources": [
+      "docker-compose.yml (container setting)"
+    ]
+  },
+  "MARIADB_ROOT_PASSWORD": {
+    "purpose": "Image root password mapped from DB_ROOT_PASSWORD",
+    "sources": [
+      "docker-compose.yml (container setting)"
+    ]
+  },
+  "MARIADB_USER": {
+    "purpose": "Image role account from DB_USER",
+    "sources": [
+      "docker-compose.yml (container setting)"
+    ]
+  },
+  "MASTER_ADMIN_POOL_SIZE": {
+    "purpose": "Provisioning/admin pool maximum",
+    "sources": [
+      ".env.example",
+      "backend/src/master-server.js",
+      "docker-compose.yml"
+    ]
+  },
+  "MASTER_DB_NAME": {
+    "purpose": "Catalog schema",
+    "sources": [
+      ".env.example",
+      "backend/src/master-server.js",
+      "docker-compose.yml"
+    ]
+  },
+  "MASTER_DB_POOL_SIZE": {
+    "purpose": "Catalog pool maximum",
+    "sources": [
+      ".env.example",
+      "backend/src/master-server.js",
+      "docker-compose.yml"
+    ]
+  },
+  "MASTER_SESSION_SECRET": {
+    "purpose": "HMAC signing secret shared by replicas",
+    "sources": [
+      ".env.example",
+      "backend/src/master-server.js",
+      "docker-compose.yml"
+    ]
+  },
+  "MINIO_ACCESS_KEY": {
+    "purpose": "MinIO client/admin username",
+    "sources": [
+      ".env.example",
+      "backend/src/storage.js",
+      "docker-compose.yml"
+    ]
+  },
+  "MINIO_API_PORT": {
+    "purpose": "Published MinIO API port",
+    "sources": [
+      ".env.example",
+      "docker-compose.yml"
+    ]
+  },
+  "MINIO_BUCKET": {
+    "purpose": "MinIO bucket fallback",
+    "sources": [
+      ".env.example",
+      "backend/src/storage.js",
+      "docker-compose.yml"
+    ]
+  },
+  "MINIO_CONSOLE_PORT": {
+    "purpose": "Published storage admin console",
+    "sources": [
+      ".env.example",
+      "docker-compose.yml"
+    ]
+  },
+  "MINIO_ENDPOINT": {
+    "purpose": "MinIO hostname",
+    "sources": [
+      ".env.example",
+      "backend/src/storage.js",
+      "docker-compose.yml"
+    ]
+  },
+  "MINIO_PORT": {
+    "purpose": "MinIO service API port",
+    "sources": [
+      ".env.example",
+      "backend/src/storage.js",
+      "docker-compose.yml"
+    ]
+  },
+  "MINIO_PUBLIC_URL": {
+    "purpose": "Browser-reachable storage base; bucket appended",
+    "sources": [
+      ".env.example",
+      "backend/src/storage.js",
+      "docker-compose.yml"
+    ]
+  },
+  "MINIO_ROOT_PASSWORD": {
+    "purpose": "Storage image admin from secret key",
+    "sources": [
+      "docker-compose.yml (container setting)"
+    ]
+  },
+  "MINIO_ROOT_USER": {
+    "purpose": "Storage image admin from access key",
+    "sources": [
+      "docker-compose.yml (container setting)"
+    ]
+  },
+  "MINIO_SECRET_KEY": {
+    "purpose": "MinIO client/admin secret",
+    "sources": [
+      ".env.example",
+      "backend/src/storage.js",
+      "docker-compose.yml"
+    ]
+  },
+  "MINIO_SSL": {
+    "purpose": "Enable MinIO SSL only if true",
+    "sources": [
+      "backend/src/storage.js"
+    ]
+  },
+  "NOTIFICATION_WEBHOOK_URL": {
+    "purpose": "Registration/subscription notice webhook",
+    "sources": [
+      "backend/src/master-server.js"
+    ]
+  },
+  "PHPMYADMIN_PORT": {
+    "purpose": "Published database console",
+    "sources": [
+      ".env.example",
+      "docker-compose.yml"
+    ]
+  },
+  "PHPMYADMIN_UPLOAD_LIMIT": {
+    "purpose": "Database UI import limit",
+    "sources": [
+      ".env.example",
+      "docker-compose.yml"
+    ]
+  },
+  "PMA_ARBITRARY": {
+    "purpose": "Disable arbitrary database target entry",
+    "sources": [
+      "docker-compose.yml (container setting)"
+    ]
+  },
+  "PMA_HOST": {
+    "purpose": "phpMyAdmin database target",
+    "sources": [
+      "docker-compose.yml (container setting)"
+    ]
+  },
+  "PMA_PORT": {
+    "purpose": "phpMyAdmin SQL target port",
+    "sources": [
+      "docker-compose.yml (container setting)"
+    ]
+  },
+  "PORT": {
+    "purpose": "Internal HTTP listen port",
+    "sources": [
+      "backend/src/master-server.js",
+      "backend/src/server.js"
+    ]
+  },
+  "PORTAL_ROLE": {
+    "purpose": "Role process policy identity",
+    "sources": [
+      "backend/src/nest/app.module.js",
+      "backend/src/server.js"
+    ]
+  },
+  "REDIS_EVENTS_CHANNEL": {
+    "purpose": "Pub/sub channel",
+    "sources": [
+      ".env.example",
+      "backend/src/realtime.js"
+    ]
+  },
+  "REDIS_REQUIRED": {
+    "purpose": "Fail startup on caught Redis initialization error",
+    "sources": [
+      ".env.example",
+      "backend/src/master-server.js",
+      "docker-compose.yml"
+    ]
+  },
+  "REDIS_URL": {
+    "purpose": "Pub/sub connection URL",
+    "sources": [
+      ".env.example",
+      "backend/src/realtime.js",
+      "docker-compose.yml"
+    ]
+  },
+  "RUN_MIGRATIONS": {
+    "purpose": "Skip role migrations only when false",
+    "sources": [
+      ".env.example",
+      "backend/src/server.js"
+    ]
+  },
+  "S3_ACCESS_KEY_ID": {
+    "purpose": "S3 access ID",
+    "sources": [
+      ".env.example",
+      "backend/src/storage.js",
+      "docker-compose.yml"
+    ]
+  },
+  "S3_BUCKET": {
+    "purpose": "S3 bucket if no STORAGE_BUCKET",
+    "sources": [
+      ".env.example",
+      "backend/src/storage.js",
+      "docker-compose.yml"
+    ]
+  },
+  "S3_ENDPOINT": {
+    "purpose": "S3-compatible hostname",
+    "sources": [
+      ".env.example",
+      "backend/src/storage.js",
+      "docker-compose.yml"
+    ]
+  },
+  "S3_PATH_STYLE": {
+    "purpose": "Use path-style S3 requests",
+    "sources": [
+      ".env.example",
+      "backend/src/storage.js",
+      "docker-compose.yml"
+    ]
+  },
+  "S3_PORT": {
+    "purpose": "S3 TCP port",
+    "sources": [
+      ".env.example",
+      "backend/src/storage.js",
+      "docker-compose.yml"
+    ]
+  },
+  "S3_PUBLIC_URL": {
+    "purpose": "Custom public base, bucket appended",
+    "sources": [
+      ".env.example",
+      "backend/src/storage.js",
+      "docker-compose.yml"
+    ]
+  },
+  "S3_REGION": {
+    "purpose": "S3 region",
+    "sources": [
+      ".env.example",
+      "backend/src/storage.js",
+      "docker-compose.yml"
+    ]
+  },
+  "S3_SECRET_ACCESS_KEY": {
+    "purpose": "S3 secret",
+    "sources": [
+      ".env.example",
+      "backend/src/storage.js",
+      "docker-compose.yml"
+    ]
+  },
+  "S3_SSL": {
+    "purpose": "S3 TLS unless false",
+    "sources": [
+      ".env.example",
+      "backend/src/storage.js",
+      "docker-compose.yml"
+    ]
+  },
+  "SMS_WEBHOOK_TOKEN": {
+    "purpose": "SMS bearer credential",
+    "sources": [
+      ".env.example",
+      "backend/src/server.js",
+      "docker-compose.yml"
+    ]
+  },
+  "SMS_WEBHOOK_URL": {
+    "purpose": "Table booking SMS provider URL",
+    "sources": [
+      ".env.example",
+      "backend/src/server.js",
+      "docker-compose.yml"
+    ]
+  },
+  "STATE_CACHE_TTL_MS": {
+    "purpose": "Process-local state cache lifetime",
+    "sources": [
+      ".env.example",
+      "backend/src/server.js",
+      "docker-compose.yml"
+    ]
+  },
+  "STATE_HISTORY_DAYS": {
+    "purpose": "Operational history window, clamp 7\u2013365",
+    "sources": [
+      ".env.example",
+      "backend/src/database.js",
+      "docker-compose.yml"
+    ]
+  },
+  "STORAGE_BUCKET": {
+    "purpose": "Bucket override",
+    "sources": [
+      ".env.example",
+      "backend/src/storage.js",
+      "docker-compose.yml"
+    ]
+  },
+  "STORAGE_PROVIDER": {
+    "purpose": "minio or s3 selection",
+    "sources": [
+      ".env.example",
+      "backend/src/storage.js",
+      "docker-compose.yml"
+    ]
+  },
+  "STORAGE_PUBLIC_READ": {
+    "purpose": "MinIO whole-bucket public-read policy",
+    "sources": [
+      ".env.example",
+      "backend/src/storage.js",
+      "docker-compose.yml"
+    ]
+  },
+  "TENANT_POOL_IDLE_MS": {
+    "purpose": "Inactive tenant pool retirement",
+    "sources": [
+      ".env.example",
+      "backend/src/database.js",
+      "docker-compose.yml"
+    ]
+  },
+  "TZ": {
+    "purpose": "Container timezone",
+    "sources": [
+      ".env.example",
+      "docker-compose.yml"
+    ]
+  },
+  "UPLOAD_LIMIT": {
+    "purpose": "phpMyAdmin import size",
+    "sources": [
+      "docker-compose.yml (container setting)"
+    ]
+  },
+  "USER_PIN": {
+    "purpose": "k6 nonproduction account PIN",
+    "sources": [
+      "load-tests/api-capacity.js"
+    ]
+  },
+  "VITE_API_URL": {
+    "purpose": "Compose value not consumed by api.js",
+    "sources": [
+      "docker-compose.yml (container setting)"
+    ]
+  },
+  "VITE_PORTAL_ROLE": {
+    "purpose": "Browser build portal role mode",
+    "sources": [
+      "frontend/src/App.jsx",
+      "frontend/src/api.js"
+    ]
+  },
+  "VITE_PROXY_TARGET": {
+    "purpose": "Vite API/WebSocket proxy target",
+    "sources": [
+      "frontend/vite.config.js"
+    ]
+  }
+}

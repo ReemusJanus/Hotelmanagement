@@ -1,0 +1,13 @@
+sequenceDiagram
+  participant U as Client
+  participant M as Master
+  participant D as Catalog
+  U->>M: Hotel ID and PIN
+  M->>D: Enforce subscription and find active user
+  D-->>M: User role and company
+  M->>D: Record login usage
+  M-->>U: Identity and 12-hour signed token
+  U->>M: Bearer API request
+  M->>M: Check signature and expiry
+  M->>D: Check company and modules
+  M-->>U: Authorized role response

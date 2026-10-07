@@ -1,6 +1,6 @@
 # KnockOUT Mobile
 
-One Expo SDK 54 application for Admin, Waiter, and Chef on iOS and Android.
+One Expo SDK 57 application for Admin, Waiter, and Chef on iOS and Android.
 
 The first screen selects a portal. Each role then verifies its 4-digit OTP/PIN against its own backend:
 

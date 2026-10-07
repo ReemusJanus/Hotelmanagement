@@ -27,6 +27,6 @@ export default {
       edgeToEdgeEnabled: true
     },
     extra: {roles: ['admin', 'waiter', 'chef']},
-    plugins: ['expo-font', 'expo-asset']
+    plugins: ['expo-font', 'expo-asset', 'expo-status-bar']
   }
 };
