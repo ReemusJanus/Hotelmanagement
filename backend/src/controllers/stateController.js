@@ -1,7 +1,7 @@
 import {
   pool,
   migrate,
-  getState,
+  getState as getDbState,
   runWithTenant,
 } from "../database/database.js";
 import {
@@ -45,7 +45,7 @@ async function verifyPortalStaff(userId) {
 }
 
 export const getState = asyncRoute(async (req, res) => {
-  const state = await getState();
+  const state = await getDbState();
   state.companyDatabase = String(
     req.headers["x-company-database"] || process.env.DB_NAME || "knockout",
   );
