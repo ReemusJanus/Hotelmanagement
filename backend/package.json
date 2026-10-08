@@ -2,12 +2,33 @@
   "name": "hotel-backend",
   "version": "1.0.0",
   "type": "module",
-  "scripts": {"dev": "node --watch src/server/server.js", "start": "node src/server/server.js"},
+  "description": "",
+  "main": "src/server/server.js",
+  "scripts": {
+    "start": "node src/server/server.js",
+    "server": "nodemon src/server/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "new_build": "npm run prod",
+    "server:prod": "node src/server/server.js",
+    "dev": "nodemon src/server/server.js",
+    "clean": "rimraf dist",
+    "build": "echo \"No build step required for this backend\"",
+    "prod": "npm run clean && npm run build && npm run server:prod",
+    "watch": "nodemon src/server/server.js",
+    "db:init": "node src/database/database.js",
+    "db:seed": "node src/database/database.js",
+    "db:admin": "node seed_admin.js",
+    "postman:generate": "node scripts/generatePostman.js"
+  },
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "minio": "^8.0.5",
     "multer": "^2.0.2",
     "mysql2": "^3.14.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14",
+    "rimraf": "^6.1.3"
   }
 }
