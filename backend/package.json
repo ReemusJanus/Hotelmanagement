@@ -2,7 +2,7 @@
   "name": "hotel-backend",
   "version": "1.0.0",
   "type": "module",
-  "scripts": {"dev": "node --watch src/server.js", "start": "node src/server.js"},
+  "scripts": {"dev": "node --watch src/server/server.js", "start": "node src/server/server.js"},
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^5.1.0",
