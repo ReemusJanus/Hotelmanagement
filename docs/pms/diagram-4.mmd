@@ -1,0 +1,6 @@
+erDiagram
+  companies ||--o{ company_users : company_id
+  companies o|--o{ company_registration_requests : company_id
+  companies ||--o{ saas_invoices : company_id
+  companies ||--o{ tenant_subscriptions : company_id
+  companies ||--o{ usage_logins : company_id

@@ -1,5 +1,62 @@
+x-storage-env: &storage-env
+  STORAGE_PROVIDER: ${STORAGE_PROVIDER:-minio}
+  STORAGE_BUCKET: ${STORAGE_BUCKET:-}
+  STORAGE_PUBLIC_READ: ${STORAGE_PUBLIC_READ:-true}
+  S3_ENDPOINT: ${S3_ENDPOINT:-s3.amazonaws.com}
+  S3_PORT: ${S3_PORT:-443}
+  S3_SSL: ${S3_SSL:-true}
+  S3_REGION: ${S3_REGION:-ap-south-1}
+  S3_BUCKET: ${S3_BUCKET:-}
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+  S3_PUBLIC_URL: ${S3_PUBLIC_URL:-}
+  S3_PATH_STYLE: ${S3_PATH_STYLE:-false}
+
+x-runtime-env: &runtime-env
+  PGDATABASE: ${PGDATABASE:-knockout}
+  PGSSL: ${PGSSL:-false}
+  DB_TIMEZONE: ${DB_TIMEZONE:-Asia/Kolkata}
+  SEED_DEMO_DATA: ${SEED_DEMO_DATA:-false}
+  STATE_HISTORY_DAYS: ${STATE_HISTORY_DAYS:-90}
+  STATE_CACHE_TTL_MS: ${STATE_CACHE_TTL_MS:-1000}
+  DB_POOL_SIZE: ${DB_POOL_SIZE:-20}
+  DB_POOL_IDLE_TIMEOUT_MS: ${DB_POOL_IDLE_TIMEOUT_MS:-60000}
+  DB_CONNECT_TIMEOUT_MS: ${DB_CONNECT_TIMEOUT_MS:-10000}
+  TENANT_POOL_IDLE_MS: ${TENANT_POOL_IDLE_MS:-300000}
+
 services:
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - knockout_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Kolkata}
+      POSTGRES_DB: ${PGDATABASE:-knockout}
+      POSTGRES_USER: ${DB_USER:-knockout}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD}
+    ports:
+      - "127.0.0.1:${PG_EXTERNAL_PORT:-5432}:5432"
+    volumes:
+      - knockout_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   mariadb:
+    profiles: [legacy]
     image: mariadb:11.4
     container_name: knockout-mariadb
     restart: unless-stopped
@@ -21,6 +78,7 @@ services:
       retries: 20
 
   phpmyadmin:
+    profiles: [legacy]
     image: phpmyadmin:latest
     container_name: knockout-phpmyadmin
     restart: unless-stopped
@@ -56,14 +114,14 @@ services:
 
   admin-backend:
     build: ./backend
-    container_name: knockout-admin-backend
     restart: unless-stopped
     environment:
+      <<: [*storage-env, *runtime-env]
       TZ: ${TZ:-Asia/Kolkata}
       PORT: 6001
       PORTAL_ROLE: admin
-      DB_HOST: ${DB_HOST:-mariadb}
-      DB_PORT: ${DB_PORT:-3306}
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
@@ -78,7 +136,7 @@ services:
     expose:
       - "6001"
     depends_on:
-      mariadb:
+      postgres:
         condition: service_healthy
       minio:
         condition: service_healthy
@@ -90,14 +148,14 @@ services:
 
   waiter-backend:
     build: ./backend
-    container_name: knockout-waiter-backend
     restart: unless-stopped
     environment:
+      <<: [*storage-env, *runtime-env]
       TZ: ${TZ:-Asia/Kolkata}
       PORT: 7000
       PORTAL_ROLE: waiter
-      DB_HOST: ${DB_HOST:-mariadb}
-      DB_PORT: ${DB_PORT:-3306}
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
@@ -120,14 +178,14 @@ services:
 
   chef-backend:
     build: ./backend
-    container_name: knockout-chef-backend
     restart: unless-stopped
     environment:
+      <<: [*storage-env, *runtime-env]
       TZ: ${TZ:-Asia/Kolkata}
       PORT: 8000
       PORTAL_ROLE: chef
-      DB_HOST: ${DB_HOST:-mariadb}
-      DB_PORT: ${DB_PORT:-3306}
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
@@ -150,14 +208,14 @@ services:
 
   juicer-backend:
     build: ./backend
-    container_name: knockout-juicer-backend
     restart: unless-stopped
     environment:
+      <<: [*storage-env, *runtime-env]
       TZ: ${TZ:-Asia/Kolkata}
       PORT: 9000
       PORTAL_ROLE: juicer
-      DB_HOST: ${DB_HOST:-mariadb}
-      DB_PORT: ${DB_PORT:-3306}
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
@@ -180,23 +238,39 @@ services:
 
   superadmin-backend:
     build: ./backend
-    container_name: knockout-master-backend
     restart: unless-stopped
     command: npm run start:master
     environment:
+      <<: [*storage-env, *runtime-env]
       PORT: 5000
       TZ: ${TZ:-Asia/Kolkata}
-      DB_HOST: ${DB_HOST:-mariadb}
-      DB_PORT: ${DB_PORT:-3306}
-      DB_ROOT_USER: ${DB_ROOT_USER:-root}
-      DB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      MASTER_BOOTSTRAP_PIN: ${MASTER_BOOTSTRAP_PIN:-}
       MASTER_DB_NAME: ${MASTER_DB_NAME:-knockout_master}
+      MASTER_ADMIN_POOL_SIZE: ${MASTER_ADMIN_POOL_SIZE:-20}
+      MASTER_DB_POOL_SIZE: ${MASTER_DB_POOL_SIZE:-30}
+      MASTER_SESSION_SECRET: ${MASTER_SESSION_SECRET}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      REDIS_REQUIRED: ${REDIS_REQUIRED:-true}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio}
+      MINIO_PORT: ${MINIO_PORT:-9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET: ${MINIO_BUCKET:-food-images}
+      MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL}
     ports:
       - "${BACKEND_PORT:-5100}:5000"
     depends_on:
       admin-backend:
         condition: service_healthy
       juicer-backend:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
@@ -206,7 +280,6 @@ services:
 
   superadmin-frontend:
     build: ./frontend
-    container_name: knockout-master-frontend
     restart: unless-stopped
     environment:
       VITE_PORTAL_ROLE: unified
@@ -220,5 +293,7 @@ services:
         condition: service_healthy
 
 volumes:
+  knockout_postgres:
   knockout_mariadb:
   knockout_minio:
+  knockout_redis:

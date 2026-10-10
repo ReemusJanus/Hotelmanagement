@@ -1,3 +1,7 @@
+# PostgreSQL backend
+
+The backend now targets PostgreSQL. Read [the migration guide](docs/POSTGRESQL-MIGRATION.md) before starting services against existing MariaDB data. Older MariaDB instructions below describe the legacy setup.
+
 # KnockOUT — Restaurant Management Suite
 
 For the complete functional, integration, billing, printing, API, database, mobile, and regression test plan, see [TESTING_GUIDE.md](./TESTING_GUIDE.md).
@@ -104,6 +108,11 @@ Docker volumes retain data across container restarts:
 
 - `knockout_mariadb`
 - `knockout_minio`
+- `knockout_redis`
+
+## Production capacity
+
+See [SCALING.md](./SCALING.md) for the horizontal-scaling architecture, environment settings, and the staged k6 capacity test for validating 10,000–15,000 concurrent users.
 
 Stop services without deleting data:
 

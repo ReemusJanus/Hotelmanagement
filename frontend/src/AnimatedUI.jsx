@@ -35,10 +35,9 @@ function reveal(elements) {
     fresh,
     {
       opacity: [0, 1],
-      transform: ["translateY(14px) scale(.985)", "translateY(0) scale(1)"],
-      filter: ["blur(3px)", "blur(0px)"],
+      translate: ["0 12px", "0 0"],
     },
-    { duration: 0.42, delay: stagger(0.035), ease: [0.22, 1, 0.36, 1] },
+    { duration: 0.42, delay: (index) => Math.min(index * 0.025, 0.2), ease: [0.22, 1, 0.36, 1] },
   );
 }
 
@@ -78,9 +77,34 @@ export default function AnimatedUI() {
     const release=(event)=>{const target=event.target.closest?.(interactive);if(target)animate(target,{scale:1},{duration:.32,type:"spring",bounce:.35})};
     const iconIn=(event)=>{const target=event.target.closest?.("button");if(!target||target.contains(event.relatedTarget))return;const icon=target.querySelector(":scope > svg");if(icon)animate(icon,{scale:1.16,rotate:3},{duration:.22})};
     const iconOut=(event)=>{const target=event.target.closest?.("button");if(!target||target.contains(event.relatedTarget))return;const icon=target.querySelector(":scope > svg");if(icon)animate(icon,{scale:1,rotate:0},{duration:.28})};
-    const spotlight=(event)=>{const card=event.target.closest?.(".panel,.stat,.overview-metric,.company-card,.food-card,.table-card,.ticket");if(!card)return;const box=card.getBoundingClientRect();card.style.setProperty("--motion-x",`${event.clientX-box.left}px`);card.style.setProperty("--motion-y",`${event.clientY-box.top}px`)};
-    appRoot.addEventListener("pointerdown",press);appRoot.addEventListener("pointerup",release);appRoot.addEventListener("pointercancel",release);appRoot.addEventListener("pointerover",iconIn);appRoot.addEventListener("pointerout",iconOut);appRoot.addEventListener("pointermove",spotlight);
-    return () => {observer.disconnect();appRoot.removeEventListener("pointerdown",press);appRoot.removeEventListener("pointerup",release);appRoot.removeEventListener("pointercancel",release);appRoot.removeEventListener("pointerover",iconIn);appRoot.removeEventListener("pointerout",iconOut);appRoot.removeEventListener("pointermove",spotlight)};
+    const depthSelector=".stat,.overview-metric,.company-card,.food-card,.table-card,.ticket,.parcel-card,.chef-stock-grid > article,.landing-feature-grid article,.landing-visit-details > span,.landing-visit-details > a";
+    let depthFrame = 0;
+    let pendingPointer = null;
+    const finePointer = window.matchMedia("(hover: hover) and (pointer: fine)");
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const spotlight = (event) => {
+      if (!finePointer.matches || reducedMotion.matches || event.pointerType === "touch") return;
+      const card = event.target.closest?.(depthSelector);
+      if (!card) return;
+      pendingPointer = { card, x: event.clientX, y: event.clientY };
+      if (depthFrame) return;
+      depthFrame = requestAnimationFrame(() => {
+        depthFrame = 0;
+        if (!pendingPointer) return;
+        const { card, x, y } = pendingPointer;
+        pendingPointer = null;
+        if (!card.isConnected) return;
+        const box = card.getBoundingClientRect();
+        if (!box.width || !box.height) return;
+        card.style.setProperty("--motion-x", `${x - box.left}px`);
+        card.style.setProperty("--motion-y", `${y - box.top}px`);
+        card.style.setProperty("--tilt-x", `${(0.5 - (y - box.top) / box.height) * 3}deg`);
+        card.style.setProperty("--tilt-y", `${((x - box.left) / box.width - 0.5) * 4}deg`);
+      });
+    };
+    const resetDepth=(event)=>{const card=event.target.closest?.(depthSelector);if(!card||card.contains(event.relatedTarget))return;if(pendingPointer?.card===card)pendingPointer=null;card.style.setProperty("--tilt-x","0deg");card.style.setProperty("--tilt-y","0deg")};
+    appRoot.addEventListener("pointerdown",press);appRoot.addEventListener("pointerup",release);appRoot.addEventListener("pointercancel",release);appRoot.addEventListener("pointerover",iconIn);appRoot.addEventListener("pointerout",iconOut);appRoot.addEventListener("pointerout",resetDepth);appRoot.addEventListener("pointermove",spotlight);
+    return () => {cancelAnimationFrame(depthFrame);observer.disconnect();appRoot.removeEventListener("pointerdown",press);appRoot.removeEventListener("pointerup",release);appRoot.removeEventListener("pointercancel",release);appRoot.removeEventListener("pointerover",iconIn);appRoot.removeEventListener("pointerout",iconOut);appRoot.removeEventListener("pointerout",resetDepth);appRoot.removeEventListener("pointermove",spotlight)};
   }, []);
 
   return null;

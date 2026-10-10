@@ -1,0 +1,11 @@
+erDiagram
+  users ||--o{ staff_attendance : user_id
+  restaurant_tables ||--o{ bookings : table_id
+  restaurant_tables o|--o{ orders : table_id
+  orders ||--o{ order_items : order_id
+  menu_items ||--o{ order_items : menu_id
+  menu_items ||--o{ combo_components : combo_id
+  menu_items ||--o{ combo_components : menu_id
+  inventory ||--o{ inventory_transactions : inventory_id
+  inventory ||--o{ stock_requests : inventory_id
+  supplier_purchases ||--o{ supplier_payments : purchase_id
