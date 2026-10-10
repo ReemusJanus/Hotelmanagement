@@ -1,3 +1,7 @@
+# PostgreSQL backend
+
+The backend now targets PostgreSQL. Read [the migration guide](docs/POSTGRESQL-MIGRATION.md) before starting services against existing MariaDB data. Older MariaDB instructions below describe the legacy setup.
+
 # KnockOUT — Restaurant Management Suite
 
 For the complete functional, integration, billing, printing, API, database, mobile, and regression test plan, see [TESTING_GUIDE.md](./TESTING_GUIDE.md).

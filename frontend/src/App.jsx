@@ -1,3 +1,4 @@
+import LandingStory from "./LandingStory";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   LayoutDashboard,
@@ -210,66 +211,7 @@ function CompanyApp() {
   );
 }
 
-function PublicLanding({ login, register }) {
-  useEffect(() => {
-    const elements = document.querySelectorAll(".landing-signatures, .landing-section-head, .landing-feature-grid article, .landing-visit>div, .landing-visit-details>*");
-    elements.forEach((element, index) => {
-      element.classList.add("landing-reveal");
-      element.style.setProperty("--reveal-delay", `${Math.min(index % 4, 3) * 90}ms`);
-    });
-    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
-      if (entry.isIntersecting) {
-        entry.target.classList.add("is-visible");
-        observer.unobserve(entry.target);
-      }
-    }), { threshold: .14, rootMargin: "0px 0px -45px" });
-    elements.forEach((element) => observer.observe(element));
-    return () => observer.disconnect();
-  }, []);
-  return <main className="public-landing">
-    <nav className="landing-nav">
-      <button className="landing-brand" onClick={() => window.scrollTo({top:0,behavior:"smooth"})}><img src="/knockout-logo.png" alt="KnockOUT logo"/><span><b>KnockOUT</b><small>HOSPITALITY OPERATING SYSTEM</small></span></button>
-      <div><a href="#platform">Platform</a><a href="#businesses">Businesses</a><a href="#operations">Operations</a><button className="landing-register-nav" onClick={register}>Register</button><button className="landing-login" onClick={login}>Login <ArrowRight size={15}/></button></div>
-    </nav>
-    <section className="landing-hero">
-      <div className="landing-hero-copy">
-        <span className="landing-pill"><i/> ONE PLATFORM · EVERY LOCATION</span>
-        <h1>Run hospitality <em>beautifully.</em></h1>
-        <p>A modular SaaS operating system for restaurants, cafés, hotels, food courts, and cloud kitchens. Connect every order, table, kitchen station, employee, stock item, and bill in one live workspace.</p>
-        <blockquote className="landing-hero-quote">“Less operational noise. More time for exceptional hospitality.”</blockquote>
-        <div className="landing-hero-actions"><a className="landing-explore" href="#platform">Explore the platform <ArrowRight/></a></div>
-        <div className="landing-trust"><span><CheckCircle2/> Isolated hotel workspaces</span><span><CheckCircle2/> Live order tracking</span><span><CheckCircle2/> Role-based access</span></div>
-      </div>
-      <div className="landing-food-visual">
-        <img src="/hospitality-platform-hero-v1.png" alt="Café, restaurant and hotel businesses managed with KnockOUT"/>
-        <div className="landing-food-shine"/>
-        <span className="landing-food-edition">CAFÉ · RESTAURANT · HOTEL</span>
-        <div className="landing-dish-label broasted"><small>LIVE OPERATIONS</small><b>Orders to service</b><span>Every round tracked in real time</span></div>
-        <div className="landing-dish-label alfaham"><small>BUSINESS CONTROL</small><b>One clear overview</b><span>Revenue · stock · teams · billing</span></div>
-        <div className="landing-food-seal"><Gauge/><span><b>Always in sync</b><small>Web and mobile workspaces</small></span></div>
-      </div>
-    </section>
-    <section className="landing-signatures" id="businesses">
-      <div><span className="eyebrow">BUILT FOR HOSPITALITY</span><h2>One system that adapts to your business.</h2></div>
-      <div className="landing-signature-copy"><p>Start with the modules you need and enable more as you grow. Each property receives its own Hotel ID, isolated data, staff access, configuration, and operating dashboard.</p><blockquote>Restaurants · Cafés · Hotels · Cloud kitchens · Multi-location groups</blockquote></div>
-      <span className="landing-signature-mark">S<span>A</span></span>
-    </section>
-    <section className="landing-platform" id="platform">
-      <div className="landing-section-head"><span className="eyebrow">THE COMPLETE PLATFORM</span><h2>Everything your service team needs</h2><p>Purpose-built portals keep every role focused while sharing the same live operational truth.</p></div>
-      <div className="landing-feature-grid">
-        <article><Armchair/><span>01</span><h3>Tables &amp; Waiters</h3><p>Take orders by service round, follow each handoff, add more items, and send completed tables to billing.</p></article>
-        <article><ChefHat/><span>02</span><h3>Kitchen Display</h3><p>Separate table and parcel queues with live ticket counts, preparation timers, and individual round status.</p></article>
-        <article><Package/><span>03</span><h3>Parcel Operations</h3><p>Manage takeaway orders, scheduled collections, kitchen progress, handoff, payment, and order history.</p></article>
-        <article><TrendingUp/><span>04</span><h3>Business Intelligence</h3><p>See revenue, bills, stock alerts, staff attendance, and live service health from the admin dashboard.</p></article>
-      </div>
-    </section>
-    <section className="landing-visit" id="operations">
-      <div><span className="eyebrow">CONTROL WITHOUT COMPLEXITY</span><h2>From first order to final bill.</h2><p>Every status change reaches the right portal through live socket updates.</p></div>
-      <div className="landing-visit-details"><span><ShoppingCart/><b>Capture every order</b><small>New rounds remain separate and easy to audit</small></span><span><Clock3/><b>Track every handoff</b><small>Preparing, ready, collected, received, and complete</small></span><span><Settings/><b>Choose every module</b><small>Super Admin controls access for each business</small></span></div>
-    </section>
-    <footer className="landing-footer"><span><img src="/knockout-logo.png" alt=""/><b>KnockOUT</b></span><p>Powered by KnockOUT</p><small>© 2026 KnockOUT SaaS</small></footer>
-  </main>;
-}
+function PublicLanding(props) { return <LandingStory {...props}/>; }
 
 function Login({ onLogin }) {
   const routeFromPath = () => location.pathname === "/login" ? "login" : location.pathname === "/register" ? "register" : "landing";
@@ -1203,29 +1145,45 @@ function AdminOverview({ data, setPage, user }) {
   const active = data.orders.filter(
       (o) => !["completed", "served"].includes(o.status),
     ),
-    revenue = data.orders
-      .filter((o) => o.total)
-      .reduce((s, o) => s + o.total, 0),
+    days = Array.from({ length: 7 }, (_, index) => {
+      const date = new Date();
+      date.setDate(date.getDate() - 6 + index);
+      const key = dateKey(date);
+      return { key, label: date.toLocaleDateString(undefined, { weekday: "short" }),
+        total: data.orders.filter((order) => order.paymentStatus === "paid" && dateKey(order.completedAt || order.createdAt) === key)
+          .reduce((sum, order) => sum + Number(order.total || 0), 0) };
+    }),
+    revenue = days[6].total,
+    chartMax = Math.max(1, ...days.map((day) => day.total)),
     hour = new Date().getHours(),
     greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   return (
     <div className="portal-overview admin-overview">
-      <PageHead
-        kicker="ADMIN COMMAND CENTER"
-        title={`${greeting}, ${user?.name || "Admin"}`}
-        sub="A complete view of today's restaurant operations."
-        action={
-          <button className="primary" onClick={() => setPage("orders")}>
-            View all orders <ArrowRight size={15} />
-          </button>
-        }
-      />
+      <section className="premier-hero">
+        <div className="premier-hero-copy">
+          <span className="premier-kicker"><span /> YOUR SERVICE, IN FOCUS</span>
+          <h1>{greeting},<br /><em>{user?.name || "Admin"}.</em></h1>
+          <p>A little more perspective.<br />Everything you need for a seamless service.</p>
+          <div className="premier-hero-actions">
+            <button className="primary" onClick={() => setPage("orders")}>Open orders <ArrowRight size={16} /></button>
+            <button className="secondary" onClick={() => setPage("tables")}>Explore the floor <Armchair size={16} /></button>
+          </div>
+          <span className="premier-date">{new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</span>
+        </div>
+        <div className="premier-scene" aria-hidden="true">
+          <div className="premier-orbit premier-orbit-one" /><div className="premier-orbit premier-orbit-two" />
+          <div className="premier-plinth"><div className="premier-sculpture">K<span>HOSPITALITY, ELEVATED</span></div></div>
+          <div className="premier-float premier-float-top"><Armchair size={19}/><div><strong>{data.tables.filter(t => t.status === "available").length} tables</strong><small>Ready to welcome</small></div></div>
+          <div className="premier-float premier-float-bottom"><ReceiptText size={19}/><div><strong>{active.length} active orders</strong><small>Service at a glance</small></div></div>
+        </div>
+      </section>
+      <div className="premier-section-label"><span>THE DAILY PICTURE</span><span>Current workspace data</span></div>
       <div className="stats">
         <Stat
           icon={TrendingUp}
           label="Today's Revenue"
-          value={money(revenue || 28460)}
-          note="↑ 12.4% vs yesterday"
+          value={money(revenue)}
+          note="Paid orders today"
         />
         <Stat
           icon={Armchair}
@@ -1254,12 +1212,10 @@ function AdminOverview({ data, setPage, user }) {
             sub="Sales over the last 7 days"
           />
           <div className="chart">
-            {[52, 69, 45, 77, 62, 91, 83].map((x, i) => (
-              <div key={i}>
-                <span style={{ height: `${x}%` }}></span>
-                <small>
-                  {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][i]}
-                </small>
+            {days.map((day) => (
+              <div key={day.key} title={`${day.label}: ${money(day.total)}`}>
+                <span style={{ height: `${day.total ? Math.max(3, day.total / chartMax * 100) : 0}%` }} />
+                <small>{day.label}</small>
               </div>
             ))}
           </div>
@@ -1270,7 +1226,7 @@ function AdminOverview({ data, setPage, user }) {
             <Ring
               value={Math.round(
                 (data.tables.filter((t) => t.status !== "available").length /
-                  data.tables.length) *
+                  Math.max(1, data.tables.length)) *
                   100,
               )}
             />
