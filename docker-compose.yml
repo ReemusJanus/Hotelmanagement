@@ -16,6 +16,7 @@ x-runtime-env: &runtime-env
   PGDATABASE: ${PGDATABASE:-knockout}
   PGSSL: ${PGSSL:-false}
   DB_TIMEZONE: ${DB_TIMEZONE:-Asia/Kolkata}
+  RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
   SEED_DEMO_DATA: ${SEED_DEMO_DATA:-false}
   STATE_HISTORY_DAYS: ${STATE_HISTORY_DAYS:-90}
   STATE_CACHE_TTL_MS: ${STATE_CACHE_TTL_MS:-1000}
@@ -74,134 +75,9 @@ services:
       timeout: 5s
       retries: 20
 
-  admin-backend:
+  backend:
     build: ./backend
     restart: unless-stopped
-    environment:
-      <<: [*storage-env, *runtime-env]
-      TZ: ${TZ:-Asia/Kolkata}
-      PORT: 6001
-      PORTAL_ROLE: admin
-      DB_HOST: ${DB_HOST:-postgres}
-      DB_PORT: ${DB_PORT:-5432}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_NAME: ${DB_NAME}
-      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio}
-      MINIO_PORT: ${MINIO_PORT:-9000}
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      MINIO_BUCKET: ${MINIO_BUCKET:-food-images}
-      MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL}
-      SMS_WEBHOOK_URL: ${SMS_WEBHOOK_URL:-}
-      SMS_WEBHOOK_TOKEN: ${SMS_WEBHOOK_TOKEN:-}
-    expose:
-      - "6001"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:6001/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
-      interval: 5s
-      timeout: 4s
-      retries: 20
-
-  waiter-backend:
-    build: ./backend
-    restart: unless-stopped
-    environment:
-      <<: [*storage-env, *runtime-env]
-      TZ: ${TZ:-Asia/Kolkata}
-      PORT: 7000
-      PORTAL_ROLE: waiter
-      DB_HOST: ${DB_HOST:-postgres}
-      DB_PORT: ${DB_PORT:-5432}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_NAME: ${DB_NAME}
-      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio}
-      MINIO_PORT: ${MINIO_PORT:-9000}
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      MINIO_BUCKET: ${MINIO_BUCKET:-food-images}
-      MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL}
-    expose:
-      - "7000"
-    depends_on:
-      admin-backend:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:7000/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
-      interval: 5s
-      timeout: 4s
-      retries: 20
-
-  chef-backend:
-    build: ./backend
-    restart: unless-stopped
-    environment:
-      <<: [*storage-env, *runtime-env]
-      TZ: ${TZ:-Asia/Kolkata}
-      PORT: 8000
-      PORTAL_ROLE: chef
-      DB_HOST: ${DB_HOST:-postgres}
-      DB_PORT: ${DB_PORT:-5432}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_NAME: ${DB_NAME}
-      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio}
-      MINIO_PORT: ${MINIO_PORT:-9000}
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      MINIO_BUCKET: ${MINIO_BUCKET:-food-images}
-      MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL}
-    expose:
-      - "8000"
-    depends_on:
-      admin-backend:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8000/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
-      interval: 5s
-      timeout: 4s
-      retries: 20
-
-  juicer-backend:
-    build: ./backend
-    restart: unless-stopped
-    environment:
-      <<: [*storage-env, *runtime-env]
-      TZ: ${TZ:-Asia/Kolkata}
-      PORT: 9000
-      PORTAL_ROLE: juicer
-      DB_HOST: ${DB_HOST:-postgres}
-      DB_PORT: ${DB_PORT:-5432}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_NAME: ${DB_NAME}
-      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio}
-      MINIO_PORT: ${MINIO_PORT:-9000}
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      MINIO_BUCKET: ${MINIO_BUCKET:-food-images}
-      MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL}
-    expose:
-      - "9000"
-    depends_on:
-      admin-backend:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:9000/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
-      interval: 5s
-      timeout: 4s
-      retries: 20
-
-  superadmin-backend:
-    build: ./backend
-    restart: unless-stopped
-    command: npm run start:master
     environment:
       <<: [*storage-env, *runtime-env]
       PORT: 5000
@@ -211,6 +87,7 @@ services:
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       MASTER_BOOTSTRAP_PIN: ${MASTER_BOOTSTRAP_PIN:-}
+      DB_NAME: ${DB_NAME:-knockout}
       MASTER_DB_NAME: ${MASTER_DB_NAME:-knockout_master}
       MASTER_ADMIN_POOL_SIZE: ${MASTER_ADMIN_POOL_SIZE:-20}
       MASTER_DB_POOL_SIZE: ${MASTER_DB_POOL_SIZE:-30}
@@ -226,9 +103,7 @@ services:
     ports:
       - "${BACKEND_PORT:-5100}:5000"
     depends_on:
-      admin-backend:
-        condition: service_healthy
-      juicer-backend:
+      postgres:
         condition: service_healthy
       minio:
         condition: service_healthy
@@ -246,12 +121,12 @@ services:
     environment:
       VITE_PORTAL_ROLE: unified
       VITE_API_URL: /api
-      VITE_PROXY_TARGET: http://superadmin-backend:5000
+      VITE_PROXY_TARGET: http://backend:5000
     command: npm run dev -- --host 0.0.0.0 --port 5000
     ports:
       - "${FRONTEND_PORT:-5200}:5000"
     depends_on:
-      superadmin-backend:
+      backend:
         condition: service_healthy
 
 volumes:

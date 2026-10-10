@@ -12,7 +12,6 @@ export async function createNestApplication(expressInstance, serviceName) {
       logger: ['log', 'error', 'warn'],
     },
   );
-  application.enableShutdownHooks();
   const instance = application.getHttpAdapter().getInstance();
   instance.disable('x-powered-by');
   instance.locals.nestService = serviceName;

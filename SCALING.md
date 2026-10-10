@@ -1,22 +1,22 @@
 # KnockOUT capacity and production scaling
 
-The application is now stateless at the API edge, uses Redis to relay live events between Master API replicas, reclaims idle tenant pools, coalesces simultaneous state reads, bounds operational history, and exposes separate liveness/readiness endpoints.
+The application is now stateless at the API edge, uses Redis to relay live events between unified backend replicas, reclaims idle tenant pools, coalesces simultaneous state reads, bounds operational history, and exposes separate liveness/readiness endpoints.
 
 This makes horizontal scaling possible; it is not by itself a guarantee of 15,000 concurrent active users. Capacity must be proven on production-sized infrastructure with the included k6 test.
 
 For a local multi-instance smoke test, first let one instance complete migrations, set `RUN_MIGRATIONS=false`, then run:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.scale.yml up -d --scale superadmin-backend=3 --scale admin-backend=2 --scale waiter-backend=2 --scale chef-backend=2 --scale juicer-backend=2
+docker compose -f docker-compose.yml -f docker-compose.scale.yml up -d --scale backend=3
 ```
 
-The Master API uses the configured host-port range and Docker's service networking distributes its internal calls among role replicas. Production should run migrations as a separate one-shot deployment before API replicas start.
+Each unified backend replica uses the configured host-port range and serves all roles internally. Production should run migrations as a separate one-shot deployment before API replicas start.
 
 ## Required production topology
 
 - Put the built frontend behind a CDN; do not run the Vite development server.
-- Put TLS and a load balancer in front of at least three Master API replicas. Enable WebSocket upgrades and a load-balancer idle timeout above 30 seconds.
-- Run at least two replicas of every enabled role backend. Their APIs are stateless.
+- Put TLS and a load balancer in front of at least three unified backend replicas. Enable WebSocket upgrades and a load-balancer idle timeout above 30 seconds.
+- Scale complete backend replicas; do not start separate role services.
 - Use managed Redis with replication/persistence. Set `REDIS_REQUIRED=true` so a replica does not silently start without cross-instance events.
 - Use a managed PostgreSQL cluster with automated backups, failover, connection monitoring, and a read replica for reports. Keep aggregate reporting off transactional request paths.
 - Use S3 or clustered MinIO and a CDN for images/reports.

@@ -11,7 +11,7 @@
     "preinstall": "node scripts/check-runtime-versions.mjs",
     "dev": "node --watch src/main.js",
     "start": "node src/main.js",
-    "start:master": "node src/main-master.js",
+    "start:master": "node src/main.js",
     "test": "node --test test/*.test.js"
   },
   "dependencies": {

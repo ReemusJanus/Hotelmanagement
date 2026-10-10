@@ -1,6 +1,6 @@
 # PostgreSQL setup
 
-The backend uses PostgreSQL 17 and the `pg` driver. All services use one physical database, selected by `PGDATABASE` (default `knockout`). `knockout_master` holds the company catalog; `knockout` and `tenant_*` schemas hold company data. Tenant schemas share the application's database role. API fields named `databaseName` remain tenant schema identifiers.
+The backend uses PostgreSQL 17 and the `pg` driver. The single backend uses one physical database, selected by `PGDATABASE` (default `knockout`). `knockout_master` holds the company catalog; `knockout` and `tenant_*` schemas hold company data. Tenant schemas share the application's database role. API fields named `databaseName` remain tenant schema identifiers.
 
 ## Configuration and startup
 
@@ -40,3 +40,5 @@ Back up object storage separately; SQL backups contain object references, not im
 ## Verification
 
 `npm test --workspace backend` runs the unit test. Integration tests require a disposable PostgreSQL server and exported `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, with `PG_INTEGRATION=1`. The test role must be able to create temporary databases. Tests cover schema constraints, identity sequences, tenant isolation, transactions and API workflows. API tests stub object storage; they do not validate a production storage deployment.
+
+Backend process management: [single-backend deployment](SINGLE-BACKEND.md).

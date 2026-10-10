@@ -1,0 +1,15 @@
+module.exports={apps:[{
+ name:'knockout-backend',
+ cwd:__dirname,
+ script:'backend/src/main.js',
+ node_args:'--env-file=.env',
+ instances:1,
+ exec_mode:'fork',
+ autorestart:true,
+ restart_delay:3000,
+ wait_ready:true,
+ listen_timeout:60000,
+ kill_timeout:35000,
+ time:true,
+ env:{NODE_ENV:'production',PORT:5000,DB_HOST:'127.0.0.1',DB_PORT:5432,MINIO_ENDPOINT:'127.0.0.1',MINIO_PORT:9100,REDIS_URL:'',REDIS_REQUIRED:'false'}
+}]};

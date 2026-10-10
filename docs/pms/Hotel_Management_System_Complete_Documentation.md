@@ -1,3 +1,5 @@
+> Current runtime topology and startup: [single-backend deployment](../SINGLE-BACKEND.md). Separate role service topology below is historical.
+
 > Database operations and configuration: see [PostgreSQL setup](../POSTGRESQL.md). The application uses one physical database with tenant schemas.
 
 # HOTEL MANAGEMENT SYSTEM (PMS)

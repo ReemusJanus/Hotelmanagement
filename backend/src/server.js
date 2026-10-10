@@ -1,17 +1,27 @@
 import express from 'express';
-import cors from 'cors';
 import multer from 'multer';
 import crypto from 'node:crypto';
-import {pool, migrate, getState, runWithTenant, closePools} from './database.js';
-import {minio, bucket, initializeStorage, ensureStorageFolders, putImage, putReport, storageProvider} from './storage.js';
-import {createNestApplication} from './nest/platform.js';
+import {pool, getState, runWithTenant} from './database.js';
+import {minio, bucket, putImage, putReport, storageProvider} from './storage.js';
 
-const app = express();
-const portalRole = process.env.PORTAL_ROLE || 'admin';
 const stateCache=new Map(),stateCacheTtl=Math.max(100,Number(process.env.STATE_CACHE_TTL_MS||1000));
+export function createRoleRouter(portalRole,{onMutation=async()=>{}}={}) {
+if(!['admin','waiter','chef','juicer'].includes(portalRole))throw new Error('Invalid portal role');
+const app = express.Router();
 const upload = multer({storage: multer.memoryStorage(), limits:{fileSize:5*1024*1024}, fileFilter:(_req,file,cb)=>cb(null,file.mimetype.startsWith('image/'))});
-app.use(cors()); app.use(express.json({limit:'6mb'}));
-app.use((req,_res,next)=>{const requested=String(req.headers['x-company-database']||process.env.DB_NAME||'knockout').toLowerCase();const database=/^(?:knockout(?:_[0-9]+)?|tenant_[a-z][a-z0-9_]{1,54})$/.test(requested)?requested:(process.env.DB_NAME||'knockout');runWithTenant(database,next)});
+// This router is reachable only after the unified gateway verifies the session.
+app.use((req,res,next)=>{
+ if(!req.portalSession||req.portalSession.role!==portalRole)return res.status(401).json({message:'A verified portal session is required'});
+ const originalJson=res.json.bind(res);
+ res.json=body=>{
+  if(['GET','HEAD','OPTIONS'].includes(req.method)||res.statusCode>=400)return originalJson(body);
+  stateCache.delete(req.portalSession.companyDatabase);
+  Promise.resolve(onMutation(req)).then(()=>originalJson(body)).catch(next);
+  return res;
+ };
+ next();
+});
+app.use((req,_res,next)=>{const requested=req.portalSession.companyDatabase;const database=/^(?:knockout(?:_[0-9]+)?|tenant_[a-z][a-z0-9_]{1,54})$/.test(requested)?requested:(process.env.DB_NAME||'knockout');runWithTenant(database,next)});
 
 const asyncRoute = fn => (req,res,next)=>Promise.resolve(fn(req,res,next)).catch(next);
 async function storageOwner(){const[[settings]]=await pool.query("SELECT hotel_name \"hotelName\" FROM settings WHERE id=1");return settings?.hotelName||'knockout'}
@@ -133,9 +143,5 @@ app.delete('/api/menu/:id/image',asyncRoute(async(req,res)=>{const [[item]]=awai
 app.post('/api/reports',asyncRoute(async(req,res)=>{if(!req.body.filename||typeof req.body.content!=='string')return res.status(400).json({message:'Report filename and content are required'});const stored=await putReport(await storageOwner(),req.body.filename,req.body.content,req.body.contentType||'text/csv;charset=utf-8');res.status(201).json({...stored,provider:storageProvider})}));
 app.use((error,_req,res,_next)=>{console.error(error);res.status(error.status||500).json({message:error.message||'Server error'})});
 
-const port=process.env.PORT||4000;
-let nestApplication;
-async function start(){for(let i=0;i<30;i++){try{if(process.env.RUN_MIGRATIONS!=='false')await migrate();await initializeStorage();await ensureStorageFolders(await storageOwner());nestApplication=await createNestApplication(app,`knockout-${portalRole}`);await nestApplication.listen(port,'0.0.0.0');console.log(`KnockOUT ${portalRole} NestJS API on http://localhost:${port}`);return}catch(e){console.log(`Waiting for services (${i+1}/30): ${e.message}`);await new Promise(r=>setTimeout(r,3000))}}process.exit(1)}
-async function shutdown(signal){console.log(`${signal}: draining ${portalRole} API`);await Promise.allSettled([nestApplication?.close(),closePools()]);process.exit(0)}
-process.on('SIGTERM',()=>shutdown('SIGTERM'));process.on('SIGINT',()=>shutdown('SIGINT'));
-start();
+return app;
+}

@@ -7,5 +7,5 @@ COPY package*.json ./
 COPY scripts ./scripts
 RUN npm install --omit=dev
 COPY src ./src
-EXPOSE 4000
+EXPOSE 5000
 CMD ["npm", "start"]

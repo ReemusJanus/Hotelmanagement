@@ -1,4 +1,6 @@
 import express from 'express';
+import {createRoleRouter} from './server.js';
+import {migrate,closePools} from './database.js';
 import cors from 'cors';
 import {createPool,quoteIdentifier} from './postgres.js';
 import {ensureSchema,tenantDDL,masterDDL,syncSequences} from './schema.js';
@@ -51,7 +53,7 @@ const socketHeartbeat=setInterval(()=>{for(const socket of socketServer.clients)
 socketServer.on('close',()=>clearInterval(socketHeartbeat));
 app.use((req,res,next)=>{
  if(['GET','HEAD','OPTIONS'].includes(req.method)||['/api/login','/api/public/resolve-login'].includes(req.path))return next();
- res.on('finish',()=>{if(res.statusCode<400){const requested=String(req.headers['x-company-database']||'');const database=socketDatabase(requested)||'master';broadcastChange(database,req.path)}});
+ res.on('finish',()=>{if(res.statusCode<400){const database=req.portalSession?.companyDatabase||'master';broadcastChange(database,req.path)}});
  next();
 });
 
@@ -165,6 +167,10 @@ async function companySummary(company){
  try{if(!validTenant(company.databaseName))throw new Error('Invalid tenant database');const db=`"${company.databaseName}"`;const[[users],[orders],[revenue],[stock],[daily]]=await Promise.all([masterPool.query("SELECT tenant_user_id id,name,role,pin,phone,active FROM company_users WHERE company_id=? ORDER BY role,name",[company.id]),adminPool.query(`SELECT COUNT(*) count FROM ${db}.orders WHERE status<>'completed'`),adminPool.query(`SELECT COALESCE(SUM(total),0) total FROM ${db}.orders WHERE payment_status='paid'`),adminPool.query(`SELECT COUNT(*) count FROM ${db}.inventory WHERE quantity<=min_quantity`),adminPool.query(`SELECT to_char(completed_at, 'YYYY-MM-DD') AS day,COUNT(*) bills,COALESCE(SUM(total),0) total FROM ${db}.orders WHERE payment_status='paid' AND completed_at IS NOT NULL GROUP BY to_char(completed_at,'YYYY-MM-DD') ORDER BY day DESC LIMIT 31`)]);return{...company,users:users.map(user=>({...user,active:!!user.active})),staffCount:users.filter(user=>user.active).length,adminLoginActive:users.some(user=>user.role==='admin'&&user.active),activeOrders:orders[0].count,revenue:Number(revenue[0].total),dailyRevenue:daily.map(row=>({date:row.day,bills:row.bills,total:Number(row.total)})),lowStock:stock[0].count,online:true}}catch(error){console.error("Company summary failed:",error.message);return{...company,users:[],staffCount:0,adminLoginActive:false,activeOrders:0,revenue:0,dailyRevenue:[],lowStock:0,online:false}}
 }
 
+const roleRouters=Object.fromEntries(['admin','waiter','chef','juicer'].map(role=>[role,createRoleRouter(role,{onMutation:async req=>{
+ if(/^\/api\/staff(?:\/|$)/.test(req.originalUrl)||['/api/juicer-login','/api/profile'].includes(req.path))await syncCompanyUsers(req.portalSession.companyDatabase);
+}})]));
+
 app.use('/api',asyncRoute(async(req,res,next)=>{
  const session=verifyPortalToken(req.headers.authorization),role=session?.role||'';
  if(!session&&['admin','waiter','chef','juicer'].includes(String(req.headers['x-portal-role']||'').toLowerCase())&&!['/public/resolve-login','/login'].includes(req.path))return res.status(401).json({message:'Your secure session has expired. Sign in with your PIN again.'});
@@ -174,19 +180,24 @@ app.use('/api',asyncRoute(async(req,res,next)=>{
  const modules=parseModules(company.modules),path=req.path,moduleKey=path.startsWith('/bookings')?'bookings':path.startsWith('/tables')?'tables':path.startsWith('/finance')||path.startsWith('/supplier-')?'finance':path.startsWith('/inventory')||path.startsWith('/stock-')?'stock':path.startsWith('/menu')||path.startsWith('/combos')?'menu':path.startsWith('/staff')||path.startsWith('/attendance')||path.startsWith('/kitchen-staff')?'staff':null;
  if(path==='/session')return res.json({modules,companyDatabase:session.companyDatabase,role});
  if((role==='chef'&&!modules.kitchen)||(role==='juicer'&&!modules.juicer)||(moduleKey&&!modules[moduleKey]))return res.status(403).json({code:'MODULE_DISABLED',message:`This module is disabled for your hotel by KnockOUT Master.`});
- const targets={admin:process.env.ADMIN_API_URL||'http://admin-backend:6001',waiter:process.env.WAITER_API_URL||'http://waiter-backend:7000',chef:process.env.CHEF_API_URL||'http://chef-backend:8000',juicer:process.env.JUICER_API_URL||'http://juicer-backend:9000'},headers={'x-company-database':session.companyDatabase,'x-portal-role':role,'x-portal-user-id':String(session.id)};
- if(req.headers['content-type'])headers['content-type']=req.headers['content-type'];
- const options={method:req.method,headers};
- if(!['GET','HEAD'].includes(req.method)){if(req.is('application/json'))options.body=JSON.stringify(req.body||{});else{options.body=req;options.duplex='half'}}
- const upstream=await fetch(`${targets[role]}${req.originalUrl}`,options),body=Buffer.from(await upstream.arrayBuffer());
- if(upstream.ok&&!['GET','HEAD','OPTIONS'].includes(req.method)&&(/^\/api\/staff(?:\/|$)/.test(req.originalUrl)||req.originalUrl==='/api/juicer-login'||req.originalUrl==='/api/profile'))await syncCompanyUsers(headers['x-company-database']);
- res.status(upstream.status);const contentType=upstream.headers.get('content-type');if(contentType)res.set('content-type',contentType);res.send(body);
+ req.portalSession=session;
+ req.headers['x-company-database']=session.companyDatabase;
+ req.headers['x-portal-role']=role;
+ req.headers['x-portal-user-id']=String(session.id);
+ // Mounted /api middleware sees a stripped URL; role routers retain existing /api paths.
+ const previousUrl=req.url;
+ req.url='/api'+req.url;
+ return roleRouters[role](req,res,error=>{
+  req.url=previousUrl;
+  if(error)return next(error);
+  res.status(404).json({message:'Unknown portal API route'});
+ });
 }));
 
 app.use('/api',(req,res,next)=>{if(['/live','/health','/framework','/login','/public/companies','/public/resolve-login','/public/company-registrations','/public/onboarding-status','/public/complete-registration'].includes(req.path))return next();const session=verifyPortalToken(req.headers.authorization);if(session?.role!=='superadmin')return res.status(401).json({message:'KnockOUT Master approval is required'});next()});
 
-app.get('/api/live',(_req,res)=>res.json({ok:true,service:'knockout-master-api'}));
-app.get('/api/health',asyncRoute(async(_req,res)=>{await masterPool.query("SELECT 1");res.json({ok:true,service:'knockout-master-api',database:masterDb,realtime:realtimeStatus()})}));
+app.get('/api/live',(_req,res)=>res.json({ok:true,service:'knockout-api'}));
+app.get('/api/health',asyncRoute(async(_req,res)=>{await masterPool.query("SELECT 1");res.json({ok:true,service:'knockout-api',database:'postgresql',masterSchema:masterDb,realtime:realtimeStatus()})}));
 app.get('/api/public/companies',asyncRoute(async(_req,res)=>{const[rows]=await masterPool.query("SELECT id,company_name \"companyName\",database_name \"databaseName\" FROM companies WHERE status='active' ORDER BY id");res.json(rows)}));
  app.post('/api/public/company-registrations',asyncRoute(async(req,res)=>{const companyName=String(req.body.companyName||'').trim(),adminName=String(req.body.adminName||'').trim(),email=String(req.body.email||'').trim(),phone=String(req.body.phone||'').trim().replace(/[\s()-]/g,''),packageCode=String(req.body.packageCode||'starter'),periodMonths=Number(req.body.periodMonths||1);if(!companyName||!adminName||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!/^\+?[0-9]{8,15}$/.test(phone)||!packages[packageCode]||![1,6,12].includes(periodMonths))return res.status(400).json({message:'Enter valid business details, package, and subscription period'});const databaseName=tenantDatabaseName(companyName);const[[company]]=await masterPool.query("SELECT id FROM companies WHERE company_name=? OR database_name=?",[companyName,databaseName]),[[pending]]=await masterPool.query("SELECT id FROM company_registration_requests WHERE (company_name=? OR email=?) AND completed_at IS NULL AND status IN ('pending','approved') LIMIT 1",[companyName,email]);if(company)return res.status(409).json({message:'This hotel/business name is already registered'});if(pending)return res.status(409).json({message:'An active application already uses this business name or email'});const temporaryPin=await generateTemporaryPin(),selectedModules=packages[packageCode],[result]=await masterPool.query("INSERT INTO company_registration_requests (company_name,hotel_id,admin_name,admin_pin,temporary_pin,package_code,period_months,selected_modules,email,phone) VALUES (?,NULL,?,NULL,?,?,?,?,?,?)",[companyName,adminName,temporaryPin,packageCode,periodMonths,JSON.stringify(selectedModules),email,phone]);const message=`Your KnockOUT application is waiting for approval. Temporary onboarding PIN: ${temporaryPin}. No Hotel ID is required for this temporary PIN.`;await queueNotice(email,'email','KnockOUT application received',message);await queueNotice(phone,'sms','Application received',message);broadcastChange('master','registration.waiting');res.status(201).json({id:result.insertId,status:'pending',temporaryPin,message:'Sent for approval. Your temporary onboarding PIN has been queued to your email and mobile.'})}));
 app.post('/api/public/resolve-login',asyncRoute(async(req,res)=>{await enforceSubscriptions();const hotelId=String(req.body.hotelId||''),pin=String(req.body.pin||'');if(!hotelId||hotelId==='0000'){const[[masterUser]]=await masterPool.query("SELECT id,name FROM master_users WHERE pin=? AND active=TRUE LIMIT 1",[pin]);if(masterUser){const user={...masterUser,role:'superadmin',companyDatabase:null,companyName:'KnockOUT Master',hotelId:'0000'};return res.json({...user,accessToken:issuePortalToken(user)})}if(!hotelId){const[[application]]=await masterPool.query("SELECT id,company_name \"companyName\",admin_name name,status,completed_at \"completedAt\" FROM company_registration_requests WHERE temporary_pin=? AND completed_at IS NULL LIMIT 1",[pin]);if(application)return res.json({...application,role:'applicant',temporaryPin:pin});return res.status(401).json({message:'Invalid Super Admin or temporary onboarding PIN. Hotel staff must enter their Hotel ID.'})}return res.status(401).json({message:'Invalid Master Hotel ID or PIN'})}if(!/^[0-9]{4}$/.test(hotelId)||!/^[0-9]{6}$/.test(pin))return res.status(400).json({message:'Enter your 4-digit Hotel ID and 6-digit PIN'});const matches=await findPortalLogins(null,pin,false,hotelId);if(!matches.length){const blocked=await findPortalLogins(null,pin,true,hotelId),suspended=blocked.find(user=>user.companyStatus==='suspended');if(suspended)return res.status(403).json({code:'COMPANY_SUSPENDED',message:`${suspended.companyName} is suspended. Renew the KnockOUT subscription to restore access.`});return res.status(401).json({message:'Invalid Hotel ID, PIN, or inactive account'})}const user=matches[0];await masterPool.query("INSERT INTO usage_logins (company_id,user_id,role) SELECT id,?,? FROM companies WHERE database_name=?",[user.id,user.role,user.companyDatabase]);res.json({...user,accessToken:issuePortalToken(user)})}));
@@ -208,7 +219,30 @@ app.patch('/api/module-pricing/:key',asyncRoute(async(req,res)=>{const key=Strin
 app.post('/api/reports',asyncRoute(async(req,res)=>{if(!req.body.filename||typeof req.body.content!=='string')return res.status(400).json({message:'Report filename and content are required'});const stored=await putReport('knockout',req.body.filename,req.body.content,req.body.contentType||'text/csv;charset=utf-8');res.status(201).json({...stored,provider:storageProvider})}));
 app.use((error,_req,res,_next)=>{console.error(error);res.status(error.status||500).json({message:error.message||'Master server error'})});
 
-async function start(){for(let attempt=1;attempt<=30;attempt++){try{await initialize();try{await initializeRealtime(relayChange)}catch(error){if(process.env.REDIS_REQUIRED==='true')throw error;console.error(`Redis unavailable; using single-instance realtime: ${error.message}`)}const nest=await createNestApplication(app,'knockout-master');await nest.init();server.listen(port,'0.0.0.0',()=>console.log(`KnockOUT Master NestJS API + WebSocket on http://localhost:${port}`));return}catch(error){console.log(`Waiting for master services (${attempt}/30): ${error.message}`);await new Promise(resolve=>setTimeout(resolve,3000))}}process.exit(1)}
-async function shutdown(signal){console.log(`${signal}: draining connections`);server.close(async()=>{await Promise.allSettled([closeRealtime(),masterPool?.end(),adminPool?.end()]);process.exit(0)});setTimeout(()=>process.exit(1),30000).unref()}
+let nestApplication;
+async function start(){
+ try{
+  if(process.env.RUN_MIGRATIONS!=='false')await migrate();
+  await initialize();
+  try{await initializeRealtime(relayChange)}catch(error){if(process.env.REDIS_REQUIRED==='true')throw error;console.error(`Redis unavailable; using single-instance realtime: ${error.message}`)}
+  nestApplication=await createNestApplication(app,'knockout-api');
+  await nestApplication.init();
+  await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,'0.0.0.0',resolve)});
+  console.log(`KnockOUT unified API + WebSocket on http://localhost:${port}`);
+  if(process.send)process.send('ready');
+ }catch(error){console.error('Backend startup failed:',error);await shutdown('startup failure',1)}
+}
+let stopping=false;
+async function shutdown(signal,exitCode=0){
+ if(stopping)return;stopping=true;
+ console.log(`${signal}: draining unified backend`);
+ const timeout=setTimeout(()=>process.exit(1),30000);timeout.unref();
+ clearInterval(socketHeartbeat);
+ for(const socket of socketServer.clients)socket.terminate();
+ socketServer.close();
+ await new Promise(resolve=>server.close(resolve));
+ await Promise.allSettled([closeRealtime(),masterPool?.end(),adminPool?.end(),closePools(),nestApplication?.close()]);
+ clearTimeout(timeout);process.exit(exitCode);
+}
 process.on('SIGTERM',()=>shutdown('SIGTERM'));process.on('SIGINT',()=>shutdown('SIGINT'));
 start();

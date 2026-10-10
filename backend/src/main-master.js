@@ -1,2 +1,2 @@
-import 'reflect-metadata';
-import './master-server.js';
+// Backward-compatible entry point; starts the same unified application.
+import './main.js';

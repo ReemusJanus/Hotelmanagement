@@ -62,12 +62,21 @@ See `mobile/README.md` for simulator, device, and EAS App Store/Play Store build
 ## Architecture
 
 - One React + Vite frontend for every role
-- NestJS 11 backend with an Express compatibility adapter
+- One NestJS backend process with authenticated Master, Admin, Waiter, Chef and Juicer routing
 - PostgreSQL 17 for all operational data
 - MinIO object storage for food photos
 - Docker Compose with persistent PostgreSQL and MinIO volumes
 
 See [PostgreSQL setup](docs/POSTGRESQL.md) for configuration, schema layout and verification.
+
+## Single backend with PM2
+
+See [single-backend deployment](docs/SINGLE-BACKEND.md). Start one process from the project root:
+
+```bash
+pm2 start ecosystem.config.cjs
+pm2 save
+```
 
 ## Start the platform
 
@@ -82,7 +91,7 @@ docker compose up -d --build
 - Unified frontend: <http://localhost:5200>
 - Master NestJS API: <http://localhost:5100>
 - Master framework health: <http://localhost:5100/api/framework>
-- Admin, Waiter, Chef, and Juicer backends remain isolated inside Docker
+- All roles share one backend service; tenant sessions select their workspace
 - PostgreSQL: `localhost:5432`
 - MinIO API: <http://localhost:9100>
 - MinIO console: <http://localhost:9101>
@@ -96,7 +105,7 @@ PostgreSQL credentials are configured with `PGDATABASE`, `DB_USER` and `DB_PASSW
 
 The API automatically creates the relational schema (demo content requires `SEED_DEMO_DATA=true`), creates the `food-images` bucket, and configures public read access for menu photos.
 
-The browser connects only to the unified frontend and Master API. The Master API resolves each six-digit PIN and securely routes requests to the correct company and role backend.
+The browser connects only to the unified frontend and Master API. The Master API resolves each six-digit PIN and securely routes requests to the correct company and role inside the same process.
 
 ## Persistent data
 

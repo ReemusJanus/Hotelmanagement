@@ -2,13 +2,7 @@
 
 One Expo SDK 57 application for Admin, Waiter, and Chef on iOS and Android.
 
-The first screen selects a portal. Each role then verifies its 4-digit OTP/PIN against its own backend:
-
-| Portal | Demo OTP | API |
-|---|---:|---:|
-| Admin | `1234` | `6000` |
-| Waiter | `1111` | `7100/api` proxy |
-| Chef | `2222` | `8000` |
+All roles connect to the same backend using a Hotel ID and PIN. Configure `EXPO_PUBLIC_API_PORT` to 5000 for PM2 or the published Docker backend port (default 5100).
 
 Set `EXPO_PUBLIC_API_HOST` in `.env` to the computer's LAN IP. Keep the phone and computer on the same network.
 

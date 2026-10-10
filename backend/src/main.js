@@ -1,2 +1,2 @@
 import 'reflect-metadata';
-import './server.js';
+import './master-server.js';

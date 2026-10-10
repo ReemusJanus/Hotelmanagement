@@ -5,8 +5,8 @@ class FrameworkController {
     return {
       ok: true,
       framework: 'NestJS',
-      service: process.env.PORTAL_ROLE ? `knockout-${process.env.PORTAL_ROLE}` : 'knockout-master',
-      architecture: 'multi-tenant',
+      service: 'knockout-api',
+      architecture: 'single-process-multi-tenant',
     };
   }
 }

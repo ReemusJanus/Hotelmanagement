@@ -4,7 +4,7 @@
     "method": "GET",
     "path": "/api/live",
     "file": "backend/src/server.js",
-    "line": 56,
+    "line": 66,
     "body": [],
     "query": [],
     "params": [],
@@ -20,7 +20,7 @@
     "method": "GET",
     "path": "/api/health",
     "file": "backend/src/server.js",
-    "line": 57,
+    "line": 67,
     "body": [],
     "query": [],
     "params": [],
@@ -36,7 +36,7 @@
     "method": "GET",
     "path": "/api/state",
     "file": "backend/src/server.js",
-    "line": 58,
+    "line": 68,
     "body": [],
     "query": [],
     "params": [],
@@ -52,7 +52,7 @@
     "method": "POST",
     "path": "/api/login",
     "file": "backend/src/server.js",
-    "line": 59,
+    "line": 69,
     "body": [
       "pin"
     ],
@@ -73,7 +73,7 @@
     "method": "GET",
     "path": "/api/profile",
     "file": "backend/src/server.js",
-    "line": 60,
+    "line": 70,
     "body": [],
     "query": [],
     "params": [],
@@ -94,7 +94,7 @@
     "method": "PATCH",
     "path": "/api/profile",
     "file": "backend/src/server.js",
-    "line": 61,
+    "line": 71,
     "body": [
       "name",
       "phone",
@@ -124,7 +124,7 @@
     "method": "POST",
     "path": "/api/bookings",
     "file": "backend/src/server.js",
-    "line": 62,
+    "line": 72,
     "body": [
       "tableId",
       "bookingDate",
@@ -157,7 +157,7 @@
     "method": "DELETE",
     "path": "/api/bookings/:id",
     "file": "backend/src/server.js",
-    "line": 85,
+    "line": 95,
     "body": [],
     "query": [],
     "params": [
@@ -183,7 +183,7 @@
     "method": "POST",
     "path": "/api/orders",
     "file": "backend/src/server.js",
-    "line": 86,
+    "line": 96,
     "body": [
       "items.length",
       "items",
@@ -219,7 +219,7 @@
     "method": "POST",
     "path": "/api/orders/:id/items",
     "file": "backend/src/server.js",
-    "line": 87,
+    "line": 97,
     "body": [
       "items.length",
       "items"
@@ -252,7 +252,7 @@
     "method": "PATCH",
     "path": "/api/tables/:id/status",
     "file": "backend/src/server.js",
-    "line": 88,
+    "line": 98,
     "body": [
       "status",
       "bookingTime"
@@ -284,7 +284,7 @@
     "method": "POST",
     "path": "/api/tables",
     "file": "backend/src/server.js",
-    "line": 89,
+    "line": 99,
     "body": [
       "number",
       "seats",
@@ -316,7 +316,7 @@
     "method": "DELETE",
     "path": "/api/tables/:id",
     "file": "backend/src/server.js",
-    "line": 90,
+    "line": 100,
     "body": [],
     "query": [],
     "params": [
@@ -345,7 +345,7 @@
     "method": "POST",
     "path": "/api/parcels",
     "file": "backend/src/server.js",
-    "line": 91,
+    "line": 101,
     "body": [
       "items.length",
       "items",
@@ -380,7 +380,7 @@
     "method": "POST",
     "path": "/api/orders/:id/mark-paid",
     "file": "backend/src/server.js",
-    "line": 92,
+    "line": 102,
     "body": [
       "paymentMethod"
     ],
@@ -416,7 +416,7 @@
     "method": "PATCH",
     "path": "/api/orders/:id/items/status",
     "file": "backend/src/server.js",
-    "line": 93,
+    "line": 103,
     "body": [
       "status",
       "batchNo"
@@ -445,7 +445,7 @@
     "method": "PATCH",
     "path": "/api/orders/:id/batches/:batchNo/handoff",
     "file": "backend/src/server.js",
-    "line": 94,
+    "line": 104,
     "body": [
       "status"
     ],
@@ -478,7 +478,7 @@
     "method": "PATCH",
     "path": "/api/orders/:id/status",
     "file": "backend/src/server.js",
-    "line": 95,
+    "line": 105,
     "body": [
       "status"
     ],
@@ -511,7 +511,7 @@
     "method": "POST",
     "path": "/api/orders/:id/request-bill",
     "file": "backend/src/server.js",
-    "line": 96,
+    "line": 106,
     "body": [],
     "query": [],
     "params": [
@@ -542,7 +542,7 @@
     "method": "GET",
     "path": "/api/orders/:id/bill",
     "file": "backend/src/server.js",
-    "line": 97,
+    "line": 107,
     "body": [],
     "query": [],
     "params": [
@@ -565,7 +565,7 @@
     "method": "POST",
     "path": "/api/orders/:id/finalize",
     "file": "backend/src/server.js",
-    "line": 98,
+    "line": 108,
     "body": [
       "paymentMethod"
     ],
@@ -596,7 +596,7 @@
     "method": "POST",
     "path": "/api/inventory",
     "file": "backend/src/server.js",
-    "line": 99,
+    "line": 109,
     "body": [
       "name",
       "category",
@@ -634,7 +634,7 @@
     "method": "PUT",
     "path": "/api/inventory/:id",
     "file": "backend/src/server.js",
-    "line": 100,
+    "line": 110,
     "body": [
       "name",
       "category",
@@ -667,7 +667,7 @@
     "method": "POST",
     "path": "/api/inventory/:id/movements",
     "file": "backend/src/server.js",
-    "line": 101,
+    "line": 111,
     "body": [
       "movementType",
       "quantity",
@@ -703,7 +703,7 @@
     "method": "DELETE",
     "path": "/api/inventory/:id",
     "file": "backend/src/server.js",
-    "line": 102,
+    "line": 112,
     "body": [],
     "query": [],
     "params": [
@@ -729,7 +729,7 @@
     "method": "POST",
     "path": "/api/stock-requests",
     "file": "backend/src/server.js",
-    "line": 103,
+    "line": 113,
     "body": [
       "inventoryId",
       "requestedQuantity",
@@ -764,7 +764,7 @@
     "method": "PATCH",
     "path": "/api/stock-requests/:id/status",
     "file": "backend/src/server.js",
-    "line": 104,
+    "line": 114,
     "body": [
       "status"
     ],
@@ -795,7 +795,7 @@
     "method": "POST",
     "path": "/api/finance",
     "file": "backend/src/server.js",
-    "line": 105,
+    "line": 115,
     "body": [
       "entryType",
       "category",
@@ -833,7 +833,7 @@
     "method": "DELETE",
     "path": "/api/finance/:id",
     "file": "backend/src/server.js",
-    "line": 106,
+    "line": 116,
     "body": [],
     "query": [],
     "params": [
@@ -856,7 +856,7 @@
     "method": "POST",
     "path": "/api/supplier-purchases",
     "file": "backend/src/server.js",
-    "line": 107,
+    "line": 117,
     "body": [
       "supplierName",
       "invoiceNumber",
@@ -899,7 +899,7 @@
     "method": "POST",
     "path": "/api/supplier-purchases/:id/payments",
     "file": "backend/src/server.js",
-    "line": 108,
+    "line": 118,
     "body": [
       "amount",
       "paymentDate",
@@ -934,7 +934,7 @@
     "method": "DELETE",
     "path": "/api/supplier-purchases/:id",
     "file": "backend/src/server.js",
-    "line": 109,
+    "line": 119,
     "body": [],
     "query": [],
     "params": [
@@ -957,7 +957,7 @@
     "method": "PUT",
     "path": "/api/settings",
     "file": "backend/src/server.js",
-    "line": 110,
+    "line": 120,
     "body": [
       "hotelName",
       "taxRate",
@@ -979,7 +979,7 @@
     "method": "GET",
     "path": "/api/attendance/:id",
     "file": "backend/src/server.js",
-    "line": 112,
+    "line": 122,
     "body": [],
     "query": [],
     "params": [
@@ -1002,7 +1002,7 @@
     "method": "POST",
     "path": "/api/attendance/:id/check-in",
     "file": "backend/src/server.js",
-    "line": 113,
+    "line": 123,
     "body": [
       "notes"
     ],
@@ -1033,7 +1033,7 @@
     "method": "POST",
     "path": "/api/attendance/:id/check-out",
     "file": "backend/src/server.js",
-    "line": 114,
+    "line": 124,
     "body": [
       "notes"
     ],
@@ -1063,7 +1063,7 @@
     "method": "POST",
     "path": "/api/staff",
     "file": "backend/src/server.js",
-    "line": 115,
+    "line": 125,
     "body": [
       "name",
       "role",
@@ -1100,7 +1100,7 @@
     "method": "PUT",
     "path": "/api/staff/:id",
     "file": "backend/src/server.js",
-    "line": 116,
+    "line": 126,
     "body": [
       "name",
       "role",
@@ -1144,7 +1144,7 @@
     "method": "DELETE",
     "path": "/api/staff/:id",
     "file": "backend/src/server.js",
-    "line": 117,
+    "line": 127,
     "body": [],
     "query": [],
     "params": [
@@ -1173,7 +1173,7 @@
     "method": "GET",
     "path": "/api/juicer-login",
     "file": "backend/src/server.js",
-    "line": 118,
+    "line": 128,
     "body": [],
     "query": [],
     "params": [],
@@ -1194,7 +1194,7 @@
     "method": "POST",
     "path": "/api/juicer-login",
     "file": "backend/src/server.js",
-    "line": 119,
+    "line": 129,
     "body": [
       "name",
       "phone",
@@ -1231,7 +1231,7 @@
     "method": "POST",
     "path": "/api/kitchen-staff",
     "file": "backend/src/server.js",
-    "line": 120,
+    "line": 130,
     "body": [
       "name",
       "designation",
@@ -1275,7 +1275,7 @@
     "method": "PUT",
     "path": "/api/kitchen-staff/:id",
     "file": "backend/src/server.js",
-    "line": 121,
+    "line": 131,
     "body": [
       "name",
       "designation",
@@ -1323,7 +1323,7 @@
     "method": "DELETE",
     "path": "/api/kitchen-staff/:id",
     "file": "backend/src/server.js",
-    "line": 122,
+    "line": 132,
     "body": [],
     "query": [],
     "params": [
@@ -1349,7 +1349,7 @@
     "method": "POST",
     "path": "/api/staff/:id/check-in",
     "file": "backend/src/server.js",
-    "line": 123,
+    "line": 133,
     "body": [
       "notes"
     ],
@@ -1381,7 +1381,7 @@
     "method": "POST",
     "path": "/api/staff/:id/check-out",
     "file": "backend/src/server.js",
-    "line": 124,
+    "line": 134,
     "body": [
       "notes"
     ],
@@ -1409,7 +1409,7 @@
     "method": "POST",
     "path": "/api/menu",
     "file": "backend/src/server.js",
-    "line": 125,
+    "line": 135,
     "body": [
       "name",
       "category",
@@ -1445,7 +1445,7 @@
     "method": "PUT",
     "path": "/api/menu/:id",
     "file": "backend/src/server.js",
-    "line": 126,
+    "line": 136,
     "body": [
       "name",
       "category",
@@ -1479,7 +1479,7 @@
     "method": "DELETE",
     "path": "/api/menu/:id",
     "file": "backend/src/server.js",
-    "line": 127,
+    "line": 137,
     "body": [],
     "query": [],
     "params": [
@@ -1502,7 +1502,7 @@
     "method": "PATCH",
     "path": "/api/menu/:id/availability",
     "file": "backend/src/server.js",
-    "line": 128,
+    "line": 138,
     "body": [
       "available"
     ],
@@ -1535,7 +1535,7 @@
     "method": "POST",
     "path": "/api/combos",
     "file": "backend/src/server.js",
-    "line": 129,
+    "line": 139,
     "body": [
       "name",
       "description",
@@ -1571,7 +1571,7 @@
     "method": "PUT",
     "path": "/api/combos/:id",
     "file": "backend/src/server.js",
-    "line": 130,
+    "line": 140,
     "body": [
       "name",
       "description",
@@ -1604,7 +1604,7 @@
     "method": "POST",
     "path": "/api/menu/:id/image",
     "file": "backend/src/server.js",
-    "line": 131,
+    "line": 141,
     "body": [],
     "query": [],
     "params": [
@@ -1630,7 +1630,7 @@
     "method": "DELETE",
     "path": "/api/menu/:id/image",
     "file": "backend/src/server.js",
-    "line": 132,
+    "line": 142,
     "body": [],
     "query": [],
     "params": [
@@ -1648,7 +1648,7 @@
     "method": "POST",
     "path": "/api/reports",
     "file": "backend/src/server.js",
-    "line": 133,
+    "line": 143,
     "body": [
       "filename",
       "content",
@@ -1674,12 +1674,12 @@
     "method": "GET",
     "path": "/api/live",
     "file": "backend/src/master-server.js",
-    "line": 188,
+    "line": 199,
     "body": [],
     "query": [],
     "params": [],
     "responses": [
-      "{ok: true, service: \"knockout-master-api\"}"
+      "{ok: true, service: \"knockout-api\"}"
     ],
     "errors": [],
     "statuses": [],
@@ -1690,12 +1690,12 @@
     "method": "GET",
     "path": "/api/health",
     "file": "backend/src/master-server.js",
-    "line": 189,
+    "line": 200,
     "body": [],
     "query": [],
     "params": [],
     "responses": [
-      "{ok: true, service: \"knockout-master-api\", database: <masterDb>, realtime: <computed>}"
+      "{ok: true, service: \"knockout-api\", database: \"postgresql\", masterSchema: <masterDb>, realtime: <computed>}"
     ],
     "errors": [],
     "statuses": [],
@@ -1706,7 +1706,7 @@
     "method": "GET",
     "path": "/api/public/companies",
     "file": "backend/src/master-server.js",
-    "line": 190,
+    "line": 201,
     "body": [],
     "query": [],
     "params": [],
@@ -1722,7 +1722,7 @@
     "method": "POST",
     "path": "/api/public/company-registrations",
     "file": "backend/src/master-server.js",
-    "line": 191,
+    "line": 202,
     "body": [
       "companyName",
       "adminName",
@@ -1757,7 +1757,7 @@
     "method": "POST",
     "path": "/api/public/resolve-login",
     "file": "backend/src/master-server.js",
-    "line": 192,
+    "line": 203,
     "body": [
       "hotelId",
       "pin"
@@ -1791,7 +1791,7 @@
     "method": "POST",
     "path": "/api/public/onboarding-status",
     "file": "backend/src/master-server.js",
-    "line": 193,
+    "line": 204,
     "body": [
       "id",
       "pin"
@@ -1815,7 +1815,7 @@
     "method": "POST",
     "path": "/api/public/complete-registration",
     "file": "backend/src/master-server.js",
-    "line": 194,
+    "line": 205,
     "body": [
       "pin",
       "id",
@@ -1852,7 +1852,7 @@
     "method": "POST",
     "path": "/api/login",
     "file": "backend/src/master-server.js",
-    "line": 195,
+    "line": 206,
     "body": [
       "pin"
     ],
@@ -1875,7 +1875,7 @@
     "method": "GET",
     "path": "/api/state",
     "file": "backend/src/master-server.js",
-    "line": 196,
+    "line": 207,
     "body": [],
     "query": [],
     "params": [],
@@ -1891,7 +1891,7 @@
     "method": "POST",
     "path": "/api/companies",
     "file": "backend/src/master-server.js",
-    "line": 197,
+    "line": 208,
     "body": [
       "companyName",
       "adminName",
@@ -1915,7 +1915,7 @@
     "method": "POST",
     "path": "/api/company-registrations/:id/approve",
     "file": "backend/src/master-server.js",
-    "line": 198,
+    "line": 209,
     "body": [
       "reviewNote"
     ],
@@ -1942,7 +1942,7 @@
     "method": "PATCH",
     "path": "/api/companies/:id/modules",
     "file": "backend/src/master-server.js",
-    "line": 199,
+    "line": 210,
     "body": [
       "module",
       "enabled"
@@ -1971,7 +1971,7 @@
     "method": "PATCH",
     "path": "/api/saas-invoices/:id/status",
     "file": "backend/src/master-server.js",
-    "line": 200,
+    "line": 211,
     "body": [
       "status"
     ],
@@ -1999,7 +1999,7 @@
     "method": "POST",
     "path": "/api/company-registrations/:id/reject",
     "file": "backend/src/master-server.js",
-    "line": 201,
+    "line": 212,
     "body": [
       "reviewNote"
     ],
@@ -2024,7 +2024,7 @@
     "method": "PATCH",
     "path": "/api/companies/:id/status",
     "file": "backend/src/master-server.js",
-    "line": 202,
+    "line": 213,
     "body": [
       "status"
     ],
@@ -2052,7 +2052,7 @@
     "method": "PATCH",
     "path": "/api/companies/:companyId/users/:userId/pin",
     "file": "backend/src/master-server.js",
-    "line": 203,
+    "line": 214,
     "body": [
       "pin"
     ],
@@ -2085,7 +2085,7 @@
     "method": "PATCH",
     "path": "/api/master-users/:userId/pin",
     "file": "backend/src/master-server.js",
-    "line": 204,
+    "line": 215,
     "body": [
       "pin"
     ],
@@ -2115,7 +2115,7 @@
     "method": "DELETE",
     "path": "/api/companies/:id",
     "file": "backend/src/master-server.js",
-    "line": 205,
+    "line": 216,
     "body": [
       "companyName"
     ],
@@ -2148,7 +2148,7 @@
     "method": "GET",
     "path": "/api/module-pricing",
     "file": "backend/src/master-server.js",
-    "line": 206,
+    "line": 217,
     "body": [],
     "query": [],
     "params": [],
@@ -2164,7 +2164,7 @@
     "method": "PATCH",
     "path": "/api/module-pricing/:key",
     "file": "backend/src/master-server.js",
-    "line": 207,
+    "line": 218,
     "body": [
       "price"
     ],
@@ -2189,7 +2189,7 @@
     "method": "POST",
     "path": "/api/reports",
     "file": "backend/src/master-server.js",
-    "line": 208,
+    "line": 219,
     "body": [
       "filename",
       "content",
