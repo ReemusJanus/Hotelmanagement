@@ -18,7 +18,7 @@ The Master API uses the configured host-port range and Docker's service networki
 - Put TLS and a load balancer in front of at least three Master API replicas. Enable WebSocket upgrades and a load-balancer idle timeout above 30 seconds.
 - Run at least two replicas of every enabled role backend. Their APIs are stateless.
 - Use managed Redis with replication/persistence. Set `REDIS_REQUIRED=true` so a replica does not silently start without cross-instance events.
-- Use a managed MariaDB/MySQL cluster with automated backups, failover, connection monitoring, and a read replica for reports. Keep aggregate reporting off transactional request paths.
+- Use a managed PostgreSQL cluster with automated backups, failover, connection monitoring, and a read replica for reports. Keep aggregate reporting off transactional request paths.
 - Use S3 or clustered MinIO and a CDN for images/reports.
 - Run notifications, report generation, and subscription jobs in background workers in the final production environment.
 
@@ -38,7 +38,7 @@ Increase the `active_users` and `realtime_users` targets in stages (500, 2,000, 
 
 - request rate, p50/p95/p99 latency, 4xx/5xx rate
 - open WebSockets and reconnect rate per replica
-- MariaDB active/queued connections, slow queries, lock waits, replication lag
+- PostgreSQL active/queued connections, slow queries, lock waits, replication lag
 - Redis memory, connections, pub/sub throughput, evictions
 - Node event-loop delay, heap, CPU, restarts
 - object-storage latency and notification queue depth

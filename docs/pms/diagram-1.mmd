@@ -7,8 +7,8 @@ flowchart TD
   Master --> Waiter[Waiter API :7000]
   Master --> Chef[Chef API :8000]
   Master --> Juicer[Juicer API :9000]
-  Master --> Catalog[MariaDB master schema]
-  Master --> Tenants[MariaDB tenant schemas]
+  Master --> Catalog[PostgreSQL master schema]
+  Master --> Tenants[PostgreSQL tenant schemas]
   Admin --> Tenants
   Waiter --> Tenants
   Chef --> Tenants

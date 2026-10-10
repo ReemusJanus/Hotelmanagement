@@ -1,3 +1,5 @@
+> Database operations and configuration: see [PostgreSQL setup](../POSTGRESQL.md). The application uses one physical database with tenant schemas.
+
 # HOTEL MANAGEMENT SYSTEM (PMS)
 
 Complete Technical, Architecture, Deployment & Operations Documentation
@@ -55,7 +57,7 @@ The PDF provides a clickable, paginated table of contents. The editable source f
 
 KnockOUT coordinates restaurant table service, kitchen preparation, takeaway orders, billing, stock, staff attendance and daily finances across multiple companies. The master console manages company onboarding, subscriptions and module entitlements. Although the requested title uses PMS, this codebase is predominantly a restaurant/hospitality operations platform. Guest-room inventory, overnight stays, room-rate plans and lodging folios: **Not identified from the current codebase.** Staff check-in/check-out is attendance, not a hotel stay.
 
-Primary users are Super Admin, company Admin, Waiter, Head Chef, Juicer and registration applicants. The system addresses order coordination, service/payment handoff, stock visibility and multi-company access. Browser clients use React/Vite; mobile uses React Native/Expo. NestJS hosts Express handlers. A master API authenticates and proxies requests to four role processes. MariaDB stores a master catalog and separate tenant schemas; MinIO/S3 stores images/reports; Redis relays change events between master replicas.
+Primary users are Super Admin, company Admin, Waiter, Head Chef, Juicer and registration applicants. The system addresses order coordination, service/payment handoff, stock visibility and multi-company access. Browser clients use React/Vite; mobile uses React Native/Expo. NestJS hosts Express handlers. A master API authenticates and proxies requests to four role processes. PostgreSQL stores a master catalog and separate tenant schemas; MinIO/S3 stores images/reports; Redis relays change events between master replicas.
 
 Docker Compose is the only full-stack orchestration found. Application functionality is substantial, but production readiness is not established: functional automation, TLS ingress, backup scheduling, monitoring and CI/CD are missing. Material risks include plaintext PINs, incomplete authorization, schema drift, destructive startup updates and financial transaction edge cases. These findings are source-based, not a live penetration test or database audit.
 
@@ -101,12 +103,11 @@ Room types, hotel stays, room housekeeping/maintenance, guest/corporate/travel-a
 | Browser UI | lucide-react ^0.536.0; motion 13.1.0 | Icons and motion effects |
 | Backend | NestJS 11.2.1; Express ^5.1.0 | Express handlers via Nest ExpressAdapter |
 | Languages | JavaScript, JSX; TypeScript ^5.8.3 dependency | Most application sources are JS/JSX |
-| Database | MariaDB 11.4 image; mysql2 ^3.14.3 | Raw SQL and pooled transactions; no ORM |
+| Database | PostgreSQL 17 image; pg ^8.16.3 | Raw SQL and pooled transactions; no ORM |
 | Realtime | ws ^8.21.3; redis 5.12.1; Redis 7.4-alpine | WebSocket and cross-master pub/sub |
 | Storage | minio ^8.0.5; minio/minio:latest | MinIO or S3 objects |
 | Uploads/HTTP | multer ^2.0.2; cors ^2.8.5; native fetch | Memory uploads, CORS and proxy |
 | Mobile | Expo ~57.0.24; React Native 0.86.3; React 19.2.3 | iOS/Android; independent npm project |
-| Database console | phpmyadmin:latest | Database administration |
 | Testing | k6, runner version not pinned | Load test script, not functional suite |
 | Distribution | eas.json, CLI >=12.0.0 | Native development/preview/production profiles |
 | Build | npm workspaces, Docker Compose | Root web/backend and service orchestration |
@@ -152,7 +153,7 @@ Hotel Management/
   docs/pms/                        this handover
 ```
 
-Generated dist bundles, node_modules, .git internals, Expo caches and historical mobile export-check directories are omitted. The root prototype uses localStorage and is not the React/MariaDB runtime. README links to TESTING_GUIDE.md, which was not found in this snapshot.
+Generated dist bundles, node_modules, .git internals, Expo caches and historical mobile export-check directories are omitted. The root prototype uses localStorage and is not the React/PostgreSQL runtime. README links to TESTING_GUIDE.md, which was not found in this snapshot.
 
 ## 5. System architecture
 
@@ -166,8 +167,8 @@ flowchart TD
   Master --> Waiter[Waiter API :7000]
   Master --> Chef[Chef API :8000]
   Master --> Juicer[Juicer API :9000]
-  Master --> Catalog[MariaDB master schema]
-  Master --> Tenants[MariaDB tenant schemas]
+  Master --> Catalog[PostgreSQL master schema]
+  Master --> Tenants[PostgreSQL tenant schemas]
   Admin --> Tenants
   Waiter --> Tenants
   Chef --> Tenants
@@ -210,9 +211,9 @@ Change notifications use the request tenant header while proxy SQL identity uses
 
 ## 7. Database architecture
 
-MariaDB via mysql2/promise, raw parameterized SQL, no ORM. Default schemas: knockout_master and knockout; new schemas tenant_<normalized_name>, with legacy knockout_<digits> also accepted. Runtime source declares 16 tenant and 9 master tables, plus views tenant_waiting_list and tenant_registrations. Appendix 32.2 lists columns, primary keys, FKs, indexes and constraints.
+PostgreSQL via pg, raw parameterized SQL, no ORM. Default schemas: knockout_master and knockout; new schemas tenant_<normalized_name>, with legacy knockout_<digits> also accepted. Runtime source declares 16 tenant and 9 master tables, plus views tenant_waiting_list and tenant_registrations. Appendix 32.2 lists columns, primary keys, FKs, indexes and constraints.
 
-Most primary keys are AUTO_INCREMENT id. settings uses id=1; module_pricing uses module_key. No stored procedures, custom SQL functions, triggers or independent sequences were identified. Major indexes include booking_slot, request_status, order_live_history, order_payment_date, order_round_status, user_portal_login, registration_status, invoice_month and company_login. company_users has unique company/user and company/PIN; companies has unique company/database/cy_db/Hotel ID; invoices have unique company/month.
+Most primary keys are generated identity IDs with owned sequences. settings uses id=1; module_pricing uses module_key. A touch_updated_at function and triggers maintain update timestamps. Major indexes include booking_slot, request_status, order_live_history, order_payment_date, order_round_status, user_portal_login, registration_status, invoice_month and company_login. company_users has unique company/user and company/PIN; companies has unique company/database/cy_db/Hotel ID; invoices have unique company/month.
 
 ### 7.1 Startup migration mechanism
 
@@ -224,7 +225,6 @@ RUN_MIGRATIONS=false suppresses role migrate only. Compose does not inject that 
 
 knockout-production.sql is an older structure-only export with unsigned IDs and additional uniqueness/indexes, but missing newer fields/master tables. Combining it with runtime DDL can fail on FK type mismatches. Do not treat it as the authoritative current migration.
 
-Provisioning uses CREATE TABLE LIKE; foreign keys are not preserved by this mechanism (MariaDB CREATE TABLE documentation, reference R1 below). ensureDailyFinanceTables also creates supplier_payments with an index instead of an FK when missing. ER relationships below describe explicit base DDL, not a verified constraint guarantee for every tenant. Inspect SHOW CREATE TABLE and information_schema before migration/recovery.
 
 ## 8. Entity relationship diagrams
 
@@ -416,8 +416,7 @@ Vite prints its chosen address (normally 5173). HTTP still uses hostname:5100; W
 | Compose web | http://localhost:5200 |
 | Master API | http://localhost:5100/api |
 | WebSocket | ws://localhost:5100/ws |
-| MariaDB host | localhost:3307 |
-| phpMyAdmin | http://localhost:9200 |
+| PostgreSQL host | localhost:5432 |
 | MinIO API / console | http://localhost:9100 / http://localhost:9101 |
 | Metro | Usually 8081; use printed Expo address |
 
@@ -429,10 +428,9 @@ Both Dockerfiles use node:26.0.0-alpine and install npm 11.12.1. Backend uses np
 
 | Service | Internal port | Host port | Persistence / health |
 |---|---|---|---|
-| mariadb | 3306 | 3307 | knockout_mariadb; connect/InnoDB check |
+| postgres | 5432 | 5432 | knockout_postgres; pg_isready health check |
 | redis | 6379 | None | knockout_redis; ping, AOF, 512 MB allkeys-lru |
 | minio | 9000/9001 | 9100/9101 | knockout_minio; live endpoint |
-| phpmyadmin | 80 | 9200 | Database dependency |
 | admin-backend | 6001 | None | /api/health |
 | waiter-backend | 7000 | None | /api/health |
 | chef-backend | 8000 | None | /api/health |
@@ -447,7 +445,7 @@ docker build -t knockout-api:local ./backend
 docker build -t knockout-web:local ./frontend
 docker compose up -d --build
 docker compose logs --tail=100 superadmin-backend admin-backend
-docker logs --tail=100 knockout-mariadb
+docker logs --tail=100 postgres
 docker compose down
 ```
 
@@ -483,33 +481,11 @@ Recommend redacted structured request IDs, latency/error rates, DB pool/locks, W
 
 Scheduled backups, retention, encryption, off-site copies and restore-test evidence: **Not identified from the current codebase.** Volumes are persistence, not backups; structure-only SQL has no business records.
 
-Recommended: encrypted daily DB backups, verified binlog/PITR if needed, independent/versioned object backups, protected configuration/secret recovery and image references. Preserve catalog and all tenant schemas together. Pause provisioning/DDL during logical snapshots.
+Recommended: encrypted daily DB backups, verified WAL/PITR if needed, independent/versioned object backups, protected configuration/secret recovery and image references. Preserve catalog and all tenant schemas together. Pause provisioning/DDL during logical snapshots.
 
-### 21.1 Proposed manual database backup
+### 21.1 Database backup and restore
 
-The following is a proposed procedure, not an existing automation. Run only against an approved target. Output contains sensitive records/PINs; restrict, encrypt and transfer it using organization-approved tooling. The password is taken from the existing container environment and not printed.
-
-```bash
-mkdir -p backups
-chmod 700 backups
-umask 077
-docker compose exec -T mariadb sh -c 'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb-dump -u root --all-databases --single-transaction --routines --events --triggers' > backups/pms-all.sql
-test -s backups/pms-all.sql
-shasum -a 256 backups/pms-all.sql
-```
-
-Do not commit backups. --single-transaction does not make concurrent DDL safe (MariaDB mariadb-dump documentation, reference R2 below). A concrete off-site destination/KMS configuration is not identified.
-
-### 21.2 Restore rehearsal
-
-Restore only to an isolated MariaDB 11.4 recovery stack; all-database dumps can replace schemas/accounts. Keep APIs stopped to prevent migration. Validate checksum/decrypt, restore, recover object keys and bucket policy, compare catalog/tenant/FK counts, test sampled bills/stock/shifts, then start a controlled app instance and verify authorized login/isolation. Re-enable writes/notifications only after validation.
-
-```bash
-# RECOVERY STACK ONLY; not a healthy production deployment.
-docker compose exec -T mariadb sh -c 'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb -u root' < backups/pms-all.sql
-```
-
-DB backups contain object references, not image/report bytes. No MinIO/S3 backup CLI or versioning configuration exists here; select and test an object-backup procedure before declaring recoverability. Copying a live MinIO directory is not automatically consistent. Redis carries transient events, not authoritative business data; reconnect/refetch after loss.
+See [PostgreSQL setup](../POSTGRESQL.md) for current backup and isolated restore commands. Back up the physical database and object storage separately. Verify restored tenant logins, bills, inventory, and object references before allowing writes.
 
 ## 22. Disaster recovery
 
@@ -615,7 +591,7 @@ VERIFICATION.md records checks actually executed for documentation. No productio
 |---|---|---|---|
 | Install fails | Exact Node/npm mismatch | Version commands | Use declared runtimes |
 | App not ready | DB/storage or migration failure | Compose ps/logs | Fix dependency/DDL first |
-| DB connection | Wrong port/credentials or existing account | DB health; 3307 host vs 3306 internal | Secure account/config correction |
+| DB connection | Wrong port/credentials or existing account | DB health; 5432 host vs 5432 internal | Secure account/config correction |
 | Login | Wrong ID/PIN, inactive/suspended, stale directory | Safe response and user state | Authorized identity/sync repair |
 | 401 | Expiry/token mismatch/master privilege | Redacted request headers | Sign in; align replica secret |
 | 403 | Role/module/suspension | Error code | Authorized policy review |
@@ -624,7 +600,6 @@ VERIFICATION.md records checks actually executed for documentation. No productio
 | 500 | SQL/input/storage exception | Sanitized log/schema | Fix cause; avoid blind POST retries |
 | 502 | External ingress/upstream | Proxy logs and health | Not app-defined; repair target |
 | CORS/mixed content | Fixed API URL/TLS mismatch | Browser network | Consistent TLS/configuration |
-| Migration fails | Old export/type drift/parallel DDL | First SQL error, SHOW CREATE TABLE | Backed-up single controlled migration |
 | Port conflict | Existing listener | Compose ps, host sockets | Change port and client together |
 | Restart loop | Exhausted startup retries | Service logs | Fix dependency, not volume reset |
 | Disk full | DB/objects/logs | df -h; docker system df | Expand/archive approved data |
@@ -639,15 +614,13 @@ VERIFICATION.md records checks actually executed for documentation. No productio
 ```bash
 docker compose ps
 docker compose logs --tail=100 superadmin-backend
-docker compose logs --tail=100 admin-backend mariadb redis
+docker compose logs --tail=100 admin-backend postgres redis
 curl --fail http://localhost:5100/api/live
 curl --fail http://localhost:5100/api/health
 docker compose exec redis redis-cli ping
-docker compose exec mariadb healthcheck.sh --connect --innodb_initialized
 # Approved maintenance window: master initialization runs again.
 docker compose restart superadmin-backend
 # Interactive database inspection; password prompt, never inline password:
-docker compose exec mariadb mariadb -u root -p
 ```
 
 Inspect SHOW DATABASES/PROCESSLIST/CREATE TABLE and information_schema FK/index metadata. Avoid dumping user/outbox tables into shared logs. Backups/restores follow section 21 on approved targets. Before rollout record image/source, backup reference and health; afterward validate roles and financial flows. Roll back images only with schema compatibility; startup changes are not automatically undone.
@@ -716,7 +689,7 @@ SQL readiness and runtime metadata. Source: backend/src/server.js:57.
 |Query parameters|None|
 |Request fields|No JSON fields read|
 |Destructured defaults|See validation and workflow; no destructured defaults|
-|Response shape|{ok: true, service: <computed>, portal: <portalRole>, database: "mariadb", storage: <storageProvider>}|
+|Response shape|{ok: true, service: <computed>, portal: <portalRole>, database: "postgresql", storage: <storageProvider>}|
 |Explicit HTTP statuses|200; unhandled errors 500|
 |Validation / important errors|Shared authentication/error rules; SQL/storage failures may surface as 500|
 
@@ -2001,497 +1974,159 @@ GET /api/framework: Nest controller in backend/src/nest/app.module.js; {ok,frame
 
 /ws: WebSocket on master HTTP server; query database and token required. Tenant token can subscribe only to its database, Super Admin to master. Invalid session closes 1008. Server sends connected then state.changed messages with database/resource/at and optional module details. Heartbeat 25 seconds. No durable replay or revalidation of token expiry on every existing socket message.
 
-### 32.2 Database table and column inventory
+### 32.2 PostgreSQL table inventory
 
-Runtime base definitions are primary evidence. Columns added through later ALTER statements are listed separately. FKs below are base DDL declarations, not guaranteed for cloned schemas.
-
-|Table|Purpose|PK|Foreign keys / major relationships|
-|---|---|---|---|
-|Tenant.settings|Singleton property presentation/charge settings|id|None declared|
-|Tenant.users|Portal login identities and salary basis|id|None declared|
-|Tenant.kitchen_staff|Non-login kitchen personnel|id|None declared|
-|Tenant.staff_attendance|User shift history|id|user_id → users.id|
-|Tenant.restaurant_tables|Seating, status and current-order pointer|id|None declared|
-|Tenant.menu_items|Dishes and sellable combos|id|None declared|
-|Tenant.combo_components|Composition of combo menu items|id|combo_id → menu_items.id; menu_id → menu_items.id|
-|Tenant.orders|Dine-in/takeaway sale and payment state|id|table_id → restaurant_tables.id|
-|Tenant.order_items|Priced sale lines and production/handoff rounds|id|order_id → orders.id; menu_id → menu_items.id|
-|Tenant.inventory|Stock quantities, minimum and cost|id|None declared|
-|Tenant.inventory_transactions|Signed stock movement history|id|inventory_id → inventory.id|
-|Tenant.stock_requests|Chef replenishment requests|id|inventory_id → inventory.id|
-|Tenant.finance_entries|Standalone income/expense records|id|None declared|
-|Tenant.supplier_purchases|Supplier invoice/purchase amounts|id|None declared|
-|Tenant.supplier_payments|Payments against purchases|id|purchase_id → supplier_purchases.id|
-|Tenant.bookings|Future table slot reservations|id|table_id → restaurant_tables.id|
-|Master.master_users|Platform operator credentials|id|None declared|
-|Master.companies|Tenant schema and module registry|id|None declared|
-|Master.company_users|Synchronized tenant login directory|id|company_id → companies.id|
-|Master.company_registration_requests|Application, approval and setup tracking|id|company_id → companies.id|
-|Master.saas_invoices|Company subscription charge snapshots|id|company_id → companies.id|
-|Master.notification_outbox|Notice content and nominal delivery status|id|None declared|
-|Master.tenant_subscriptions|Package term, grace and expiry|id|company_id → companies.id|
-|Master.usage_logins|Company user login counts/history|id|company_id → companies.id|
-|Master.module_pricing|Monthly module price catalog|module_key|None declared|
-
-
-#### Tenant: settings
-
-Evidence: backend/src/database.js:39.
-
-|Column or constraint|Definition|
-|---|---|
-|id|INT PRIMARY KEY DEFAULT 1|
-|hotel_name|VARCHAR(120) NOT NULL|
-|tax_rate|DECIMAL(5,2) NOT NULL DEFAULT 2.5|
-|cgst_rate|DECIMAL(5,2) NOT NULL DEFAULT 2.5|
-|service_charge|DECIMAL(5,2) NOT NULL DEFAULT 18|
-|currency|VARCHAR(8) NOT NULL DEFAULT 'INR'|
-|updated_at|TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP|
-
-
-#### Tenant: users
-
-Evidence: backend/src/database.js:40.
-
-|Column or constraint|Definition|
-|---|---|
-|id|INT AUTO_INCREMENT PRIMARY KEY|
-|name|VARCHAR(120) NOT NULL|
-|role|ENUM('admin','waiter','chef','juicer') NOT NULL|
-|pin|VARCHAR(80) NOT NULL|
-|phone|VARCHAR(30) DEFAULT ''|
-|email|VARCHAR(160) DEFAULT ''|
-|profile_image_url|VARCHAR(500) NULL|
-|profile_image_object|VARCHAR(255) NULL|
-|pay_type|ENUM('daily','monthly') DEFAULT 'monthly'|
-|pay_rate|DECIMAL(10,2) DEFAULT 0|
-|active|BOOLEAN DEFAULT TRUE|
-|deleted_at|DATETIME NULL|
-|created_at|TIMESTAMP DEFAULT CURRENT_TIMESTAMP|
-
-
-#### Tenant: kitchen_staff
-
-Evidence: backend/src/database.js:41.
-
-|Column or constraint|Definition|
-|---|---|
-|id|INT AUTO_INCREMENT PRIMARY KEY|
-|name|VARCHAR(120) NOT NULL|
-|designation|VARCHAR(100) NOT NULL DEFAULT 'Chef'|
-|phone|VARCHAR(30) DEFAULT ''|
-|specialization|VARCHAR(120) DEFAULT ''|
-|pay_type|ENUM('daily','monthly') DEFAULT 'monthly'|
-|pay_rate|DECIMAL(10,2) DEFAULT 0|
-|joined_on|DATE NULL|
-|notes|VARCHAR(255) DEFAULT ''|
-|active|BOOLEAN DEFAULT TRUE|
-|created_by|VARCHAR(120) DEFAULT 'Head Chef'|
-|created_at|TIMESTAMP DEFAULT CURRENT_TIMESTAMP|
-|updated_at|TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP|
-
-
-#### Tenant: staff_attendance
-
-Evidence: backend/src/database.js:42.
-
-|Column or constraint|Definition|
-|---|---|
-|id|INT AUTO_INCREMENT PRIMARY KEY|
-|user_id|INT NOT NULL|
-|check_in|DATETIME NOT NULL|
-|check_out|DATETIME NULL|
-|notes|VARCHAR(255) DEFAULT ''|
-|created_at|TIMESTAMP DEFAULT CURRENT_TIMESTAMP|
-|FOREIGN|KEY (user_id) REFERENCES users(id)|
-
-
-#### Tenant: restaurant_tables
-
-Evidence: backend/src/database.js:43.
-
-|Column or constraint|Definition|
-|---|---|
-|id|INT AUTO_INCREMENT PRIMARY KEY|
-|table_number|INT NOT NULL UNIQUE|
-|seats|INT NOT NULL|
-|area|VARCHAR(80) NOT NULL|
-|status|ENUM('available','occupied','reserved','cleaning') DEFAULT 'available'|
-|guest_name|VARCHAR(120) DEFAULT ''|
-|booking_time|VARCHAR(10) DEFAULT ''|
-|order_id|INT NULL|
-|active|BOOLEAN DEFAULT TRUE|
-
-
-#### Tenant: menu_items
-
-Evidence: backend/src/database.js:44.
-
-|Column or constraint|Definition|
-|---|---|
-|id|INT AUTO_INCREMENT PRIMARY KEY|
-|name|VARCHAR(160) NOT NULL|
-|category|VARCHAR(80) NOT NULL|
-|description|VARCHAR(500) DEFAULT ''|
-|price|DECIMAL(10,2) NOT NULL|
-|icon|VARCHAR(20) DEFAULT '🍽️'|
-|image_url|VARCHAR(500) NULL|
-|image_object|VARCHAR(255) NULL|
-|is_combo|BOOLEAN DEFAULT FALSE|
-|available|BOOLEAN DEFAULT TRUE|
-|created_at|TIMESTAMP DEFAULT CURRENT_TIMESTAMP|
-
-
-#### Tenant: combo_components
-
-Evidence: backend/src/database.js:45.
-
-|Column or constraint|Definition|
-|---|---|
-|id|INT AUTO_INCREMENT PRIMARY KEY|
-|combo_id|INT NOT NULL|
-|menu_id|INT NOT NULL|
-|quantity|INT NOT NULL DEFAULT 1|
-|FOREIGN|KEY (combo_id) REFERENCES menu_items(id) ON DELETE CASCADE|
-|FOREIGN|KEY (menu_id) REFERENCES menu_items(id)|
-
-
-#### Tenant: orders
-
-Evidence: backend/src/database.js:46.
-
-|Column or constraint|Definition|
-|---|---|
-|id|INT AUTO_INCREMENT PRIMARY KEY|
-|table_id|INT NULL|
-|order_type|ENUM('dine_in','parcel') NOT NULL DEFAULT 'dine_in'|
-|guest_name|VARCHAR(120)|
-|customer_phone|VARCHAR(30) DEFAULT ''|
-|waiter|VARCHAR(120)|
-|status|ENUM('new','preparing','ready','collected','received','served','billing_requested','completed') DEFAULT 'new'|
-|payment_status|ENUM('unpaid','paid') DEFAULT 'unpaid'|
-|payment_method|VARCHAR(30) NULL|
-|subtotal|DECIMAL(10,2) NULL|
-|tax|DECIMAL(10,2) NULL|
-|service_charge|DECIMAL(10,2) NULL|
-|total|DECIMAL(10,2) NULL|
-|created_at|DATETIME NOT NULL|
-|completed_at|DATETIME NULL|
-|FOREIGN|KEY (table_id) REFERENCES restaurant_tables(id)|
-
-
-#### Tenant: order_items
-
-Evidence: backend/src/database.js:47.
-
-|Column or constraint|Definition|
-|---|---|
-|id|INT AUTO_INCREMENT PRIMARY KEY|
-|order_id|INT NOT NULL|
-|menu_id|INT NOT NULL|
-|quantity|INT NOT NULL|
-|note|VARCHAR(255) DEFAULT ''|
-|price|DECIMAL(10,2) NOT NULL|
-|production_status|ENUM('new','preparing','ready') NOT NULL DEFAULT 'new'|
-|batch_no|INT NOT NULL DEFAULT 1|
-|handoff_status|ENUM('pending','collected','received') NOT NULL DEFAULT 'pending'|
-|FOREIGN|KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE|
-|FOREIGN|KEY (menu_id) REFERENCES menu_items(id)|
-
-
-#### Tenant: inventory
-
-Evidence: backend/src/database.js:48.
-
-|Column or constraint|Definition|
-|---|---|
-|id|INT AUTO_INCREMENT PRIMARY KEY|
-|name|VARCHAR(160) NOT NULL|
-|category|VARCHAR(80)|
-|quantity|DECIMAL(10,2) NOT NULL|
-|unit|VARCHAR(20) NOT NULL|
-|min_quantity|DECIMAL(10,2) NOT NULL|
-|cost|DECIMAL(10,2) NOT NULL|
-|updated_at|TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP|
-
-
-#### Tenant: inventory_transactions
-
-Evidence: backend/src/database.js:49.
-
-|Column or constraint|Definition|
-|---|---|
-|id|INT AUTO_INCREMENT PRIMARY KEY|
-|inventory_id|INT NOT NULL|
-|movement_type|ENUM('purchase','usage','adjustment','waste') NOT NULL|
-|quantity|DECIMAL(10,2) NOT NULL|
-|unit_cost|DECIMAL(10,2) NULL|
-|note|VARCHAR(255) DEFAULT ''|
-|created_by|VARCHAR(120) DEFAULT 'Admin'|
-|created_at|TIMESTAMP DEFAULT CURRENT_TIMESTAMP|
-|FOREIGN|KEY (inventory_id) REFERENCES inventory(id)|
-
-
-#### Tenant: stock_requests
-
-Evidence: backend/src/database.js:50.
-
-|Column or constraint|Definition|
-|---|---|
-|id|INT AUTO_INCREMENT PRIMARY KEY|
-|inventory_id|INT NOT NULL|
-|requested_quantity|DECIMAL(10,2) NOT NULL|
-|note|VARCHAR(255) DEFAULT ''|
-|requested_by|VARCHAR(120) NOT NULL|
-|status|ENUM('pending','ordered','resolved') NOT NULL DEFAULT 'pending'|
-|created_at|TIMESTAMP DEFAULT CURRENT_TIMESTAMP|
-|updated_at|TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP|
-|resolved_at|DATETIME NULL|
-|FOREIGN|KEY (inventory_id) REFERENCES inventory(id)|
-|INDEX|request_status (status,created_at)|
-
-
-#### Tenant: finance_entries
-
-Evidence: backend/src/database.js:51.
-
-|Column or constraint|Definition|
-|---|---|
-|id|INT AUTO_INCREMENT PRIMARY KEY|
-|entry_type|ENUM('income','expense') NOT NULL|
-|category|VARCHAR(100) NOT NULL|
-|description|VARCHAR(255) NOT NULL|
-|amount|DECIMAL(12,2) NOT NULL|
-|payment_method|VARCHAR(40) DEFAULT 'Cash'|
-|entry_date|DATE NOT NULL|
-|reference|VARCHAR(100) DEFAULT ''|
-|created_by|VARCHAR(120) DEFAULT 'Admin'|
-|created_at|TIMESTAMP DEFAULT CURRENT_TIMESTAMP|
-
-
-#### Tenant: supplier_purchases
-
-Evidence: backend/src/database.js:52.
-
-|Column or constraint|Definition|
-|---|---|
-|id|INT AUTO_INCREMENT PRIMARY KEY|
-|supplier_name|VARCHAR(160) NOT NULL|
-|invoice_number|VARCHAR(100) DEFAULT ''|
-|description|VARCHAR(255) NOT NULL|
-|purchase_date|DATE NOT NULL|
-|total_amount|DECIMAL(12,2) NOT NULL|
-|notes|VARCHAR(255) DEFAULT ''|
-|created_by|VARCHAR(120) DEFAULT 'Admin'|
-|created_at|TIMESTAMP DEFAULT CURRENT_TIMESTAMP|
-
-
-#### Tenant: supplier_payments
-
-Evidence: backend/src/database.js:53.
-
-|Column or constraint|Definition|
-|---|---|
-|id|INT AUTO_INCREMENT PRIMARY KEY|
-|purchase_id|INT NOT NULL|
-|amount|DECIMAL(12,2) NOT NULL|
-|payment_method|VARCHAR(40) DEFAULT 'Cash'|
-|payment_date|DATE NOT NULL|
-|reference|VARCHAR(100) DEFAULT ''|
-|notes|VARCHAR(255) DEFAULT ''|
-|created_by|VARCHAR(120) DEFAULT 'Admin'|
-|created_at|TIMESTAMP DEFAULT CURRENT_TIMESTAMP|
-|FOREIGN|KEY (purchase_id) REFERENCES supplier_purchases(id) ON DELETE CASCADE|
-
-
-#### Tenant: bookings
-
-Evidence: backend/src/database.js:54.
-
-|Column or constraint|Definition|
-|---|---|
-|id|INT AUTO_INCREMENT PRIMARY KEY|
-|table_id|INT NOT NULL|
-|guest_name|VARCHAR(120) NOT NULL DEFAULT 'Customer'|
-|customer_phone|VARCHAR(30) NOT NULL DEFAULT ''|
-|booking_date|DATE NOT NULL|
-|booking_time|VARCHAR(10) NOT NULL|
-|duration_minutes|INT NOT NULL DEFAULT 90|
-|status|ENUM('confirmed','seated','cancelled') DEFAULT 'confirmed'|
-|notification_status|ENUM('queued','sent','failed') DEFAULT 'queued'|
-|notification_message|VARCHAR(500) DEFAULT ''|
-|created_at|TIMESTAMP DEFAULT CURRENT_TIMESTAMP|
-|FOREIGN|KEY (table_id) REFERENCES restaurant_tables(id)|
-|INDEX|booking_slot (table_id,booking_date,status)|
-
+Generated from `backend/src/schema.js`. Identity columns own sequences; timestamp update triggers call `touch_updated_at()`. Tenant provisioning uses the same table definitions, including foreign keys. The SQL export includes all 25 tables and both master views.
 
 #### Master: master_users
 
-Evidence: backend/src/master-server.js:89.
-
-|Column or constraint|Definition|
-|---|---|
-|id|INT AUTO_INCREMENT PRIMARY KEY|
-|name|VARCHAR(120) NOT NULL|
-|pin|VARCHAR(20) NOT NULL|
-|active|BOOLEAN DEFAULT TRUE|
-|created_at|TIMESTAMP DEFAULT CURRENT_TIMESTAMP|
-
+```sql
+CREATE TABLE master_users (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,name VARCHAR(120) NOT NULL,pin VARCHAR(20) NOT NULL,active BOOLEAN DEFAULT TRUE,created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+```
 
 #### Master: companies
 
-Evidence: backend/src/master-server.js:90.
-
-|Column or constraint|Definition|
-|---|---|
-|id|INT AUTO_INCREMENT PRIMARY KEY|
-|company_name|VARCHAR(160) NOT NULL UNIQUE|
-|database_name|VARCHAR(64) NOT NULL UNIQUE|
-|cy_db|VARCHAR(64) NULL UNIQUE|
-|hotel_id|CHAR(4) NULL UNIQUE|
-|modules|JSON NULL|
-|admin_name|VARCHAR(120) NOT NULL|
-|email|VARCHAR(160) DEFAULT ''|
-|phone|VARCHAR(30) DEFAULT ''|
-|status|ENUM('active','suspended') DEFAULT 'active'|
-|created_at|TIMESTAMP DEFAULT CURRENT_TIMESTAMP|
-
+```sql
+CREATE TABLE companies (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,company_name VARCHAR(160) NOT NULL UNIQUE,database_name VARCHAR(64) NOT NULL UNIQUE,cy_db VARCHAR(64) NULL UNIQUE,hotel_id CHAR(4) NULL UNIQUE,modules JSONB NULL,admin_name VARCHAR(120) NOT NULL,email VARCHAR(160) DEFAULT '',phone VARCHAR(30) DEFAULT '',status VARCHAR(40) CHECK (status IN ('active','suspended')) DEFAULT 'active',created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+```
 
 #### Master: company_users
 
-Evidence: backend/src/master-server.js:91.
-
-|Column or constraint|Definition|
-|---|---|
-|id|INT AUTO_INCREMENT PRIMARY KEY|
-|company_id|INT NOT NULL|
-|tenant_user_id|INT NOT NULL|
-|name|VARCHAR(120) NOT NULL|
-|role|ENUM('admin','waiter','chef','juicer') NOT NULL|
-|pin|VARCHAR(80) NOT NULL|
-|phone|VARCHAR(30) DEFAULT ''|
-|email|VARCHAR(160) DEFAULT ''|
-|profile_image_url|VARCHAR(500) NULL|
-|active|BOOLEAN DEFAULT TRUE|
-|created_at|TIMESTAMP DEFAULT CURRENT_TIMESTAMP|
-|updated_at|TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP|
-|UNIQUE|KEY company_tenant_user (company_id,tenant_user_id)|
-|UNIQUE|KEY company_pin (company_id,pin)|
-|FOREIGN|KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE|
-
+```sql
+CREATE TABLE company_users (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,company_id INT NOT NULL,tenant_user_id INT NOT NULL,name VARCHAR(120) NOT NULL,role VARCHAR(40) CHECK (role IN ('admin','waiter','chef','juicer')) NOT NULL,pin VARCHAR(80) NOT NULL,phone VARCHAR(30) DEFAULT '',email VARCHAR(160) DEFAULT '',profile_image_url VARCHAR(500) NULL,active BOOLEAN DEFAULT TRUE,created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,UNIQUE (company_id,tenant_user_id),UNIQUE (company_id,pin),FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE);
+```
 
 #### Master: company_registration_requests
 
-Evidence: backend/src/master-server.js:96.
-
-|Column or constraint|Definition|
-|---|---|
-|id|INT AUTO_INCREMENT PRIMARY KEY|
-|company_name|VARCHAR(160) NOT NULL|
-|hotel_id|CHAR(4) NULL|
-|admin_name|VARCHAR(120) NOT NULL|
-|admin_pin|VARCHAR(20) NULL|
-|email|VARCHAR(160) NOT NULL|
-|phone|VARCHAR(30) NOT NULL|
-|status|ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending'|
-|review_note|VARCHAR(255) DEFAULT ''|
-|company_id|INT NULL|
-|created_at|TIMESTAMP DEFAULT CURRENT_TIMESTAMP|
-|reviewed_at|DATETIME NULL|
-|INDEX|registration_status (status,created_at)|
-|FOREIGN|KEY (company_id) REFERENCES companies(id) ON DELETE SET NULL|
-
+```sql
+CREATE TABLE company_registration_requests (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,company_name VARCHAR(160) NOT NULL,hotel_id CHAR(4) NULL,admin_name VARCHAR(120) NOT NULL,admin_pin VARCHAR(20) NULL,email VARCHAR(160) NOT NULL,phone VARCHAR(30) NOT NULL,status VARCHAR(40) CHECK (status IN ('pending','approved','rejected')) NOT NULL DEFAULT 'pending',review_note VARCHAR(255) DEFAULT '',company_id INT NULL,created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,reviewed_at TIMESTAMP WITH TIME ZONE NULL,FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE SET NULL, temporary_pin CHAR(6) UNIQUE, package_code VARCHAR(30) NOT NULL DEFAULT 'starter', period_months INT NOT NULL DEFAULT 1, selected_modules JSONB, setup_data JSONB, payment_reference VARCHAR(120), completed_at TIMESTAMP WITH TIME ZONE);
+```
 
 #### Master: saas_invoices
 
-Evidence: backend/src/master-server.js:97.
-
-|Column or constraint|Definition|
-|---|---|
-|id|INT AUTO_INCREMENT PRIMARY KEY|
-|company_id|INT NOT NULL|
-|billing_month|DATE NOT NULL|
-|line_items|JSON NOT NULL|
-|subtotal|DECIMAL(12,2) NOT NULL|
-|tax_rate|DECIMAL(5,2) NOT NULL DEFAULT 18|
-|tax|DECIMAL(12,2) NOT NULL|
-|total|DECIMAL(12,2) NOT NULL|
-|status|ENUM('due','paid') NOT NULL DEFAULT 'due'|
-|paid_at|DATETIME NULL|
-|generated_at|TIMESTAMP DEFAULT CURRENT_TIMESTAMP|
-|UNIQUE|KEY company_billing_month(company_id,billing_month)|
-|INDEX|invoice_month(billing_month,status)|
-|FOREIGN|KEY(company_id) REFERENCES companies(id) ON DELETE CASCADE|
-
+```sql
+CREATE TABLE saas_invoices (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,company_id INT NOT NULL,billing_month DATE NOT NULL,line_items JSONB NOT NULL,subtotal DECIMAL(12,2) NOT NULL,tax_rate DECIMAL(5,2) NOT NULL DEFAULT 18,tax DECIMAL(12,2) NOT NULL,total DECIMAL(12,2) NOT NULL,status VARCHAR(40) CHECK (status IN ('due','paid')) NOT NULL DEFAULT 'due',paid_at TIMESTAMP WITH TIME ZONE NULL,generated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,UNIQUE (company_id,billing_month),FOREIGN KEY(company_id) REFERENCES companies(id) ON DELETE CASCADE);
+```
 
 #### Master: notification_outbox
 
-Evidence: backend/src/master-server.js:98.
-
-|Column or constraint|Definition|
-|---|---|
-|id|INT AUTO_INCREMENT PRIMARY KEY|
-|recipient|VARCHAR(180) NOT NULL|
-|channel|ENUM('email','sms') NOT NULL|
-|subject|VARCHAR(180) DEFAULT ''|
-|message|TEXT NOT NULL|
-|status|ENUM('queued','sent','failed') DEFAULT 'queued'|
-|created_at|TIMESTAMP DEFAULT CURRENT_TIMESTAMP|
-|sent_at|DATETIME NULL|
-
+```sql
+CREATE TABLE notification_outbox (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,recipient VARCHAR(180) NOT NULL,channel VARCHAR(40) CHECK (channel IN ('email','sms')) NOT NULL,subject VARCHAR(180) DEFAULT '',message TEXT NOT NULL,status VARCHAR(40) CHECK (status IN ('queued','sent','failed')) DEFAULT 'queued',created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,sent_at TIMESTAMP WITH TIME ZONE NULL);
+```
 
 #### Master: tenant_subscriptions
 
-Evidence: backend/src/master-server.js:99.
-
-|Column or constraint|Definition|
-|---|---|
-|id|INT AUTO_INCREMENT PRIMARY KEY|
-|company_id|INT NOT NULL|
-|package_code|VARCHAR(30) NOT NULL|
-|period_months|INT NOT NULL|
-|started_at|DATETIME NOT NULL|
-|expires_at|DATETIME NOT NULL|
-|grace_ends_at|DATETIME NOT NULL|
-|status|ENUM('active','grace','expired') DEFAULT 'active'|
-|last_reminder_at|DATETIME NULL|
-|created_at|TIMESTAMP DEFAULT CURRENT_TIMESTAMP|
-|FOREIGN|KEY(company_id) REFERENCES companies(id) ON DELETE CASCADE|
-
+```sql
+CREATE TABLE tenant_subscriptions (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,company_id INT NOT NULL,package_code VARCHAR(30) NOT NULL,period_months INT NOT NULL,started_at TIMESTAMP WITH TIME ZONE NOT NULL,expires_at TIMESTAMP WITH TIME ZONE NOT NULL,grace_ends_at TIMESTAMP WITH TIME ZONE NOT NULL,status VARCHAR(40) CHECK (status IN ('active','grace','expired')) DEFAULT 'active',last_reminder_at TIMESTAMP WITH TIME ZONE NULL,created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(company_id) REFERENCES companies(id) ON DELETE CASCADE);
+```
 
 #### Master: usage_logins
 
-Evidence: backend/src/master-server.js:100.
-
-|Column or constraint|Definition|
-|---|---|
-|id|BIGINT AUTO_INCREMENT PRIMARY KEY|
-|company_id|INT NOT NULL|
-|user_id|INT NOT NULL|
-|role|VARCHAR(30) NOT NULL|
-|logged_in_at|TIMESTAMP DEFAULT CURRENT_TIMESTAMP|
-|INDEX|company_login(company_id,logged_in_at)|
-|FOREIGN|KEY(company_id) REFERENCES companies(id) ON DELETE CASCADE|
-
+```sql
+CREATE TABLE usage_logins (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,company_id INT NOT NULL,user_id INT NOT NULL,role VARCHAR(30) NOT NULL,logged_in_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(company_id) REFERENCES companies(id) ON DELETE CASCADE);
+```
 
 #### Master: module_pricing
 
-Evidence: backend/src/master-server.js:101.
+```sql
+CREATE TABLE module_pricing (module_key VARCHAR(30) PRIMARY KEY,module_name VARCHAR(100) NOT NULL,monthly_price DECIMAL(12,2) NOT NULL,updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+```
 
-|Column or constraint|Definition|
-|---|---|
-|module_key|VARCHAR(30) PRIMARY KEY|
-|module_name|VARCHAR(100) NOT NULL|
-|monthly_price|DECIMAL(12,2) NOT NULL|
-|updated_at|TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP|
+#### Tenant: settings
 
+```sql
+CREATE TABLE settings (id INT PRIMARY KEY DEFAULT 1, hotel_name VARCHAR(120) NOT NULL, tax_rate DECIMAL(5,2) NOT NULL DEFAULT 2.5, cgst_rate DECIMAL(5,2) NOT NULL DEFAULT 2.5, service_charge DECIMAL(5,2) NOT NULL DEFAULT 18, currency VARCHAR(8) NOT NULL DEFAULT 'INR', updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+```
 
-#### Upgrade-only columns, indexes and SQL-export differences
+#### Tenant: users
 
-company_registration_requests adds temporary_pin CHAR(6) UNIQUE, package_code, period_months, selected_modules JSON, setup_data JSON, payment_reference and completed_at. The full temporary_pin unique constraint covers completed rows too, while generation checks only unfinished rows: a reused completed PIN can cause an insert conflict.
+```sql
+CREATE TABLE users (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, name VARCHAR(120) NOT NULL, role VARCHAR(40) CHECK (role IN ('admin','waiter','chef','juicer')) NOT NULL, pin VARCHAR(80) NOT NULL, phone VARCHAR(30) DEFAULT '', email VARCHAR(160) DEFAULT '', profile_image_url VARCHAR(500) NULL, profile_image_object VARCHAR(255) NULL, pay_type VARCHAR(40) CHECK (pay_type IN ('daily','monthly')) DEFAULT 'monthly', pay_rate DECIMAL(10,2) DEFAULT 0, active BOOLEAN DEFAULT TRUE, deleted_at TIMESTAMP WITH TIME ZONE NULL, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+```
 
-Tenant upgrades add booking_slot, order_live_history, order_payment_date, order_round_status and user_portal_login. Salary values hourly are converted to daily. Master upgrades add columns already in newer CREATE forms and remove the older global PIN index. Master views: tenant_waiting_list WHERE completed_at IS NULL; tenant_registrations WHERE completed_at IS NOT NULL. No triggers/procedures/functions/sequences were identified.
-SQL export table index: master_users, companies, settings, users, kitchen_staff, staff_attendance, restaurant_tables, menu_items, combo_components, orders, order_items, inventory, inventory_transactions, finance_entries, supplier_purchases, supplier_payments, bookings. This export omits stock_requests, company_users, company_registration_requests, saas_invoices, notification_outbox, tenant_subscriptions, usage_logins, module_pricing. Runtime CREATE uses signed IDs while export uses unsigned IDs for many entities; compare types before mixing paths. Export-only unique constraints include uq_master_users_pin, uq_users_pin and uq_combo_component.
+#### Tenant: kitchen_staff
+
+```sql
+CREATE TABLE kitchen_staff (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, name VARCHAR(120) NOT NULL, designation VARCHAR(100) NOT NULL DEFAULT 'Chef', phone VARCHAR(30) DEFAULT '', specialization VARCHAR(120) DEFAULT '', pay_type VARCHAR(40) CHECK (pay_type IN ('daily','monthly')) DEFAULT 'monthly', pay_rate DECIMAL(10,2) DEFAULT 0, joined_on DATE NULL, notes VARCHAR(255) DEFAULT '', active BOOLEAN DEFAULT TRUE, created_by VARCHAR(120) DEFAULT 'Head Chef', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+```
+
+#### Tenant: staff_attendance
+
+```sql
+CREATE TABLE staff_attendance (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, user_id INT NOT NULL, check_in TIMESTAMP WITH TIME ZONE NOT NULL, check_out TIMESTAMP WITH TIME ZONE NULL, notes VARCHAR(255) DEFAULT '', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id));
+```
+
+#### Tenant: restaurant_tables
+
+```sql
+CREATE TABLE restaurant_tables (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, table_number INT NOT NULL UNIQUE, seats INT NOT NULL, area VARCHAR(80) NOT NULL, status VARCHAR(40) CHECK (status IN ('available','occupied','reserved','cleaning')) DEFAULT 'available', guest_name VARCHAR(120) DEFAULT '', booking_time VARCHAR(10) DEFAULT '', order_id INT NULL, active BOOLEAN DEFAULT TRUE);
+```
+
+#### Tenant: menu_items
+
+```sql
+CREATE TABLE menu_items (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, name VARCHAR(160) NOT NULL, category VARCHAR(80) NOT NULL, description VARCHAR(500) DEFAULT '', price DECIMAL(10,2) NOT NULL, icon VARCHAR(20) DEFAULT '🍽️', image_url VARCHAR(500) NULL, image_object VARCHAR(255) NULL, is_combo BOOLEAN DEFAULT FALSE, available BOOLEAN DEFAULT TRUE, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+```
+
+#### Tenant: combo_components
+
+```sql
+CREATE TABLE combo_components (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, combo_id INT NOT NULL, menu_id INT NOT NULL, quantity INT NOT NULL DEFAULT 1, FOREIGN KEY (combo_id) REFERENCES menu_items(id) ON DELETE CASCADE, FOREIGN KEY (menu_id) REFERENCES menu_items(id));
+```
+
+#### Tenant: orders
+
+```sql
+CREATE TABLE orders (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, table_id INT NULL, order_type VARCHAR(40) CHECK (order_type IN ('dine_in','parcel')) NOT NULL DEFAULT 'dine_in', guest_name VARCHAR(120), customer_phone VARCHAR(30) DEFAULT '', waiter VARCHAR(120), status VARCHAR(40) CHECK (status IN ('new','preparing','ready','collected','received','served','billing_requested','completed')) DEFAULT 'new', payment_status VARCHAR(40) CHECK (payment_status IN ('unpaid','paid')) DEFAULT 'unpaid', payment_method VARCHAR(30) NULL, subtotal DECIMAL(10,2) NULL, tax DECIMAL(10,2) NULL, service_charge DECIMAL(10,2) NULL, total DECIMAL(10,2) NULL, created_at TIMESTAMP WITH TIME ZONE NOT NULL, completed_at TIMESTAMP WITH TIME ZONE NULL, FOREIGN KEY (table_id) REFERENCES restaurant_tables(id));
+```
+
+#### Tenant: order_items
+
+```sql
+CREATE TABLE order_items (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, order_id INT NOT NULL, menu_id INT NOT NULL, quantity INT NOT NULL, note VARCHAR(255) DEFAULT '', price DECIMAL(10,2) NOT NULL, production_status VARCHAR(40) CHECK (production_status IN ('new','preparing','ready')) NOT NULL DEFAULT 'new', batch_no INT NOT NULL DEFAULT 1, handoff_status VARCHAR(40) CHECK (handoff_status IN ('pending','collected','received')) NOT NULL DEFAULT 'pending', FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE, FOREIGN KEY (menu_id) REFERENCES menu_items(id));
+```
+
+#### Tenant: inventory
+
+```sql
+CREATE TABLE inventory (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, name VARCHAR(160) NOT NULL, category VARCHAR(80), quantity DECIMAL(10,2) NOT NULL, unit VARCHAR(20) NOT NULL, min_quantity DECIMAL(10,2) NOT NULL, cost DECIMAL(10,2) NOT NULL, updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+```
+
+#### Tenant: inventory_transactions
+
+```sql
+CREATE TABLE inventory_transactions (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, inventory_id INT NOT NULL, movement_type VARCHAR(40) CHECK (movement_type IN ('purchase','usage','adjustment','waste')) NOT NULL, quantity DECIMAL(10,2) NOT NULL, unit_cost DECIMAL(10,2) NULL, note VARCHAR(255) DEFAULT '', created_by VARCHAR(120) DEFAULT 'Admin', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (inventory_id) REFERENCES inventory(id));
+```
+
+#### Tenant: stock_requests
+
+```sql
+CREATE TABLE stock_requests (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, inventory_id INT NOT NULL, requested_quantity DECIMAL(10,2) NOT NULL, note VARCHAR(255) DEFAULT '', requested_by VARCHAR(120) NOT NULL, status VARCHAR(40) CHECK (status IN ('pending','ordered','resolved')) NOT NULL DEFAULT 'pending', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, resolved_at TIMESTAMP WITH TIME ZONE NULL, FOREIGN KEY (inventory_id) REFERENCES inventory(id));
+```
+
+#### Tenant: finance_entries
+
+```sql
+CREATE TABLE finance_entries (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, entry_type VARCHAR(40) CHECK (entry_type IN ('income','expense')) NOT NULL, category VARCHAR(100) NOT NULL, description VARCHAR(255) NOT NULL, amount DECIMAL(12,2) NOT NULL, payment_method VARCHAR(40) DEFAULT 'Cash', entry_date DATE NOT NULL, reference VARCHAR(100) DEFAULT '', created_by VARCHAR(120) DEFAULT 'Admin', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+```
+
+#### Tenant: supplier_purchases
+
+```sql
+CREATE TABLE supplier_purchases (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, supplier_name VARCHAR(160) NOT NULL, invoice_number VARCHAR(100) DEFAULT '', description VARCHAR(255) NOT NULL, purchase_date DATE NOT NULL, total_amount DECIMAL(12,2) NOT NULL, notes VARCHAR(255) DEFAULT '', created_by VARCHAR(120) DEFAULT 'Admin', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+```
+
+#### Tenant: supplier_payments
+
+```sql
+CREATE TABLE supplier_payments (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, purchase_id INT NOT NULL, amount DECIMAL(12,2) NOT NULL, payment_method VARCHAR(40) DEFAULT 'Cash', payment_date DATE NOT NULL, reference VARCHAR(100) DEFAULT '', notes VARCHAR(255) DEFAULT '', created_by VARCHAR(120) DEFAULT 'Admin', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (purchase_id) REFERENCES supplier_purchases(id) ON DELETE CASCADE);
+```
+
+#### Tenant: bookings
+
+```sql
+CREATE TABLE bookings (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, table_id INT NOT NULL, guest_name VARCHAR(120) NOT NULL DEFAULT 'Customer', customer_phone VARCHAR(30) NOT NULL DEFAULT '', booking_date DATE NOT NULL, booking_time VARCHAR(10) NOT NULL, duration_minutes INT NOT NULL DEFAULT 90, status VARCHAR(40) CHECK (status IN ('confirmed','seated','cancelled')) DEFAULT 'confirmed', notification_status VARCHAR(40) CHECK (notification_status IN ('queued','sent','failed')) DEFAULT 'queued', notification_message VARCHAR(500) DEFAULT '', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (table_id) REFERENCES restaurant_tables(id));
+```
 
 ### 32.3 Environment-variable index
 
@@ -2507,28 +2142,21 @@ Requiredness is contextual: a code fallback does not make a secret safe. Variabl
 |BASE_URL|k6 target only|Optional|http://localhost:5100|
 |COMPOSE_PROJECT_NAME|Compose resource prefix|Optional|knockout|
 |DB_CONNECT_TIMEOUT_MS|SQL connection timeout|Optional|10000|
-|DB_EXTERNAL_PORT|Published DB host port|Optional|3307|
-|DB_HOST|SQL hostname|Yes for nondefault topology|mariadb|
+|PG_EXTERNAL_PORT|Published PostgreSQL host port|Optional|5432|
+|DB_HOST|SQL hostname|Yes for nondefault topology|postgresql|
 |DB_NAME|Primary tenant database|Yes in Compose|knockout|
 |DB_PASSWORD|Role SQL password|Yes; replace fallback|<DATABASE_PASSWORD>|
 |DB_POOL_IDLE_TIMEOUT_MS|Idle connection timeout|Optional|60000|
 |DB_POOL_MAX_IDLE|Pool idle connection maximum|Optional|10|
 |DB_POOL_SIZE|Per-tenant role connection maximum|Optional|20|
-|DB_PORT|SQL port; role direct default 3307, master 3306|Default exists|3306|
+|DB_PORT|SQL port; role direct default 5432, master 5432|Default exists|5432|
 |DB_QUEUE_LIMIT|Maximum queued connection requests|Optional|500|
-|DB_ROOT_PASSWORD|Master/root SQL password|Yes|<DATABASE_ROOT_PASSWORD>|
-|DB_ROOT_USER|Provisioning SQL administrator|Default exists|<DATABASE_ADMIN>|
 |DB_USER|Role database account; grants hardcode knockout|Yes in Compose|<DATABASE_USER>|
 |EXPO_PUBLIC_API_HOST|Phone-reachable API hostname|For physical device|<WORKSTATION_LAN_IP>|
 |EXPO_PUBLIC_API_PORT|Mobile unified API port|Optional|5100|
 |FRONTEND_PORT|Published frontend port|Optional|5200|
 |HOTEL_ID|k6 disposable tenant identity|Set for test tenant|<TEST_HOTEL_ID>|
 |INSTANCE_ID|Publisher identity for echo suppression|Optional; generated UUID|<INSTANCE_ID>|
-|MARIADB_DATABASE|Image initial schema from DB_NAME|Compose-derived|knockout|
-|MARIADB_PASSWORD|Image role password from DB_PASSWORD|Compose-derived|<DATABASE_PASSWORD>|
-|MARIADB_ROOT_HOST|Allowed root host pattern|Compose-defined|%|
-|MARIADB_ROOT_PASSWORD|Image root password mapped from DB_ROOT_PASSWORD|Compose-derived|<DATABASE_ROOT_PASSWORD>|
-|MARIADB_USER|Image role account from DB_USER|Compose-derived|<DATABASE_USER>|
 |MASTER_ADMIN_POOL_SIZE|Provisioning/admin pool maximum|Optional|20|
 |MASTER_DB_NAME|Catalog schema|Default exists|knockout_master|
 |MASTER_DB_POOL_SIZE|Catalog pool maximum|Optional|30|
@@ -2545,11 +2173,7 @@ Requiredness is contextual: a code fallback does not make a secret safe. Variabl
 |MINIO_SECRET_KEY|MinIO client/admin secret|Yes for MinIO|<MINIO_SECRET>|
 |MINIO_SSL|Enable MinIO SSL only if true|Optional; not injected by Compose|false|
 |NOTIFICATION_WEBHOOK_URL|Registration/subscription notice webhook|Optional; not injected by Compose|https://notify.example.invalid/send|
-|PHPMYADMIN_PORT|Published database console|Optional|9200|
-|PHPMYADMIN_UPLOAD_LIMIT|Database UI import limit|Optional|64M|
 |PMA_ARBITRARY|Disable arbitrary database target entry|Compose-defined|0|
-|PMA_HOST|phpMyAdmin database target|Compose-defined|mariadb|
-|PMA_PORT|phpMyAdmin SQL target port|Compose-defined|3306|
 |PORT|Internal HTTP listen port|Service-defined|5000|
 |PORTAL_ROLE|Role process policy identity|Required for correct role process|admin|
 |REDIS_EVENTS_CHANNEL|Pub/sub channel|Optional; not injected in Compose|knockout:state-events|
@@ -2574,7 +2198,6 @@ Requiredness is contextual: a code fallback does not make a secret safe. Variabl
 |STORAGE_PUBLIC_READ|MinIO whole-bucket public-read policy|Optional; review privacy|false|
 |TENANT_POOL_IDLE_MS|Inactive tenant pool retirement|Optional|300000|
 |TZ|Container timezone|Optional|Asia/Kolkata|
-|UPLOAD_LIMIT|phpMyAdmin import size|Compose-derived|64M|
 |USER_PIN|k6 nonproduction account PIN|Required for k6|<TEST_PIN>|
 |VITE_API_URL|Compose value not consumed by api.js|Unused by current HTTP helper|/api|
 |VITE_PORTAL_ROLE|Browser build portal role mode|Optional|unified|
@@ -2602,19 +2225,12 @@ Requiredness is contextual: a code fallback does not make a secret safe. Variabl
 |DB_POOL_SIZE|.env.example, backend/src/database.js, docker-compose.yml|
 |DB_PORT|.env.example, backend/src/database.js, backend/src/master-server.js, docker-compose.yml|
 |DB_QUEUE_LIMIT|.env.example, backend/src/database.js, backend/src/master-server.js, docker-compose.yml|
-|DB_ROOT_PASSWORD|.env.example, backend/src/master-server.js, docker-compose.yml|
-|DB_ROOT_USER|.env.example, backend/src/master-server.js, docker-compose.yml|
 |DB_USER|.env.example, backend/src/database.js, docker-compose.yml|
 |EXPO_PUBLIC_API_HOST|mobile/.env.example, mobile/App.js|
 |EXPO_PUBLIC_API_PORT|mobile/App.js|
 |FRONTEND_PORT|.env.example, docker-compose.yml|
 |HOTEL_ID|load-tests/api-capacity.js|
 |INSTANCE_ID|backend/src/realtime.js|
-|MARIADB_DATABASE|docker-compose.yml (container setting)|
-|MARIADB_PASSWORD|docker-compose.yml (container setting)|
-|MARIADB_ROOT_HOST|docker-compose.yml (container setting)|
-|MARIADB_ROOT_PASSWORD|docker-compose.yml (container setting)|
-|MARIADB_USER|docker-compose.yml (container setting)|
 |MASTER_ADMIN_POOL_SIZE|.env.example, backend/src/master-server.js, docker-compose.yml|
 |MASTER_DB_NAME|.env.example, backend/src/master-server.js, docker-compose.yml|
 |MASTER_DB_POOL_SIZE|.env.example, backend/src/master-server.js, docker-compose.yml|
@@ -2631,11 +2247,7 @@ Requiredness is contextual: a code fallback does not make a secret safe. Variabl
 |MINIO_SECRET_KEY|.env.example, backend/src/storage.js, docker-compose.yml|
 |MINIO_SSL|backend/src/storage.js|
 |NOTIFICATION_WEBHOOK_URL|backend/src/master-server.js|
-|PHPMYADMIN_PORT|.env.example, docker-compose.yml|
-|PHPMYADMIN_UPLOAD_LIMIT|.env.example, docker-compose.yml|
 |PMA_ARBITRARY|docker-compose.yml (container setting)|
-|PMA_HOST|docker-compose.yml (container setting)|
-|PMA_PORT|docker-compose.yml (container setting)|
 |PORT|backend/src/master-server.js, backend/src/server.js|
 |PORTAL_ROLE|backend/src/nest/app.module.js, backend/src/server.js|
 |REDIS_EVENTS_CHANNEL|.env.example, backend/src/realtime.js|
@@ -2679,7 +2291,7 @@ Requiredness is contextual: a code fallback does not make a secret safe. Variabl
 |backend/package.json|express|^5.1.0|5.2.1|dependencies|
 |backend/package.json|minio|^8.0.5|8.0.7|dependencies|
 |backend/package.json|multer|^2.0.2|2.2.0|dependencies|
-|backend/package.json|mysql2|^3.14.3|3.23.2|dependencies|
+|backend/package.json|pg|^8.16.3|See package-lock.json|dependencies|
 |backend/package.json|redis|5.12.1|5.12.1|dependencies|
 |backend/package.json|reflect-metadata|0.2.2|0.2.2|dependencies|
 |backend/package.json|rxjs|7.8.2|7.8.2|dependencies|
@@ -2850,8 +2462,6 @@ Master module change requires known module key and boolean enabled. Company stat
 
 ### 32.9 External technical references
 
-R1. MariaDB CREATE TABLE: confirms LIKE copies columns/indexes/options but not foreign-key definitions. https://mariadb.com/docs/server/server-usage/tables/create-table
 
-R2. MariaDB mariadb-dump: documents --single-transaction behavior and concurrent DDL limitations. https://mariadb.com/docs/server/clients-and-utilities/backup-restore-and-import-clients/mariadb-dump
 
 These references validate database-engine semantics only. Application feature claims and configuration derive from repository source. References checked 4 October 2026.

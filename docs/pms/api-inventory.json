@@ -25,7 +25,7 @@
     "query": [],
     "params": [],
     "responses": [
-      "{ok: true, service: <computed>, portal: <portalRole>, database: \"mariadb\", storage: <storageProvider>}"
+      "{ok: true, service: <computed>, portal: <portalRole>, database: \"postgresql\", storage: <storageProvider>}"
     ],
     "errors": [],
     "statuses": [],
@@ -1674,7 +1674,7 @@
     "method": "GET",
     "path": "/api/live",
     "file": "backend/src/master-server.js",
-    "line": 207,
+    "line": 188,
     "body": [],
     "query": [],
     "params": [],
@@ -1690,7 +1690,7 @@
     "method": "GET",
     "path": "/api/health",
     "file": "backend/src/master-server.js",
-    "line": 208,
+    "line": 189,
     "body": [],
     "query": [],
     "params": [],
@@ -1706,7 +1706,7 @@
     "method": "GET",
     "path": "/api/public/companies",
     "file": "backend/src/master-server.js",
-    "line": 209,
+    "line": 190,
     "body": [],
     "query": [],
     "params": [],
@@ -1722,7 +1722,7 @@
     "method": "POST",
     "path": "/api/public/company-registrations",
     "file": "backend/src/master-server.js",
-    "line": 210,
+    "line": 191,
     "body": [
       "companyName",
       "adminName",
@@ -1757,7 +1757,7 @@
     "method": "POST",
     "path": "/api/public/resolve-login",
     "file": "backend/src/master-server.js",
-    "line": 211,
+    "line": 192,
     "body": [
       "hotelId",
       "pin"
@@ -1791,7 +1791,7 @@
     "method": "POST",
     "path": "/api/public/onboarding-status",
     "file": "backend/src/master-server.js",
-    "line": 212,
+    "line": 193,
     "body": [
       "id",
       "pin"
@@ -1815,7 +1815,7 @@
     "method": "POST",
     "path": "/api/public/complete-registration",
     "file": "backend/src/master-server.js",
-    "line": 213,
+    "line": 194,
     "body": [
       "pin",
       "id",
@@ -1852,7 +1852,7 @@
     "method": "POST",
     "path": "/api/login",
     "file": "backend/src/master-server.js",
-    "line": 214,
+    "line": 195,
     "body": [
       "pin"
     ],
@@ -1875,7 +1875,7 @@
     "method": "GET",
     "path": "/api/state",
     "file": "backend/src/master-server.js",
-    "line": 215,
+    "line": 196,
     "body": [],
     "query": [],
     "params": [],
@@ -1891,7 +1891,7 @@
     "method": "POST",
     "path": "/api/companies",
     "file": "backend/src/master-server.js",
-    "line": 216,
+    "line": 197,
     "body": [
       "companyName",
       "adminName",
@@ -1915,7 +1915,7 @@
     "method": "POST",
     "path": "/api/company-registrations/:id/approve",
     "file": "backend/src/master-server.js",
-    "line": 217,
+    "line": 198,
     "body": [
       "reviewNote"
     ],
@@ -1942,7 +1942,7 @@
     "method": "PATCH",
     "path": "/api/companies/:id/modules",
     "file": "backend/src/master-server.js",
-    "line": 218,
+    "line": 199,
     "body": [
       "module",
       "enabled"
@@ -1971,7 +1971,7 @@
     "method": "PATCH",
     "path": "/api/saas-invoices/:id/status",
     "file": "backend/src/master-server.js",
-    "line": 219,
+    "line": 200,
     "body": [
       "status"
     ],
@@ -1999,7 +1999,7 @@
     "method": "POST",
     "path": "/api/company-registrations/:id/reject",
     "file": "backend/src/master-server.js",
-    "line": 220,
+    "line": 201,
     "body": [
       "reviewNote"
     ],
@@ -2024,7 +2024,7 @@
     "method": "PATCH",
     "path": "/api/companies/:id/status",
     "file": "backend/src/master-server.js",
-    "line": 221,
+    "line": 202,
     "body": [
       "status"
     ],
@@ -2052,7 +2052,7 @@
     "method": "PATCH",
     "path": "/api/companies/:companyId/users/:userId/pin",
     "file": "backend/src/master-server.js",
-    "line": 222,
+    "line": 203,
     "body": [
       "pin"
     ],
@@ -2085,7 +2085,7 @@
     "method": "PATCH",
     "path": "/api/master-users/:userId/pin",
     "file": "backend/src/master-server.js",
-    "line": 223,
+    "line": 204,
     "body": [
       "pin"
     ],
@@ -2115,7 +2115,7 @@
     "method": "DELETE",
     "path": "/api/companies/:id",
     "file": "backend/src/master-server.js",
-    "line": 224,
+    "line": 205,
     "body": [
       "companyName"
     ],
@@ -2148,7 +2148,7 @@
     "method": "GET",
     "path": "/api/module-pricing",
     "file": "backend/src/master-server.js",
-    "line": 225,
+    "line": 206,
     "body": [],
     "query": [],
     "params": [],
@@ -2164,7 +2164,7 @@
     "method": "PATCH",
     "path": "/api/module-pricing/:key",
     "file": "backend/src/master-server.js",
-    "line": 226,
+    "line": 207,
     "body": [
       "price"
     ],
@@ -2189,7 +2189,7 @@
     "method": "POST",
     "path": "/api/reports",
     "file": "backend/src/master-server.js",
-    "line": 227,
+    "line": 208,
     "body": [
       "filename",
       "content",

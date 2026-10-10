@@ -8,11 +8,11 @@ Multi-tenant restaurant operations with table service, parcels, inventory, finan
 | --- | --- |
 | web | React 19, Vite 7, custom JSX/CSS, lucide icons, motion |
 | mobile | Expo 57, React Native 0.86.3, StyleSheet, AsyncStorage; no Flutter |
-| backend | Nest 11 bootstrap with Express route handlers, raw mysql2 queries |
-| database | MariaDB; separate tenant databases and master registry; no ORM |
+| backend | Nest 11 bootstrap with Express route handlers, parameterized PostgreSQL queries |
+| database | PostgreSQL; tenant schemas and master registry in one PostgreSQL database; no ORM |
 | authentication | PIN login and custom HMAC bearer sessions, 12-hour expiry; no JWT refresh/MFA found |
 | state | React hooks plus browser session/local storage; native AsyncStorage; shared /state snapshots |
-| infrastructure | Docker Compose, role APIs behind master routing, MariaDB, Redis and MinIO/S3 |
+| infrastructure | Docker Compose, role APIs behind master routing, PostgreSQL, Redis and MinIO/S3 |
 | realtime | WebSocket state invalidation and refresh, polling fallback in some clients |
 | payments | Cash/Card-UPI recording and SaaS reference input; no verified payment gateway found |
 | notifications | Local feedback plus outbound email/SMS/webhook code; delivery availability depends on configuration |

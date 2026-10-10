@@ -52,13 +52,6 @@
       "docker-compose.yml"
     ]
   },
-  "DB_EXTERNAL_PORT": {
-    "purpose": "Published DB host port",
-    "sources": [
-      ".env.example",
-      "docker-compose.yml"
-    ]
-  },
   "DB_HOST": {
     "purpose": "SQL hostname",
     "sources": [
@@ -94,15 +87,6 @@
       "docker-compose.yml"
     ]
   },
-  "DB_POOL_MAX_IDLE": {
-    "purpose": "Pool idle connection maximum",
-    "sources": [
-      ".env.example",
-      "backend/src/database.js",
-      "backend/src/master-server.js",
-      "docker-compose.yml"
-    ]
-  },
   "DB_POOL_SIZE": {
     "purpose": "Per-tenant role connection maximum",
     "sources": [
@@ -112,35 +96,10 @@
     ]
   },
   "DB_PORT": {
-    "purpose": "SQL port; role direct default 3307, master 3306",
+    "purpose": "PostgreSQL server port; default 5432",
     "sources": [
       ".env.example",
       "backend/src/database.js",
-      "backend/src/master-server.js",
-      "docker-compose.yml"
-    ]
-  },
-  "DB_QUEUE_LIMIT": {
-    "purpose": "Maximum queued connection requests",
-    "sources": [
-      ".env.example",
-      "backend/src/database.js",
-      "backend/src/master-server.js",
-      "docker-compose.yml"
-    ]
-  },
-  "DB_ROOT_PASSWORD": {
-    "purpose": "Master/root SQL password",
-    "sources": [
-      ".env.example",
-      "backend/src/master-server.js",
-      "docker-compose.yml"
-    ]
-  },
-  "DB_ROOT_USER": {
-    "purpose": "Provisioning SQL administrator",
-    "sources": [
-      ".env.example",
       "backend/src/master-server.js",
       "docker-compose.yml"
     ]
@@ -183,36 +142,6 @@
     "purpose": "Publisher identity for echo suppression",
     "sources": [
       "backend/src/realtime.js"
-    ]
-  },
-  "MARIADB_DATABASE": {
-    "purpose": "Image initial schema from DB_NAME",
-    "sources": [
-      "docker-compose.yml (container setting)"
-    ]
-  },
-  "MARIADB_PASSWORD": {
-    "purpose": "Image role password from DB_PASSWORD",
-    "sources": [
-      "docker-compose.yml (container setting)"
-    ]
-  },
-  "MARIADB_ROOT_HOST": {
-    "purpose": "Allowed root host pattern",
-    "sources": [
-      "docker-compose.yml (container setting)"
-    ]
-  },
-  "MARIADB_ROOT_PASSWORD": {
-    "purpose": "Image root password mapped from DB_ROOT_PASSWORD",
-    "sources": [
-      "docker-compose.yml (container setting)"
-    ]
-  },
-  "MARIADB_USER": {
-    "purpose": "Image role account from DB_USER",
-    "sources": [
-      "docker-compose.yml (container setting)"
     ]
   },
   "MASTER_ADMIN_POOL_SIZE": {
@@ -331,38 +260,6 @@
     "purpose": "Registration/subscription notice webhook",
     "sources": [
       "backend/src/master-server.js"
-    ]
-  },
-  "PHPMYADMIN_PORT": {
-    "purpose": "Published database console",
-    "sources": [
-      ".env.example",
-      "docker-compose.yml"
-    ]
-  },
-  "PHPMYADMIN_UPLOAD_LIMIT": {
-    "purpose": "Database UI import limit",
-    "sources": [
-      ".env.example",
-      "docker-compose.yml"
-    ]
-  },
-  "PMA_ARBITRARY": {
-    "purpose": "Disable arbitrary database target entry",
-    "sources": [
-      "docker-compose.yml (container setting)"
-    ]
-  },
-  "PMA_HOST": {
-    "purpose": "phpMyAdmin database target",
-    "sources": [
-      "docker-compose.yml (container setting)"
-    ]
-  },
-  "PMA_PORT": {
-    "purpose": "phpMyAdmin SQL target port",
-    "sources": [
-      "docker-compose.yml (container setting)"
     ]
   },
   "PORT": {
@@ -552,12 +449,6 @@
       "docker-compose.yml"
     ]
   },
-  "UPLOAD_LIMIT": {
-    "purpose": "phpMyAdmin import size",
-    "sources": [
-      "docker-compose.yml (container setting)"
-    ]
-  },
   "USER_PIN": {
     "purpose": "k6 nonproduction account PIN",
     "sources": [
@@ -582,5 +473,23 @@
     "sources": [
       "frontend/vite.config.js"
     ]
+  },
+  "PGDATABASE": {
+    "purpose": "Physical PostgreSQL database"
+  },
+  "PG_EXTERNAL_PORT": {
+    "purpose": "Published PostgreSQL port, default 5432"
+  },
+  "DB_TIMEZONE": {
+    "purpose": "Timestamp timezone, default Asia/Kolkata"
+  },
+  "PGSSL": {
+    "purpose": "Require verified TLS when true"
+  },
+  "MASTER_BOOTSTRAP_PIN": {
+    "purpose": "Private six-digit PIN for first master account"
+  },
+  "SEED_DEMO_DATA": {
+    "purpose": "Opt-in demo seed, default false"
   }
 }

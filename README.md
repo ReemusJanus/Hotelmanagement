@@ -63,11 +63,15 @@ See `mobile/README.md` for simulator, device, and EAS App Store/Play Store build
 
 - One React + Vite frontend for every role
 - NestJS 11 backend with an Express compatibility adapter
-- MariaDB 11.4 for all operational data
+- PostgreSQL 17 for all operational data
 - MinIO object storage for food photos
-- Docker Compose with persistent MariaDB and MinIO volumes
+- Docker Compose with persistent PostgreSQL and MinIO volumes
+
+See [PostgreSQL setup](docs/POSTGRESQL.md) for configuration, schema layout and verification.
 
 ## Start the platform
+
+Set `DB_PASSWORD` and a private six-digit `MASTER_BOOTSTRAP_PIN` in `.env` for a fresh installation. Existing PostgreSQL accounts are preserved.
 
 ```bash
 docker compose up -d --build
@@ -79,7 +83,7 @@ docker compose up -d --build
 - Master NestJS API: <http://localhost:5100>
 - Master framework health: <http://localhost:5100/api/framework>
 - Admin, Waiter, Chef, and Juicer backends remain isolated inside Docker
-- MariaDB: `localhost:3307`
+- PostgreSQL: `localhost:5432`
 - MinIO API: <http://localhost:9100>
 - MinIO console: <http://localhost:9101>
 
@@ -88,13 +92,9 @@ MinIO console credentials:
 - Username: `knockout`
 - Password: `knockout_secret`
 
-MariaDB credentials:
+PostgreSQL credentials are configured with `PGDATABASE`, `DB_USER` and `DB_PASSWORD` in `.env`.
 
-- Database: `knockout`
-- Username: `knockout`
-- Password: `knockout_pass`
-
-The API automatically creates the relational schema, seeds demo content on an empty database, creates the `food-images` bucket, and configures public read access for menu photos.
+The API automatically creates the relational schema (demo content requires `SEED_DEMO_DATA=true`), creates the `food-images` bucket, and configures public read access for menu photos.
 
 The browser connects only to the unified frontend and Master API. The Master API resolves each six-digit PIN and securely routes requests to the correct company and role backend.
 
@@ -102,7 +102,7 @@ The browser connects only to the unified frontend and Master API. The Master API
 
 Docker volumes retain data across container restarts:
 
-- `knockout_mariadb`
+- `knockout_postgres`
 - `knockout_minio`
 - `knockout_redis`
 

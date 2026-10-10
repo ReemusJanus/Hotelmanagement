@@ -13,12 +13,14 @@ x-storage-env: &storage-env
   S3_PATH_STYLE: ${S3_PATH_STYLE:-false}
 
 x-runtime-env: &runtime-env
+  PGDATABASE: ${PGDATABASE:-knockout}
+  PGSSL: ${PGSSL:-false}
+  DB_TIMEZONE: ${DB_TIMEZONE:-Asia/Kolkata}
+  SEED_DEMO_DATA: ${SEED_DEMO_DATA:-false}
   STATE_HISTORY_DAYS: ${STATE_HISTORY_DAYS:-90}
   STATE_CACHE_TTL_MS: ${STATE_CACHE_TTL_MS:-1000}
   DB_POOL_SIZE: ${DB_POOL_SIZE:-20}
-  DB_POOL_MAX_IDLE: ${DB_POOL_MAX_IDLE:-10}
   DB_POOL_IDLE_TIMEOUT_MS: ${DB_POOL_IDLE_TIMEOUT_MS:-60000}
-  DB_QUEUE_LIMIT: ${DB_QUEUE_LIMIT:-500}
   DB_CONNECT_TIMEOUT_MS: ${DB_CONNECT_TIMEOUT_MS:-10000}
   TENANT_POOL_IDLE_MS: ${TENANT_POOL_IDLE_MS:-300000}
 
@@ -35,41 +37,23 @@ services:
       timeout: 3s
       retries: 20
 
-  mariadb:
-    image: mariadb:11.4
-    container_name: knockout-mariadb
+  postgres:
+    image: postgres:17-alpine
     restart: unless-stopped
     environment:
       TZ: ${TZ:-Asia/Kolkata}
-      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
-      MARIADB_ROOT_HOST: "%"
-      MARIADB_DATABASE: ${DB_NAME}
-      MARIADB_USER: ${DB_USER}
-      MARIADB_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${PGDATABASE:-knockout}
+      POSTGRES_USER: ${DB_USER:-knockout}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD}
     ports:
-      - "${DB_EXTERNAL_PORT:-3307}:3306"
+      - "127.0.0.1:${PG_EXTERNAL_PORT:-5432}:5432"
     volumes:
-      - knockout_mariadb:/var/lib/mysql
+      - knockout_postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
       retries: 20
-
-  phpmyadmin:
-    image: phpmyadmin:latest
-    container_name: knockout-phpmyadmin
-    restart: unless-stopped
-    environment:
-      PMA_HOST: mariadb
-      PMA_PORT: 3306
-      PMA_ARBITRARY: 0
-      UPLOAD_LIMIT: ${PHPMYADMIN_UPLOAD_LIMIT:-64M}
-    ports:
-      - "${PHPMYADMIN_PORT:-9200}:80"
-    depends_on:
-      mariadb:
-        condition: service_healthy
 
   minio:
     image: minio/minio:latest
@@ -98,8 +82,8 @@ services:
       TZ: ${TZ:-Asia/Kolkata}
       PORT: 6001
       PORTAL_ROLE: admin
-      DB_HOST: ${DB_HOST:-mariadb}
-      DB_PORT: ${DB_PORT:-3306}
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
@@ -114,7 +98,7 @@ services:
     expose:
       - "6001"
     depends_on:
-      mariadb:
+      postgres:
         condition: service_healthy
       minio:
         condition: service_healthy
@@ -132,8 +116,8 @@ services:
       TZ: ${TZ:-Asia/Kolkata}
       PORT: 7000
       PORTAL_ROLE: waiter
-      DB_HOST: ${DB_HOST:-mariadb}
-      DB_PORT: ${DB_PORT:-3306}
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
@@ -162,8 +146,8 @@ services:
       TZ: ${TZ:-Asia/Kolkata}
       PORT: 8000
       PORTAL_ROLE: chef
-      DB_HOST: ${DB_HOST:-mariadb}
-      DB_PORT: ${DB_PORT:-3306}
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
@@ -192,8 +176,8 @@ services:
       TZ: ${TZ:-Asia/Kolkata}
       PORT: 9000
       PORTAL_ROLE: juicer
-      DB_HOST: ${DB_HOST:-mariadb}
-      DB_PORT: ${DB_PORT:-3306}
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
@@ -222,10 +206,11 @@ services:
       <<: [*storage-env, *runtime-env]
       PORT: 5000
       TZ: ${TZ:-Asia/Kolkata}
-      DB_HOST: ${DB_HOST:-mariadb}
-      DB_PORT: ${DB_PORT:-3306}
-      DB_ROOT_USER: ${DB_ROOT_USER:-root}
-      DB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      MASTER_BOOTSTRAP_PIN: ${MASTER_BOOTSTRAP_PIN:-}
       MASTER_DB_NAME: ${MASTER_DB_NAME:-knockout_master}
       MASTER_ADMIN_POOL_SIZE: ${MASTER_ADMIN_POOL_SIZE:-20}
       MASTER_DB_POOL_SIZE: ${MASTER_DB_POOL_SIZE:-30}
@@ -270,6 +255,6 @@ services:
         condition: service_healthy
 
 volumes:
-  knockout_mariadb:
+  knockout_postgres:
   knockout_minio:
   knockout_redis:

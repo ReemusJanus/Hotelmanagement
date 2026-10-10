@@ -1,295 +1,57 @@
--- KnockOUT Hospitality OS - MariaDB 11.4 structure-only schema
--- Contains database and table definitions only. No records are inserted.
---
--- Run this file once as a MariaDB root/administrative user, for example:
---   mariadb -u root -p < knockout-production.sql
--- or import it from phpMyAdmin.
---
-SET NAMES utf8mb4;
-SET time_zone = '+05:30';
-
-CREATE DATABASE IF NOT EXISTS `knockout_master`
-  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
-CREATE DATABASE IF NOT EXISTS `knockout`
-  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
-USE `knockout_master`;
-
-CREATE TABLE IF NOT EXISTS master_users (
-  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  name VARCHAR(120) NOT NULL,
-  pin VARCHAR(80) NOT NULL,
-  active BOOLEAN NOT NULL DEFAULT TRUE,
-  deleted_at DATETIME NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  UNIQUE KEY uq_master_users_pin (pin)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS companies (
-  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  company_name VARCHAR(160) NOT NULL,
-  database_name VARCHAR(64) NOT NULL,
-  admin_name VARCHAR(120) NOT NULL,
-  email VARCHAR(160) NOT NULL DEFAULT '',
-  phone VARCHAR(30) NOT NULL DEFAULT '',
-  status ENUM('active','suspended') NOT NULL DEFAULT 'active',
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  UNIQUE KEY uq_companies_name (company_name),
-  UNIQUE KEY uq_companies_database (database_name),
-  KEY idx_companies_status (status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-USE `knockout`;
-
-CREATE TABLE IF NOT EXISTS settings (
-  id INT NOT NULL DEFAULT 1,
-  hotel_name VARCHAR(120) NOT NULL,
-  tax_rate DECIMAL(5,2) NOT NULL DEFAULT 5.00,
-  service_charge DECIMAL(5,2) NOT NULL DEFAULT 5.00,
-  currency VARCHAR(8) NOT NULL DEFAULT 'INR',
-  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS users (
-  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  name VARCHAR(120) NOT NULL,
-  role ENUM('admin','waiter','chef','juicer') NOT NULL,
-  pin VARCHAR(20) NOT NULL,
-  phone VARCHAR(30) NOT NULL DEFAULT '',
-  pay_type ENUM('daily','monthly') NOT NULL DEFAULT 'monthly',
-  pay_rate DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-  active BOOLEAN NOT NULL DEFAULT TRUE,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  UNIQUE KEY uq_users_pin (pin),
-  KEY idx_users_role_active (role, active)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS kitchen_staff (
-  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  name VARCHAR(120) NOT NULL,
-  designation VARCHAR(100) NOT NULL DEFAULT 'Chef',
-  phone VARCHAR(30) NOT NULL DEFAULT '',
-  specialization VARCHAR(120) NOT NULL DEFAULT '',
-  pay_type ENUM('daily','monthly') NOT NULL DEFAULT 'monthly',
-  pay_rate DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-  joined_on DATE NULL,
-  notes VARCHAR(255) NOT NULL DEFAULT '',
-  active BOOLEAN NOT NULL DEFAULT TRUE,
-  created_by VARCHAR(120) NOT NULL DEFAULT 'Head Chef',
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  KEY idx_kitchen_staff_active (active),
-  KEY idx_kitchen_staff_joined (joined_on)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS staff_attendance (
-  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  user_id INT UNSIGNED NOT NULL,
-  check_in DATETIME NOT NULL,
-  check_out DATETIME NULL,
-  notes VARCHAR(255) NOT NULL DEFAULT '',
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  KEY idx_attendance_user_checkin (user_id, check_in),
-  KEY idx_attendance_open_shift (user_id, check_out),
-  CONSTRAINT fk_attendance_user
-    FOREIGN KEY (user_id) REFERENCES users(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS restaurant_tables (
-  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  table_number INT NOT NULL,
-  seats INT NOT NULL,
-  area VARCHAR(80) NOT NULL,
-  status ENUM('available','occupied','reserved','cleaning')
-    NOT NULL DEFAULT 'available',
-  guest_name VARCHAR(120) NOT NULL DEFAULT '',
-  booking_time VARCHAR(10) NOT NULL DEFAULT '',
-  order_id INT UNSIGNED NULL,
-  active BOOLEAN NOT NULL DEFAULT TRUE,
-  PRIMARY KEY (id),
-  UNIQUE KEY uq_restaurant_table_number (table_number),
-  KEY idx_restaurant_tables_status (active, status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS menu_items (
-  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  name VARCHAR(160) NOT NULL,
-  category VARCHAR(80) NOT NULL,
-  description VARCHAR(500) NOT NULL DEFAULT '',
-  price DECIMAL(10,2) NOT NULL,
-  production_status ENUM('new','preparing','ready') NOT NULL DEFAULT 'new',
-  icon VARCHAR(20) NOT NULL DEFAULT '🍽️',
-  image_url VARCHAR(500) NULL,
-  image_object VARCHAR(255) NULL,
-  is_combo BOOLEAN NOT NULL DEFAULT FALSE,
-  available BOOLEAN NOT NULL DEFAULT TRUE,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  KEY idx_menu_category_available (category, available),
-  KEY idx_menu_combo (is_combo)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS combo_components (
-  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  combo_id INT UNSIGNED NOT NULL,
-  menu_id INT UNSIGNED NOT NULL,
-  quantity INT NOT NULL DEFAULT 1,
-  PRIMARY KEY (id),
-  UNIQUE KEY uq_combo_component (combo_id, menu_id),
-  KEY idx_combo_component_menu (menu_id),
-  CONSTRAINT fk_combo_component_combo
-    FOREIGN KEY (combo_id) REFERENCES menu_items(id) ON DELETE CASCADE,
-  CONSTRAINT fk_combo_component_menu
-    FOREIGN KEY (menu_id) REFERENCES menu_items(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS orders (
-  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  table_id INT UNSIGNED NULL,
-  order_type ENUM('dine_in','parcel') NOT NULL DEFAULT 'dine_in',
-  guest_name VARCHAR(120) NULL,
-  customer_phone VARCHAR(30) NOT NULL DEFAULT '',
-  waiter VARCHAR(120) NULL,
-  status ENUM('new','preparing','ready','served','billing_requested','completed')
-    NOT NULL DEFAULT 'new',
-  payment_status ENUM('unpaid','paid') NOT NULL DEFAULT 'unpaid',
-  payment_method VARCHAR(30) NULL,
-  subtotal DECIMAL(10,2) NULL,
-  tax DECIMAL(10,2) NULL,
-  service_charge DECIMAL(10,2) NULL,
-  total DECIMAL(10,2) NULL,
-  created_at DATETIME NOT NULL,
-  completed_at DATETIME NULL,
-  PRIMARY KEY (id),
-  KEY idx_orders_table_status (table_id, status),
-  KEY idx_orders_type_status (order_type, status),
-  KEY idx_orders_payment_completed (payment_status, completed_at),
-  KEY idx_orders_created (created_at),
-  CONSTRAINT fk_order_table
-    FOREIGN KEY (table_id) REFERENCES restaurant_tables(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS order_items (
-  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  order_id INT UNSIGNED NOT NULL,
-  menu_id INT UNSIGNED NOT NULL,
-  quantity INT NOT NULL,
-  note VARCHAR(255) NOT NULL DEFAULT '',
-  price DECIMAL(10,2) NOT NULL,
-  PRIMARY KEY (id),
-  KEY idx_order_items_order (order_id),
-  KEY idx_order_items_menu (menu_id),
-  CONSTRAINT fk_order_item_order
-    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
-  CONSTRAINT fk_order_item_menu
-    FOREIGN KEY (menu_id) REFERENCES menu_items(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS inventory (
-  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  name VARCHAR(160) NOT NULL,
-  category VARCHAR(80) NULL,
-  quantity DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-  unit VARCHAR(20) NOT NULL,
-  min_quantity DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-  cost DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  KEY idx_inventory_category (category),
-  KEY idx_inventory_stock_level (quantity, min_quantity)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS inventory_transactions (
-  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  inventory_id INT UNSIGNED NOT NULL,
-  movement_type ENUM('purchase','usage','adjustment','waste') NOT NULL,
-  quantity DECIMAL(10,2) NOT NULL,
-  unit_cost DECIMAL(10,2) NULL,
-  note VARCHAR(255) NOT NULL DEFAULT '',
-  created_by VARCHAR(120) NOT NULL DEFAULT 'Admin',
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  KEY idx_inventory_tx_item_date (inventory_id, created_at),
-  KEY idx_inventory_tx_type_date (movement_type, created_at),
-  CONSTRAINT fk_inventory_tx_item
-    FOREIGN KEY (inventory_id) REFERENCES inventory(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS finance_entries (
-  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  entry_type ENUM('income','expense') NOT NULL,
-  category VARCHAR(100) NOT NULL,
-  description VARCHAR(255) NOT NULL,
-  amount DECIMAL(12,2) NOT NULL,
-  payment_method VARCHAR(40) NOT NULL DEFAULT 'Cash',
-  entry_date DATE NOT NULL,
-  reference VARCHAR(100) NOT NULL DEFAULT '',
-  created_by VARCHAR(120) NOT NULL DEFAULT 'Admin',
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  KEY idx_finance_date_type (entry_date, entry_type),
-  KEY idx_finance_category (category)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS supplier_purchases (
-  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  supplier_name VARCHAR(160) NOT NULL,
-  invoice_number VARCHAR(100) NOT NULL DEFAULT '',
-  description VARCHAR(255) NOT NULL,
-  purchase_date DATE NOT NULL,
-  total_amount DECIMAL(12,2) NOT NULL,
-  notes VARCHAR(255) NOT NULL DEFAULT '',
-  created_by VARCHAR(120) NOT NULL DEFAULT 'Admin',
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  KEY idx_supplier_purchase_date (purchase_date),
-  KEY idx_supplier_name (supplier_name),
-  KEY idx_supplier_invoice (invoice_number)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS supplier_payments (
-  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  purchase_id INT UNSIGNED NOT NULL,
-  amount DECIMAL(12,2) NOT NULL,
-  payment_method VARCHAR(40) NOT NULL DEFAULT 'Cash',
-  payment_date DATE NOT NULL,
-  reference VARCHAR(100) NOT NULL DEFAULT '',
-  notes VARCHAR(255) NOT NULL DEFAULT '',
-  created_by VARCHAR(120) NOT NULL DEFAULT 'Admin',
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  KEY idx_supplier_payment_purchase (purchase_id),
-  KEY idx_supplier_payment_date (payment_date),
-  CONSTRAINT fk_supplier_payment_purchase
-    FOREIGN KEY (purchase_id) REFERENCES supplier_purchases(id)
-      ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS bookings (
-  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  table_id INT UNSIGNED NOT NULL,
-  guest_name VARCHAR(120) NOT NULL DEFAULT 'Customer',
-  customer_phone VARCHAR(30) NOT NULL DEFAULT '',
-  booking_date DATE NOT NULL,
-  booking_time VARCHAR(10) NOT NULL,
-  duration_minutes INT NOT NULL DEFAULT 90,
-  status ENUM('confirmed','seated','cancelled') NOT NULL DEFAULT 'confirmed',
-  notification_status ENUM('queued','sent','failed') NOT NULL DEFAULT 'queued',
-  notification_message VARCHAR(500) NOT NULL DEFAULT '',
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  KEY booking_slot (table_id, booking_date, status),
-  KEY idx_booking_upcoming (status, booking_date, booking_time),
-  CONSTRAINT fk_booking_table
-    FOREIGN KEY (table_id) REFERENCES restaurant_tables(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- KnockOUT PostgreSQL 17 structure only; run against the configured physical database.
+BEGIN;
+CREATE SCHEMA IF NOT EXISTS "knockout_master";
+SET LOCAL search_path TO "knockout_master", pg_catalog;
+CREATE TABLE IF NOT EXISTS master_users (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,name VARCHAR(120) NOT NULL,pin VARCHAR(20) NOT NULL,active BOOLEAN DEFAULT TRUE,created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS companies (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,company_name VARCHAR(160) NOT NULL UNIQUE,database_name VARCHAR(64) NOT NULL UNIQUE,cy_db VARCHAR(64) NULL UNIQUE,hotel_id CHAR(4) NULL UNIQUE,modules JSONB NULL,admin_name VARCHAR(120) NOT NULL,email VARCHAR(160) DEFAULT '',phone VARCHAR(30) DEFAULT '',status VARCHAR(40) CHECK (status IN ('active','suspended')) DEFAULT 'active',created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS company_users (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,company_id INT NOT NULL,tenant_user_id INT NOT NULL,name VARCHAR(120) NOT NULL,role VARCHAR(40) CHECK (role IN ('admin','waiter','chef','juicer')) NOT NULL,pin VARCHAR(80) NOT NULL,phone VARCHAR(30) DEFAULT '',email VARCHAR(160) DEFAULT '',profile_image_url VARCHAR(500) NULL,active BOOLEAN DEFAULT TRUE,created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,UNIQUE (company_id,tenant_user_id),UNIQUE (company_id,pin),FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS company_registration_requests (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,company_name VARCHAR(160) NOT NULL,hotel_id CHAR(4) NULL,admin_name VARCHAR(120) NOT NULL,admin_pin VARCHAR(20) NULL,email VARCHAR(160) NOT NULL,phone VARCHAR(30) NOT NULL,status VARCHAR(40) CHECK (status IN ('pending','approved','rejected')) NOT NULL DEFAULT 'pending',review_note VARCHAR(255) DEFAULT '',company_id INT NULL,created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,reviewed_at TIMESTAMP WITH TIME ZONE NULL,FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE SET NULL, temporary_pin CHAR(6) UNIQUE, package_code VARCHAR(30) NOT NULL DEFAULT 'starter', period_months INT NOT NULL DEFAULT 1, selected_modules JSONB, setup_data JSONB, payment_reference VARCHAR(120), completed_at TIMESTAMP WITH TIME ZONE);
+CREATE TABLE IF NOT EXISTS saas_invoices (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,company_id INT NOT NULL,billing_month DATE NOT NULL,line_items JSONB NOT NULL,subtotal DECIMAL(12,2) NOT NULL,tax_rate DECIMAL(5,2) NOT NULL DEFAULT 18,tax DECIMAL(12,2) NOT NULL,total DECIMAL(12,2) NOT NULL,status VARCHAR(40) CHECK (status IN ('due','paid')) NOT NULL DEFAULT 'due',paid_at TIMESTAMP WITH TIME ZONE NULL,generated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,UNIQUE (company_id,billing_month),FOREIGN KEY(company_id) REFERENCES companies(id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS notification_outbox (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,recipient VARCHAR(180) NOT NULL,channel VARCHAR(40) CHECK (channel IN ('email','sms')) NOT NULL,subject VARCHAR(180) DEFAULT '',message TEXT NOT NULL,status VARCHAR(40) CHECK (status IN ('queued','sent','failed')) DEFAULT 'queued',created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,sent_at TIMESTAMP WITH TIME ZONE NULL);
+CREATE TABLE IF NOT EXISTS tenant_subscriptions (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,company_id INT NOT NULL,package_code VARCHAR(30) NOT NULL,period_months INT NOT NULL,started_at TIMESTAMP WITH TIME ZONE NOT NULL,expires_at TIMESTAMP WITH TIME ZONE NOT NULL,grace_ends_at TIMESTAMP WITH TIME ZONE NOT NULL,status VARCHAR(40) CHECK (status IN ('active','grace','expired')) DEFAULT 'active',last_reminder_at TIMESTAMP WITH TIME ZONE NULL,created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(company_id) REFERENCES companies(id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS usage_logins (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,company_id INT NOT NULL,user_id INT NOT NULL,role VARCHAR(30) NOT NULL,logged_in_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(company_id) REFERENCES companies(id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS module_pricing (module_key VARCHAR(30) PRIMARY KEY,module_name VARCHAR(100) NOT NULL,monthly_price DECIMAL(12,2) NOT NULL,updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+CREATE OR REPLACE FUNCTION "knockout_master".touch_updated_at() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN NEW.updated_at = CURRENT_TIMESTAMP; RETURN NEW; END $$;
+DROP TRIGGER IF EXISTS touch_updated_at ON "knockout_master"."company_users";
+CREATE TRIGGER touch_updated_at BEFORE UPDATE ON "knockout_master"."company_users" FOR EACH ROW EXECUTE FUNCTION "knockout_master".touch_updated_at();
+DROP TRIGGER IF EXISTS touch_updated_at ON "knockout_master"."module_pricing";
+CREATE TRIGGER touch_updated_at BEFORE UPDATE ON "knockout_master"."module_pricing" FOR EACH ROW EXECUTE FUNCTION "knockout_master".touch_updated_at();
+CREATE INDEX IF NOT EXISTS "registration_status" ON "knockout_master"."company_registration_requests" (status,created_at);
+CREATE INDEX IF NOT EXISTS "invoice_month" ON "knockout_master"."saas_invoices" (billing_month,status);
+CREATE INDEX IF NOT EXISTS "company_login" ON "knockout_master"."usage_logins" (company_id,logged_in_at);
+CREATE OR REPLACE VIEW tenant_waiting_list AS SELECT * FROM company_registration_requests WHERE completed_at IS NULL;
+CREATE OR REPLACE VIEW tenant_registrations AS SELECT * FROM company_registration_requests WHERE completed_at IS NOT NULL;
+CREATE SCHEMA IF NOT EXISTS "knockout";
+SET LOCAL search_path TO "knockout", pg_catalog;
+CREATE TABLE IF NOT EXISTS settings (id INT PRIMARY KEY DEFAULT 1, hotel_name VARCHAR(120) NOT NULL, tax_rate DECIMAL(5,2) NOT NULL DEFAULT 2.5, cgst_rate DECIMAL(5,2) NOT NULL DEFAULT 2.5, service_charge DECIMAL(5,2) NOT NULL DEFAULT 18, currency VARCHAR(8) NOT NULL DEFAULT 'INR', updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS users (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, name VARCHAR(120) NOT NULL, role VARCHAR(40) CHECK (role IN ('admin','waiter','chef','juicer')) NOT NULL, pin VARCHAR(80) NOT NULL, phone VARCHAR(30) DEFAULT '', email VARCHAR(160) DEFAULT '', profile_image_url VARCHAR(500) NULL, profile_image_object VARCHAR(255) NULL, pay_type VARCHAR(40) CHECK (pay_type IN ('daily','monthly')) DEFAULT 'monthly', pay_rate DECIMAL(10,2) DEFAULT 0, active BOOLEAN DEFAULT TRUE, deleted_at TIMESTAMP WITH TIME ZONE NULL, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS kitchen_staff (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, name VARCHAR(120) NOT NULL, designation VARCHAR(100) NOT NULL DEFAULT 'Chef', phone VARCHAR(30) DEFAULT '', specialization VARCHAR(120) DEFAULT '', pay_type VARCHAR(40) CHECK (pay_type IN ('daily','monthly')) DEFAULT 'monthly', pay_rate DECIMAL(10,2) DEFAULT 0, joined_on DATE NULL, notes VARCHAR(255) DEFAULT '', active BOOLEAN DEFAULT TRUE, created_by VARCHAR(120) DEFAULT 'Head Chef', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS staff_attendance (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, user_id INT NOT NULL, check_in TIMESTAMP WITH TIME ZONE NOT NULL, check_out TIMESTAMP WITH TIME ZONE NULL, notes VARCHAR(255) DEFAULT '', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id));
+CREATE TABLE IF NOT EXISTS restaurant_tables (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, table_number INT NOT NULL UNIQUE, seats INT NOT NULL, area VARCHAR(80) NOT NULL, status VARCHAR(40) CHECK (status IN ('available','occupied','reserved','cleaning')) DEFAULT 'available', guest_name VARCHAR(120) DEFAULT '', booking_time VARCHAR(10) DEFAULT '', order_id INT NULL, active BOOLEAN DEFAULT TRUE);
+CREATE TABLE IF NOT EXISTS menu_items (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, name VARCHAR(160) NOT NULL, category VARCHAR(80) NOT NULL, description VARCHAR(500) DEFAULT '', price DECIMAL(10,2) NOT NULL, icon VARCHAR(20) DEFAULT '🍽️', image_url VARCHAR(500) NULL, image_object VARCHAR(255) NULL, is_combo BOOLEAN DEFAULT FALSE, available BOOLEAN DEFAULT TRUE, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS combo_components (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, combo_id INT NOT NULL, menu_id INT NOT NULL, quantity INT NOT NULL DEFAULT 1, FOREIGN KEY (combo_id) REFERENCES menu_items(id) ON DELETE CASCADE, FOREIGN KEY (menu_id) REFERENCES menu_items(id));
+CREATE TABLE IF NOT EXISTS orders (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, table_id INT NULL, order_type VARCHAR(40) CHECK (order_type IN ('dine_in','parcel')) NOT NULL DEFAULT 'dine_in', guest_name VARCHAR(120), customer_phone VARCHAR(30) DEFAULT '', waiter VARCHAR(120), status VARCHAR(40) CHECK (status IN ('new','preparing','ready','collected','received','served','billing_requested','completed')) DEFAULT 'new', payment_status VARCHAR(40) CHECK (payment_status IN ('unpaid','paid')) DEFAULT 'unpaid', payment_method VARCHAR(30) NULL, subtotal DECIMAL(10,2) NULL, tax DECIMAL(10,2) NULL, service_charge DECIMAL(10,2) NULL, total DECIMAL(10,2) NULL, created_at TIMESTAMP WITH TIME ZONE NOT NULL, completed_at TIMESTAMP WITH TIME ZONE NULL, FOREIGN KEY (table_id) REFERENCES restaurant_tables(id));
+CREATE TABLE IF NOT EXISTS order_items (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, order_id INT NOT NULL, menu_id INT NOT NULL, quantity INT NOT NULL, note VARCHAR(255) DEFAULT '', price DECIMAL(10,2) NOT NULL, production_status VARCHAR(40) CHECK (production_status IN ('new','preparing','ready')) NOT NULL DEFAULT 'new', batch_no INT NOT NULL DEFAULT 1, handoff_status VARCHAR(40) CHECK (handoff_status IN ('pending','collected','received')) NOT NULL DEFAULT 'pending', FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE, FOREIGN KEY (menu_id) REFERENCES menu_items(id));
+CREATE TABLE IF NOT EXISTS inventory (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, name VARCHAR(160) NOT NULL, category VARCHAR(80), quantity DECIMAL(10,2) NOT NULL, unit VARCHAR(20) NOT NULL, min_quantity DECIMAL(10,2) NOT NULL, cost DECIMAL(10,2) NOT NULL, updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS inventory_transactions (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, inventory_id INT NOT NULL, movement_type VARCHAR(40) CHECK (movement_type IN ('purchase','usage','adjustment','waste')) NOT NULL, quantity DECIMAL(10,2) NOT NULL, unit_cost DECIMAL(10,2) NULL, note VARCHAR(255) DEFAULT '', created_by VARCHAR(120) DEFAULT 'Admin', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (inventory_id) REFERENCES inventory(id));
+CREATE TABLE IF NOT EXISTS stock_requests (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, inventory_id INT NOT NULL, requested_quantity DECIMAL(10,2) NOT NULL, note VARCHAR(255) DEFAULT '', requested_by VARCHAR(120) NOT NULL, status VARCHAR(40) CHECK (status IN ('pending','ordered','resolved')) NOT NULL DEFAULT 'pending', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, resolved_at TIMESTAMP WITH TIME ZONE NULL, FOREIGN KEY (inventory_id) REFERENCES inventory(id));
+CREATE TABLE IF NOT EXISTS finance_entries (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, entry_type VARCHAR(40) CHECK (entry_type IN ('income','expense')) NOT NULL, category VARCHAR(100) NOT NULL, description VARCHAR(255) NOT NULL, amount DECIMAL(12,2) NOT NULL, payment_method VARCHAR(40) DEFAULT 'Cash', entry_date DATE NOT NULL, reference VARCHAR(100) DEFAULT '', created_by VARCHAR(120) DEFAULT 'Admin', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS supplier_purchases (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, supplier_name VARCHAR(160) NOT NULL, invoice_number VARCHAR(100) DEFAULT '', description VARCHAR(255) NOT NULL, purchase_date DATE NOT NULL, total_amount DECIMAL(12,2) NOT NULL, notes VARCHAR(255) DEFAULT '', created_by VARCHAR(120) DEFAULT 'Admin', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS supplier_payments (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, purchase_id INT NOT NULL, amount DECIMAL(12,2) NOT NULL, payment_method VARCHAR(40) DEFAULT 'Cash', payment_date DATE NOT NULL, reference VARCHAR(100) DEFAULT '', notes VARCHAR(255) DEFAULT '', created_by VARCHAR(120) DEFAULT 'Admin', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (purchase_id) REFERENCES supplier_purchases(id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS bookings (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, table_id INT NOT NULL, guest_name VARCHAR(120) NOT NULL DEFAULT 'Customer', customer_phone VARCHAR(30) NOT NULL DEFAULT '', booking_date DATE NOT NULL, booking_time VARCHAR(10) NOT NULL, duration_minutes INT NOT NULL DEFAULT 90, status VARCHAR(40) CHECK (status IN ('confirmed','seated','cancelled')) DEFAULT 'confirmed', notification_status VARCHAR(40) CHECK (notification_status IN ('queued','sent','failed')) DEFAULT 'queued', notification_message VARCHAR(500) DEFAULT '', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (table_id) REFERENCES restaurant_tables(id));
+CREATE OR REPLACE FUNCTION "knockout".touch_updated_at() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN NEW.updated_at = CURRENT_TIMESTAMP; RETURN NEW; END $$;
+DROP TRIGGER IF EXISTS touch_updated_at ON "knockout"."settings";
+CREATE TRIGGER touch_updated_at BEFORE UPDATE ON "knockout"."settings" FOR EACH ROW EXECUTE FUNCTION "knockout".touch_updated_at();
+DROP TRIGGER IF EXISTS touch_updated_at ON "knockout"."kitchen_staff";
+CREATE TRIGGER touch_updated_at BEFORE UPDATE ON "knockout"."kitchen_staff" FOR EACH ROW EXECUTE FUNCTION "knockout".touch_updated_at();
+DROP TRIGGER IF EXISTS touch_updated_at ON "knockout"."inventory";
+CREATE TRIGGER touch_updated_at BEFORE UPDATE ON "knockout"."inventory" FOR EACH ROW EXECUTE FUNCTION "knockout".touch_updated_at();
+DROP TRIGGER IF EXISTS touch_updated_at ON "knockout"."stock_requests";
+CREATE TRIGGER touch_updated_at BEFORE UPDATE ON "knockout"."stock_requests" FOR EACH ROW EXECUTE FUNCTION "knockout".touch_updated_at();
+CREATE INDEX IF NOT EXISTS "booking_slot" ON "knockout"."bookings" (table_id,booking_date,status);
+CREATE INDEX IF NOT EXISTS "order_live_history" ON "knockout"."orders" (completed_at,status,id);
+CREATE INDEX IF NOT EXISTS "order_payment_date" ON "knockout"."orders" (payment_status,completed_at);
+CREATE INDEX IF NOT EXISTS "order_round_status" ON "knockout"."order_items" (order_id,batch_no,production_status,handoff_status);
+CREATE INDEX IF NOT EXISTS "user_portal_login" ON "knockout"."users" (role,pin,active,deleted_at);
+CREATE INDEX IF NOT EXISTS "request_status" ON "knockout"."stock_requests" (status,created_at);
+COMMIT;

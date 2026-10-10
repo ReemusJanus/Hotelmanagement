@@ -948,7 +948,7 @@ function CompanyRegistration({ close, refresh, toast }) {
       <span className="eyebrow">NEW TENANT REGISTRATION</span>
       <h2>Register a hotel or café</h2>
       <p>
-        A separate MariaDB database and initial Admin account will be created
+        A dedicated company workspace and initial Admin account will be created
         automatically.
       </p>
       <form className="modal-form" onSubmit={register}>
