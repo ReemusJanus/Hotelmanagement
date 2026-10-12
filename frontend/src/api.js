@@ -8,7 +8,7 @@ function portalIdentity(){
 export async function api(path, options={}) {
   const identity=portalIdentity(),companyDatabase=identity.companyDatabase;
   const buildRole=import.meta.env.VITE_PORTAL_ROLE||'admin',activeRole=identity.role||buildRole;
-  const base=`${location.protocol}//${location.hostname}:5100/api`;
+  const base=(import.meta.env.VITE_API_URL || '/api');
   const accessToken=sessionStorage.getItem('knockout-access-token');
   const response = await fetch(base + path, {...options,headers: {'Content-Type':'application/json','Authorization':accessToken?`Bearer ${accessToken}`:'','X-Company-Database':companyDatabase,'X-Portal-Role':activeRole,...options.headers}});
   const data = await response.json();
@@ -27,7 +27,7 @@ export async function api(path, options={}) {
 }
 
 export async function apiForm(path, form, options={}) {
-  const identity=portalIdentity(),base=`${location.protocol}//${location.hostname}:5100/api`;
+  const identity=portalIdentity(),base=(import.meta.env.VITE_API_URL || '/api');
   const accessToken=sessionStorage.getItem('knockout-access-token');
   const response=await fetch(base+path,{...options,method:options.method||'POST',headers:{'Authorization':accessToken?`Bearer ${accessToken}`:'','X-Company-Database':identity.companyDatabase,'X-Portal-Role':identity.role,...options.headers},body:form});
   const data=await response.json().catch(()=>({message:'Upload service returned an invalid response'}));
@@ -46,7 +46,7 @@ export async function apiForm(path, form, options={}) {
 }
 
 export async function resolvePortalLogin(hotelId, pin) {
-  const masterBase=`${location.protocol}//${location.hostname}:5100/api`;
+  const masterBase=(import.meta.env.VITE_API_URL || '/api');
   const response=await fetch(`${masterBase}/public/resolve-login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hotelId,pin})});
   const data=await response.json().catch(()=>({message:'Login service returned an invalid response'}));
   if(!response.ok)throw new Error(data.message||'Unable to verify this PIN');
@@ -57,7 +57,7 @@ export async function resolvePortalLogin(hotelId, pin) {
 }
 
 export async function submitCompanyRegistration(form) {
-  const masterBase=`${location.protocol}//${location.hostname}:5100/api`;
+  const masterBase=(import.meta.env.VITE_API_URL || '/api');
   const response=await fetch(`${masterBase}/public/company-registrations`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)});
   const data=await response.json().catch(()=>({message:'Registration service returned an invalid response'}));
   if(!response.ok)throw new Error(data.message||'Unable to submit company registration');
@@ -65,7 +65,7 @@ export async function submitCompanyRegistration(form) {
 }
 
 export async function getOnboardingStatus(id, pin) {
-  const base=`${location.protocol}//${location.hostname}:5100/api`;
+  const base=(import.meta.env.VITE_API_URL || '/api');
   const response=await fetch(`${base}/public/onboarding-status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,pin})});
   const data=await response.json().catch(()=>({message:'Unable to read onboarding status'}));
   if(!response.ok)throw new Error(data.message||'Unable to read onboarding status');
@@ -73,7 +73,7 @@ export async function getOnboardingStatus(id, pin) {
 }
 
 export async function completeCompanyRegistration(form) {
-  const base=`${location.protocol}//${location.hostname}:5100/api`;
+  const base=(import.meta.env.VITE_API_URL || '/api');
   const response=await fetch(`${base}/public/complete-registration`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)});
   const data=await response.json().catch(()=>({message:'Unable to complete registration'}));
   if(!response.ok)throw new Error(data.message||'Unable to complete registration');
