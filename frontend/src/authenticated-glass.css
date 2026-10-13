@@ -1,0 +1,70 @@
+/* Authenticated presentation only; no business or print rules. */
+@media screen {
+ :root {
+  --glass-primary:rgba(39,39,42,.68); --glass-secondary:rgba(24,24,27,.76); --glass-elevated:rgba(63,63,70,.48);
+  --glass-border:rgba(255,255,255,.10); --glass-gold-border:rgba(201,162,39,.38);
+  --glass-soft-gold:#E6C76A; --glass-reflection:rgba(230,199,106,.08);
+  --glass-shadow:0 12px 40px rgba(0,0,0,.30),inset 0 1px rgba(255,255,255,.04);
+  --glass-raised-shadow:0 20px 48px rgba(0,0,0,.38),inset 0 1px rgba(230,199,106,.12);
+  --glass-solid:rgba(24,24,27,.97); --glass-radius:18px;
+ }
+ :is(.shell,.master-shell,.authenticated-onboarding) {
+  background:radial-gradient(ellipse at 80% 0,var(--glass-reflection),transparent 48%),var(--color-background);
+ }
+ :is(.shell,.master-shell)>main { background:transparent; }
+ :is(.shell,.master-shell)>aside {
+  inset:12px auto 12px 12px!important; width:232px!important; border:1px solid var(--glass-border);
+  border-top-color:var(--glass-gold-border); border-radius:22px; background:var(--glass-secondary);
+  backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); box-shadow:var(--glass-shadow);
+ }
+ :is(.shell,.master-shell)>aside .brand { padding-bottom:24px; }
+ :is(.shell,.master-shell)>aside nav button { transition:background .18s ease,box-shadow .18s ease; }
+ :is(.shell,.master-shell)>aside nav button.active { background:linear-gradient(110deg,var(--glass-reflection),transparent),var(--color-primary-soft); color:var(--glass-soft-gold); box-shadow:inset 3px 0 var(--color-primary),0 4px 16px rgba(0,0,0,.16); }
+ :is(.shell,.master-shell) main>header {
+  top:12px; margin:12px 20px 0; border:1px solid var(--glass-border); border-radius:var(--glass-radius);
+  background:var(--glass-secondary); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); box-shadow:var(--glass-shadow);
+ }
+ :is(.shell,.master-shell) :is(.panel,.glass-card,.overview-hero,.stat,.overview-metric,.company-card,.table-card,.finance-card,.order-card,.parcel-card,.staff-work-card,.kitchen-member-card,.summary-strip,.master-command-strip,.master-directory-toolbar,.registration-request-row) {
+  background:linear-gradient(140deg,var(--glass-reflection),transparent 42%),var(--glass-primary);
+  border:1px solid var(--glass-border); border-radius:var(--glass-radius); box-shadow:var(--glass-shadow);
+ }
+ :is(.shell,.master-shell) :is(.stat,.overview-metric) { border-top-color:var(--glass-gold-border); position:relative; }
+ :is(.shell,.master-shell) :is(.stat,.overview-metric)>span { border:1px solid var(--glass-gold-border); box-shadow:inset 0 1px rgba(255,255,255,.05); }
+ :is(.shell,.master-shell) :is(.table-card,.ticket,.chef-order-summary) { border-top:3px solid var(--table-accent,var(--color-warning)); }
+ :is(.shell,.master-shell) .table-card.occupied { --table-accent:var(--color-primary); }
+ :is(.shell,.master-shell) .table-card.available { --table-accent:var(--color-success); }
+ :is(.shell,.master-shell) .table-card.reserved { --table-accent:var(--color-warning); }
+ :is(.shell,.master-shell) .table-card.cleaning { --table-accent:var(--color-muted); }
+ :is(.shell,.master-shell) :is(.ticket,.chef-order-summary,.table-wrap,.table-scroll) { background:var(--glass-solid); border-radius:14px; }
+ :is(.shell,.master-shell) :is(td,th) { backdrop-filter:none; -webkit-backdrop-filter:none; }
+ :is(.shell,.master-shell) td { background:var(--glass-solid); }
+ :is(.shell,.master-shell) tr:hover td { background:var(--color-surface-elevated); }
+ :is(.shell,.master-shell) :is(.primary,.secondary,.ready-btn) { border-radius:10px; min-height:44px; }
+ :is(.shell,.master-shell) .primary { box-shadow:0 4px 16px rgba(0,0,0,.20)!important; }
+ :is(.shell,.master-shell) :is(input,select,textarea,.theme-select>button),.authenticated-onboarding :is(input,select,textarea) { background:var(--glass-solid); border-color:var(--color-input-border); border-radius:10px; transition:border-color .16s ease,box-shadow .16s ease; }
+ :is(.shell,.master-shell) .theme-select-menu { background:var(--color-surface-elevated); border:1px solid var(--glass-gold-border); border-radius:12px; }
+ body:has(.shell,.master-shell,.authenticated-onboarding) .modal-wrap { background:rgba(0,0,0,.68); }
+ body:has(.shell,.master-shell,.authenticated-onboarding) :is(.modal,.drawer) {
+  background:var(--glass-solid); border:1px solid var(--glass-border); border-top-color:var(--glass-gold-border);
+  border-radius:22px; box-shadow:var(--glass-raised-shadow); animation:none;
+ }
+ .authenticated-onboarding .public-registration-card { background:var(--glass-secondary); border-color:var(--glass-gold-border); box-shadow:var(--glass-shadow); }
+ :is(.shell,.master-shell) .header-user { background:var(--glass-primary); border-radius:14px; }
+ :is(.shell,.master-shell) .master-turnover .panel { background:linear-gradient(140deg,var(--glass-reflection),transparent 42%),var(--glass-primary); }
+ :is(.shell,.master-shell) :is(.chart span,.monthly-bars i,.master-daily-chart span) { background:linear-gradient(0deg,var(--color-primary),var(--color-primary-hover)); }
+ @media(hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference) {
+  :is(.shell,.master-shell) :is(.stat,.overview-metric):hover {
+   transform:perspective(1000px) translateY(-3px) rotateX(var(--glass-tilt-x,0deg)) rotateY(var(--glass-tilt-y,0deg));
+   background:radial-gradient(circle at var(--glass-light-x,50%) var(--glass-light-y,0%),var(--glass-reflection),transparent 65%),var(--glass-primary);
+   border-color:var(--glass-gold-border); box-shadow:var(--glass-raised-shadow);
+  }
+ }
+ @media(max-width:800px) {
+  :is(.shell,.master-shell)>aside { position:relative; inset:auto!important; width:calc(100% - 24px)!important; margin:12px; border-radius:16px; background:var(--glass-solid); backdrop-filter:none; -webkit-backdrop-filter:none; }
+  :is(.shell,.master-shell) main>header { margin:12px; top:0; padding:12px; background:var(--glass-solid); backdrop-filter:none; -webkit-backdrop-filter:none; }
+  :is(.shell,.master-shell) .master-header-actions { flex-wrap:wrap; max-width:100%; }
+ }
+ @media(pointer:coarse),(prefers-reduced-motion:reduce),(prefers-reduced-transparency:reduce) {
+  :is(.shell,.master-shell)>aside,:is(.shell,.master-shell) main>header { backdrop-filter:none; -webkit-backdrop-filter:none; background:var(--glass-solid); }
+ }
+}

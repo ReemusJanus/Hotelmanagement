@@ -1,0 +1,38 @@
+import { useRef, useState } from 'react';
+import { ArrowDown, ArrowUpRight, ArrowRight, Check, Plus, Smartphone } from 'lucide-react';
+import RestaurantScene from './landing/RestaurantScene';
+import RestaurantPlan from './landing/RestaurantPlan';
+import StoryPanel from './landing/StoryPanel';
+import { stories, modules, roles, questions } from './landing/story-data';
+import { useReducedMotion, useStoryProgress } from './landing/useStoryProgress';
+import './landing/luxury.css';
+
+function Brand() {
+  return <><img src="/knockout-gold.svg" alt="" width="40" height="40"/><span>KnockOUT<small>HOSPITALITY, CONNECTED.</small></span></>;
+}
+
+export default function LandingStory({ login, register }) {
+  const root=useRef(null), controller=useRef(null);
+  const reduced=useReducedMotion();
+  const {active,progress}=useStoryProgress(root,controller,reduced);
+  const [filter,setFilter]=useState('All'), [role,setRole]=useState(0);
+  return <main className="lux-site" ref={root} data-reduced-motion={reduced}>
+    <a className="lux-skip" href="#story-main">Skip to content</a>
+    <header className="lux-header"><a className="lux-brand" href="#story-main" aria-label="KnockOUT home"><Brand/></a><nav aria-label="Main navigation"><a href="#service-story">The story</a><a href="#workspace-explorer">The workspace</a><a href="#your-team">Your team</a><a href="#story-questions">Questions</a></nav><div className="lux-header-actions"><button className="lux-signin" onClick={login}>Sign in</button><button className="lux-button lux-button-small" onClick={register}>Get Started <ArrowUpRight size={16}/></button></div></header>
+    <section className="lux-hero" id="story-main">
+      <div className="lux-hero-copy"><span className="lux-eyebrow"><i/> THE ART OF CONNECTED HOSPITALITY</span><h1>Every Moment.<br/><em>One Connected<br/>Experience.</em></h1><p>From the first reservation to the final payment, KnockOUT connects every moment of hospitality.</p><div className="lux-hero-actions"><a className="lux-button" href="#service-story">Explore KnockOUT <ArrowDown size={16}/></a><button className="lux-link" onClick={register}>Get Started <ArrowUpRight size={17}/></button></div><div className="lux-hero-meta"><span>Restaurants</span><span>Cafés</span><span>Takeaway teams</span></div></div>
+      <div className="lux-hero-visual"><div className="lux-visual-top"><span>01 / A WORLD OF HOSPITALITY</span><span>ONE CONNECTED WORKSPACE</span></div><RestaurantScene hero reduced={reduced}/><div className="lux-hero-note"><span className="lux-live-dot"/><span>The floor. The kitchen. The whole picture.</span></div><div className="lux-visual-corner" aria-hidden="true">K.</div></div>
+      <a className="lux-scroll-invite" href="#service-story"><span>SCROLL TO FOLLOW ONE SERVICE</span><ArrowDown size={16}/></a>
+    </section>
+    <section className="lux-intro" id="service-story"><span className="lux-eyebrow">TWELVE SCENES. ONE CONNECTED EXPERIENCE.</span><h2>Great service is never<br/><em>a single moment.</em></h2><p>It’s everything that happens between the welcome and the goodbye.<br/>Follow one service, from the front door to the bigger picture.</p></section>
+    <div className="lux-journey">
+      <div className="lux-chapters">{stories.map((story,index)=><section className="lux-chapter" data-lux-chapter={index} data-active={index===active} id={`service-chapter-${index}`} key={story.id} aria-labelledby={`lux-title-${index}`}><div className="lux-chapter-label"><span>{String(index+1).padStart(2,'0')}</span><span>{story.label}</span><story.icon size={18}/></div><h2 id={`lux-title-${index}`}>{story.title}</h2><p>{story.caption}</p><ul>{story.tags.map(tag=><li key={tag}><Check size={13}/>{tag}</li>)}</ul><div className="lux-chapter-note"><span/>{story.note}</div><div className="lux-mobile-scene">{index<2&&<RestaurantPlan active={index}/>}<StoryPanel step={index}/></div></section>)}</div>
+      <aside className="lux-scene-column" aria-label="Illustrative restaurant workflow"><div className="lux-scene-sticky"><div className="lux-scene-top"><span><i/> LIVE STORY</span><span>{String(active+1).padStart(2,'0')} / {stories.length} · {stories[active].label}</span></div><RestaurantScene controller={controller} progress={progress} active={active} reduced={reduced}/><div className="lux-scene-panels">{stories.map((story,index)=><div key={story.id} className="lux-panel-layer" data-active={index===active} aria-hidden={index!==active}><StoryPanel step={index} progressive/></div>)}</div><nav className="lux-scene-nav" aria-label="Story chapters">{stories.map((story,index)=><a key={story.id} href={`#service-chapter-${index}`} aria-label={`Chapter ${index+1}: ${story.label}`} aria-current={index===active?'step':undefined}><span>{String(index+1).padStart(2,'0')}</span></a>)}</nav><div className="lux-story-progress" aria-hidden="true"><span/></div></div></aside>
+    </div>
+    <section className="lux-workspace" id="workspace-explorer"><div className="lux-section-heading"><span className="lux-eyebrow">THE WORKSPACE BEHIND THE EXPERIENCE</span><h2>Every detail.<br/><em>In its right place.</em></h2><p>Explore the tools behind your next great service.</p></div><div className="lux-filters" role="group" aria-label="Filter workspace capabilities">{['All','Before service','During service','After service','Behind the scenes'].map(value=><button key={value} aria-pressed={filter===value} onClick={()=>setFilter(value)}>{value}</button>)}</div><div className="lux-module-grid">{modules.filter(([group])=>filter==='All'||group===filter).map(([group,title,copy])=><article key={title}><span>{group}</span><h3>{title}</h3><p>{copy}</p></article>)}</div></section>
+    <section className="lux-team" id="your-team"><div className="lux-section-heading"><span className="lux-eyebrow">DESIGNED AROUND YOUR PEOPLE</span><h2>Different roles.<br/><em>The same remarkable service.</em></h2></div><div className="lux-team-grid"><div className="lux-role-tabs" role="group" aria-label="Explore team roles">{roles.map(([name],index)=><button key={name} aria-pressed={role===index} onClick={()=>setRole(index)}><span>{String(index+1).padStart(2,'0')}</span>{name}<ArrowRight size={17}/></button>)}</div><div className="lux-role-detail"><span className="lux-eyebrow">{roles[role][0]}</span><h3>{roles[role][1]}</h3><p>{roles[role][2]}</p><div className="lux-team-device"><div><Smartphone size={28}/><span>At the desk.<br/><strong>On the floor.</strong></span></div><p>Web and mobile workspaces for the way your team works.</p><small>Available features vary by role and platform.</small></div></div></div></section>
+    <section className="lux-faq" id="story-questions"><div><span className="lux-eyebrow">A LITTLE CLARITY</span><h2>Before your<br/><em>next chapter.</em></h2><p>Real capabilities.<br/>Clear expectations.</p></div><div className="lux-questions">{questions.map(([question,answer])=><details key={question}><summary>{question}<Plus size={18}/></summary><p>{answer}</p></details>)}</div></section>
+    <section className="lux-finale"><span className="lux-eyebrow">ONE CONNECTED HOSPITALITY WORKSPACE</span><h2>Ready to transform your<br/><em>hospitality experience?</em></h2><p>Bring your team, tables, kitchen, and business together with KnockOUT.</p><div><button className="lux-button" onClick={register}>Get Started <ArrowUpRight size={17}/></button><a className="lux-link" href="#workspace-explorer">Explore Features <ArrowRight size={17}/></a></div><span className="lux-finale-rule"/></section>
+    <footer className="lux-footer"><a className="lux-brand" href="#story-main"><Brand/></a><span>Built for the people behind every service.</span><small>© {new Date().getFullYear()} KnockOUT</small></footer>
+  </main>;
+}

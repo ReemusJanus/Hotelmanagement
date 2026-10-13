@@ -1,3 +1,4 @@
+import LandingStory from "./LandingStory";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   LayoutDashboard,
@@ -205,71 +206,12 @@ function CompanyApp() {
       ) : (
         <Juicer data={data} refresh={refresh} user={user} logout={logout} toast={toast} />
       )}
-      <div className={`toast ${notice ? "show" : ""}`}>{notice}</div>
+      <div role="status" aria-live="polite" className={`toast ${notice ? "show" : ""}`}>{notice}</div>
     </>
   );
 }
 
-function PublicLanding({ login, register }) {
-  useEffect(() => {
-    const elements = document.querySelectorAll(".landing-signatures, .landing-section-head, .landing-feature-grid article, .landing-visit>div, .landing-visit-details>*");
-    elements.forEach((element, index) => {
-      element.classList.add("landing-reveal");
-      element.style.setProperty("--reveal-delay", `${Math.min(index % 4, 3) * 90}ms`);
-    });
-    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
-      if (entry.isIntersecting) {
-        entry.target.classList.add("is-visible");
-        observer.unobserve(entry.target);
-      }
-    }), { threshold: .14, rootMargin: "0px 0px -45px" });
-    elements.forEach((element) => observer.observe(element));
-    return () => observer.disconnect();
-  }, []);
-  return <main className="public-landing">
-    <nav className="landing-nav">
-      <button className="landing-brand" onClick={() => window.scrollTo({top:0,behavior:"smooth"})}><img src="/knockout-logo.png" alt="KnockOUT logo"/><span><b>KnockOUT</b><small>HOSPITALITY OPERATING SYSTEM</small></span></button>
-      <div><a href="#platform">Platform</a><a href="#businesses">Businesses</a><a href="#operations">Operations</a><button className="landing-register-nav" onClick={register}>Register</button><button className="landing-login" onClick={login}>Login <ArrowRight size={15}/></button></div>
-    </nav>
-    <section className="landing-hero">
-      <div className="landing-hero-copy">
-        <span className="landing-pill"><i/> ONE PLATFORM · EVERY LOCATION</span>
-        <h1>Run hospitality <em>beautifully.</em></h1>
-        <p>A modular SaaS operating system for restaurants, cafés, hotels, food courts, and cloud kitchens. Connect every order, table, kitchen station, employee, stock item, and bill in one live workspace.</p>
-        <blockquote className="landing-hero-quote">“Less operational noise. More time for exceptional hospitality.”</blockquote>
-        <div className="landing-hero-actions"><a className="landing-explore" href="#platform">Explore the platform <ArrowRight/></a></div>
-        <div className="landing-trust"><span><CheckCircle2/> Isolated hotel workspaces</span><span><CheckCircle2/> Live order tracking</span><span><CheckCircle2/> Role-based access</span></div>
-      </div>
-      <div className="landing-food-visual">
-        <img src="/hospitality-platform-hero-v1.png" alt="Café, restaurant and hotel businesses managed with KnockOUT"/>
-        <div className="landing-food-shine"/>
-        <span className="landing-food-edition">CAFÉ · RESTAURANT · HOTEL</span>
-        <div className="landing-dish-label broasted"><small>LIVE OPERATIONS</small><b>Orders to service</b><span>Every round tracked in real time</span></div>
-        <div className="landing-dish-label alfaham"><small>BUSINESS CONTROL</small><b>One clear overview</b><span>Revenue · stock · teams · billing</span></div>
-        <div className="landing-food-seal"><Gauge/><span><b>Always in sync</b><small>Web and mobile workspaces</small></span></div>
-      </div>
-    </section>
-    <section className="landing-signatures" id="businesses">
-      <div><span className="eyebrow">BUILT FOR HOSPITALITY</span><h2>One system that adapts to your business.</h2></div>
-      <div className="landing-signature-copy"><p>Start with the modules you need and enable more as you grow. Each property receives its own Hotel ID, isolated data, staff access, configuration, and operating dashboard.</p><blockquote>Restaurants · Cafés · Hotels · Cloud kitchens · Multi-location groups</blockquote></div>
-      <span className="landing-signature-mark">S<span>A</span></span>
-    </section>
-    <section className="landing-platform" id="platform">
-      <div className="landing-section-head"><span className="eyebrow">THE COMPLETE PLATFORM</span><h2>Everything your service team needs</h2><p>Purpose-built portals keep every role focused while sharing the same live operational truth.</p></div>
-      <div className="landing-feature-grid">
-        <article><Armchair/><span>01</span><h3>Tables &amp; Waiters</h3><p>Take orders by service round, follow each handoff, add more items, and send completed tables to billing.</p></article>
-        <article><ChefHat/><span>02</span><h3>Kitchen Display</h3><p>Separate table and parcel queues with live ticket counts, preparation timers, and individual round status.</p></article>
-        <article><Package/><span>03</span><h3>Parcel Operations</h3><p>Manage takeaway orders, scheduled collections, kitchen progress, handoff, payment, and order history.</p></article>
-        <article><TrendingUp/><span>04</span><h3>Business Intelligence</h3><p>See revenue, bills, stock alerts, staff attendance, and live service health from the admin dashboard.</p></article>
-      </div>
-    </section>
-    <section className="landing-visit" id="operations">
-      <div><span className="eyebrow">CONTROL WITHOUT COMPLEXITY</span><h2>From first order to final bill.</h2><p>Every status change reaches the right portal through live socket updates.</p></div>
-      <div className="landing-visit-details"><span><ShoppingCart/><b>Capture every order</b><small>New rounds remain separate and easy to audit</small></span><span><Clock3/><b>Track every handoff</b><small>Preparing, ready, collected, received, and complete</small></span><span><Settings/><b>Choose every module</b><small>Super Admin controls access for each business</small></span></div>
-    </section>
-    <footer className="landing-footer"><span><img src="/knockout-logo.png" alt=""/><b>KnockOUT</b></span><p>Powered by KnockOUT</p><small>© 2026 KnockOUT SaaS</small></footer>
-  </main>;
-}
+function PublicLanding(props) { return <LandingStory {...props}/>; }
 
 function Login({ onLogin }) {
   const routeFromPath = () => location.pathname === "/login" ? "login" : location.pathname === "/register" ? "register" : "landing";
@@ -354,6 +296,7 @@ function Login({ onLogin }) {
         <input
           ref={input}
           className="web-otp-input"
+          aria-label="Six-digit access PIN"
           value={pin}
           onChange={(e) =>
             setPin(e.target.value.replace(/\D/g, "").slice(0, 6))
@@ -385,8 +328,8 @@ function ApplicantOnboarding({user,logout}){
   const refresh=useCallback(()=>getOnboardingStatus(user.id,user.temporaryPin).then(setStatus).catch(err=>setError(err.message)),[user.id,user.temporaryPin]);
   useEffect(()=>{refresh();const timer=setInterval(refresh,10000);return()=>clearInterval(timer)},[refresh]);
   async function finish(event){event.preventDefault();setBusy(true);setError("");try{setComplete(await completeCompanyRegistration({...form,id:user.id,pin:user.temporaryPin}))}catch(err){setError(err.message)}finally{setBusy(false)}}
-  if(complete)return <main className="web-auth public-registration-page"><section className="public-registration-card registration-success"><span><CheckCircle2/></span><span className="eyebrow">WORKSPACE ACTIVATED</span><h1>Welcome to KnockOUT</h1><p>Your isolated tenant database and first Administrator account have now been created.</p><div className="credential-result"><span>HOTEL ID <b>{complete.hotelId}</b></span><span>NEW ADMIN PIN <b>{complete.adminPin}</b></span></div><p>Permanent credentials were queued to your email and mobile. Your temporary PIN is now disabled.</p><button className="primary wide" onClick={logout}>Login with permanent credentials</button></section></main>;
-  return <main className="web-auth public-registration-page"><header className="otp-web-brand"><span className="logo">K</span><b>KnockOUT</b><small>SECURE ONBOARDING</small></header><section className="public-registration-card onboarding-card">{!status?<div className="approval-wait"><span className="otp-spinner"/><h1>Opening your application</h1>{error?<div className="form-error">{error}</div>:null}</div>:status.status==='pending'?<div className="approval-wait applicant-waiting-view"><span className="approval-pulse"><Clock3/></span><span className="eyebrow">APPLICATION #{user.id}</span><h1>Waiting for approval</h1><p>Your application has reached KnockOUT Master. This page updates automatically after it is reviewed.</p><div className="applicant-details"><span><small>BUSINESS</small><b>{status.companyName}</b></span><span><small>ADMINISTRATOR</small><b>{status.adminName}</b></span><span><small>EMAIL</small><b>{status.email}</b></span><span><small>MOBILE</small><b>{status.phone}</b></span><span><small>PACKAGE</small><b>{status.packageCode}</b></span><span><small>SUBSCRIPTION</small><b>{status.periodMonths} month{status.periodMonths>1?'s':''}</b></span></div><div className="applicant-module-list"><small>SELECTED MODULES</small><div>{(status.selectedModules||[]).map(key=><span key={key}><CheckCircle2/>{moduleNames[key]||key}</span>)}</div></div>{error?<div className="form-error">{error}</div>:null}</div>:status.status==='rejected'?<div className="approval-wait"><AlertTriangle/><h1>Application not approved</h1><p>{status.reviewNote||"Contact KnockOUT support for more information."}</p></div>:<><button className="web-back registration-back" onClick={logout}><ChevronLeft/>Exit onboarding</button><span className="eyebrow">APPROVED · COMPLETE REGISTRATION</span><h1>Set up {status.companyName}</h1><p>Complete the company profile and confirm payment. Your tenant database is created only after this step succeeds.</p><div className="onboarding-summary"><span><small>PACKAGE</small><b>{status.packageCode}</b></span><span><small>PERIOD</small><b>{status.periodMonths} month{status.periodMonths>1?'s':''}</b></span><span><small>MODULES</small><b>{status.selectedModules.length}</b></span><span><small>TOTAL WITH GST</small><b>{money(status.total)}</b></span></div><form className="public-registration-form" onSubmit={finish}><label>BUSINESS TYPE<select value={form.businessType} onChange={e=>setForm({...form,businessType:e.target.value})}><option>Restaurant</option><option>Café</option><option>Hotel</option><option>Cloud Kitchen</option><option>Food Court</option></select></label><label>GST NUMBER (OPTIONAL)<input value={form.gstNumber} onChange={e=>setForm({...form,gstNumber:e.target.value})}/></label><label className="full">BUSINESS ADDRESS<textarea value={form.address} onChange={e=>setForm({...form,address:e.target.value})} required/></label><label className="full">PAYMENT REFERENCE<input value={form.paymentReference} onChange={e=>setForm({...form,paymentReference:e.target.value})} placeholder="Transaction / payment reference" required/><small>Payment gateway reference confirms the selected package purchase.</small></label>{error?<div className="form-error full">{error}</div>:null}<button className="primary wide full" disabled={busy}>{busy?"Creating secure workspace…":`Pay ${money(status.total)} & activate workspace`}</button></form></>}</section></main>;
+  if(complete)return <main className="web-auth public-registration-page authenticated-onboarding"><section className="public-registration-card registration-success"><span><CheckCircle2/></span><span className="eyebrow">WORKSPACE ACTIVATED</span><h1>Welcome to KnockOUT</h1><p>Your isolated tenant database and first Administrator account have now been created.</p><div className="credential-result"><span>HOTEL ID <b>{complete.hotelId}</b></span><span>NEW ADMIN PIN <b>{complete.adminPin}</b></span></div><p>Permanent credentials were queued to your email and mobile. Your temporary PIN is now disabled.</p><button className="primary wide" onClick={logout}>Login with permanent credentials</button></section></main>;
+  return <main className="web-auth public-registration-page authenticated-onboarding"><header className="otp-web-brand"><span className="logo">K</span><b>KnockOUT</b><small>SECURE ONBOARDING</small></header><section className="public-registration-card onboarding-card">{!status?<div className="approval-wait"><span className="otp-spinner"/><h1>Opening your application</h1>{error?<div className="form-error">{error}</div>:null}</div>:status.status==='pending'?<div className="approval-wait applicant-waiting-view"><span className="approval-pulse"><Clock3/></span><span className="eyebrow">APPLICATION #{user.id}</span><h1>Waiting for approval</h1><p>Your application has reached KnockOUT Master. This page updates automatically after it is reviewed.</p><div className="applicant-details"><span><small>BUSINESS</small><b>{status.companyName}</b></span><span><small>ADMINISTRATOR</small><b>{status.adminName}</b></span><span><small>EMAIL</small><b>{status.email}</b></span><span><small>MOBILE</small><b>{status.phone}</b></span><span><small>PACKAGE</small><b>{status.packageCode}</b></span><span><small>SUBSCRIPTION</small><b>{status.periodMonths} month{status.periodMonths>1?'s':''}</b></span></div><div className="applicant-module-list"><small>SELECTED MODULES</small><div>{(status.selectedModules||[]).map(key=><span key={key}><CheckCircle2/>{moduleNames[key]||key}</span>)}</div></div>{error?<div className="form-error">{error}</div>:null}</div>:status.status==='rejected'?<div className="approval-wait"><AlertTriangle/><h1>Application not approved</h1><p>{status.reviewNote||"Contact KnockOUT support for more information."}</p></div>:<><button className="web-back registration-back" onClick={logout}><ChevronLeft/>Exit onboarding</button><span className="eyebrow">APPROVED · COMPLETE REGISTRATION</span><h1>Set up {status.companyName}</h1><p>Complete the company profile and confirm payment. Your tenant database is created only after this step succeeds.</p><div className="onboarding-summary"><span><small>PACKAGE</small><b>{status.packageCode}</b></span><span><small>PERIOD</small><b>{status.periodMonths} month{status.periodMonths>1?'s':''}</b></span><span><small>MODULES</small><b>{status.selectedModules.length}</b></span><span><small>TOTAL WITH GST</small><b>{money(status.total)}</b></span></div><form className="public-registration-form" onSubmit={finish}><label>BUSINESS TYPE<select value={form.businessType} onChange={e=>setForm({...form,businessType:e.target.value})}><option>Restaurant</option><option>Café</option><option>Hotel</option><option>Cloud Kitchen</option><option>Food Court</option></select></label><label>GST NUMBER (OPTIONAL)<input value={form.gstNumber} onChange={e=>setForm({...form,gstNumber:e.target.value})}/></label><label className="full">BUSINESS ADDRESS<textarea value={form.address} onChange={e=>setForm({...form,address:e.target.value})} required/></label><label className="full">PAYMENT REFERENCE<input value={form.paymentReference} onChange={e=>setForm({...form,paymentReference:e.target.value})} placeholder="Transaction / payment reference" required/><small>Payment gateway reference confirms the selected package purchase.</small></label>{error?<div className="form-error full">{error}</div>:null}<button className="primary wide full" disabled={busy}>{busy?"Creating secure workspace…":`Pay ${money(status.total)} & activate workspace`}</button></form></>}</section></main>;
 }
 
 function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
@@ -409,6 +352,7 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
     [selectedCompanyId, setSelectedCompanyId] = useState(null),
     [selectedRegistrationId,setSelectedRegistrationId]=useState(null),
     [companySection, setCompanySection] = useState("overview"),
+    [masterPage,setMasterPage]=useState("companies"),
     [companySearch, setCompanySearch] = useState(""),
     [companyFilter, setCompanyFilter] = useState("all"),
     [reviewBusy,setReviewBusy]=useState(null),
@@ -525,10 +469,12 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
           </div>
         </div>
         <nav>
-          <button className={!selectedCompany&&!selectedRegistration ? "active" : ""} onClick={() => { setSelectedCompanyId(null);setSelectedRegistrationId(null); setCompanySection("overview"); }}>
+          <button className={!selectedCompany&&!selectedRegistration&&masterPage==="companies" ? "active" : ""} onClick={() => { setMasterPage("companies");setSelectedCompanyId(null);setSelectedRegistrationId(null); setCompanySection("overview"); }}>
             <LayoutDashboard size={18} />
             Companies
           </button>
+          <button className={!selectedCompany&&masterPage==="waiting"?"active":""} onClick={()=>{setMasterPage("waiting");setSelectedCompanyId(null);setSelectedRegistrationId(null)}}><Clock3 size={18}/>Tenant Waiting List <span className="nav-count-badge">{pendingRegistrations.length}</span></button>
+          <button className={!selectedCompany&&!selectedRegistration&&masterPage==="billing"?"active":""} onClick={()=>{setMasterPage("billing");setSelectedCompanyId(null);setSelectedRegistrationId(null)}}><CreditCard size={18}/>Monthly SaaS Billing</button>
           <div className="master-company-nav">
             <small>COMPANY USERS</small>
             {companies.map((company) => <button key={company.id} className={selectedCompany?.id === company.id ? "active" : ""} onClick={() => { setSelectedRegistrationId(null);setSelectedCompanyId(company.id); setCompanySection("overview"); }}><Building2 size={17}/><span>{company.companyName}<small>{company.staffCount} users</small></span></button>)}
@@ -542,7 +488,7 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
             <h2>KnockOUT Master</h2>
           </div>
           <div className="master-header-actions">
-            <button className="master-pending-counter" onClick={()=>{setSelectedCompanyId(null);setSelectedRegistrationId(pendingRegistrations[0]?.id||null)}}><Bell size={15}/><span><b>{pendingRegistrations.length}</b><small>Pending registrations</small></span></button>
+            <button className="master-pending-counter" onClick={()=>{setMasterPage("waiting");setSelectedCompanyId(null);setSelectedRegistrationId(null)}}><Bell size={15}/><span><b>{pendingRegistrations.length}</b><small>Pending registrations</small></span></button>
             <div className="header-user">
               <span className="header-avatar">KM</span>
               <span className="header-user-copy"><b>KnockOUT Master</b><small>Super Admin</small></span>
@@ -552,16 +498,16 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
         </header>
         <div className="page">
           {selectedRegistration ? <MasterRegistrationDetail request={selectedRegistration} busy={reviewBusy} review={reviewRegistration} back={()=>setSelectedRegistrationId(null)}/> : selectedCompany ? <>
-            <PageHead kicker="COMPANY WORKSPACE" title={selectedCompany.companyName} sub={`All details and controls for the isolated ${selectedCompany.databaseName} database.`} action={<button className="secondary" onClick={() => setSelectedCompanyId(null)}><ChevronLeft size={15}/> All companies</button>}/>
+            <PageHead kicker="COMPANY WORKSPACE" title={selectedCompany.companyName} sub={`All details and controls for the isolated ${selectedCompany.databaseName} database.`} action={<button className="secondary" onClick={() => {setSelectedCompanyId(null);setMasterPage("companies")}}><ChevronLeft size={15}/> All companies</button>}/>
             <div className="company-detail-tabs"><div>{[["overview","Overview",LayoutDashboard],["users","Users",Users],["revenue","SaaS Billing",CreditCard],["controls","Controls",Settings]].map(([id,label,Icon])=><button key={id} className={companySection===id?"active":""} onClick={()=>setCompanySection(id)}><Icon size={15}/>{label}{id==="users"?<b>{selectedCompany.users?.length||0}</b>:null}</button>)}</div><span><i className={selectedCompany.online ? "online" : ""}/>{selectedCompany.online ? "Database online" : "Database unavailable"}</span></div>
             {companySection === "overview" ? <CompanyWorkspaceOverview company={selectedCompany} invoice={(data.invoices||[]).find((invoice)=>invoice.companyId===selectedCompany.id)} subscription={(data.subscriptions||[]).find((item)=>item.companyId===selectedCompany.id)} usage={(data.usage||[]).find((item)=>item.companyId===selectedCompany.id)} openUsers={()=>setCompanySection("users")} openRevenue={()=>setCompanySection("revenue")}/> : null}
             {companySection === "users" ? <MasterUsers company={selectedCompany} changePin={setPinUser}/> : null}
             {companySection === "revenue" ? <MasterBilling invoices={(data.invoices||[]).filter((invoice)=>invoice.companyId===selectedCompany.id)} companies={[selectedCompany]} setStatus={setInvoiceStatus}/> : null}
             {companySection === "controls" ? <CompanyControls company={selectedCompany} status={status} toggleModule={toggleModule} setMasterAction={setMasterAction}/> : null}
-          </> : <>
+          </> : masterPage==="waiting" ? <><PageHead kicker="TENANT ONBOARDING" title="Tenant Waiting List" sub="Review applications and manage tenant approvals."/><MasterRegistrationRequests requests={registrationRequests} open={request=>setSelectedRegistrationId(request.id)}/></> : masterPage==="billing" ? <><PageHead kicker="SUBSCRIPTION FINANCE" title="Monthly SaaS Billing" sub="Review subscription invoices and record payment status across companies."/><MasterBilling invoices={data.invoices||[]} companies={companies} setStatus={setInvoiceStatus}/></> : <>
           <PageHead kicker="EXECUTIVE COMMAND" title="Company Network" sub="A live operational view of every company in the KnockOUT group." />
-          <MasterRegistrationRequests requests={registrationRequests} open={request=>setSelectedRegistrationId(request.id)}/>
           <MasterNetworkOverview companies={companies} invoices={data.invoices||[]} usage={data.usage||[]}/>
+          <MasterTurnoverCharts companies={companies}/>
           <div className="master-directory-toolbar">
             <div><span className="eyebrow">COMPANY DIRECTORY</span><b>{visibleCompanies.length} of {companies.length} companies</b></div>
             <label><Search size={15}/><input value={companySearch} onChange={(event)=>setCompanySearch(event.target.value)} placeholder="Search company, database or admin"/></label>
@@ -589,7 +535,6 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
             ))}
           </div>
           {!visibleCompanies.length?<div className="master-directory-empty"><Search/><b>No companies found</b><small>Change the search or status filter.</small></div>:null}
-          <MasterBilling invoices={data.invoices||[]} companies={companies} setStatus={setInvoiceStatus}/>
           </>}
         </div>
         <footer className="powered-by-knockout">Powered by <b>KnockOUT</b></footer>
@@ -610,7 +555,7 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
           toast={toast}
         />
       ) : null}
-      <div className={`toast ${notice ? "show" : ""}`}>{notice}</div>
+      <div role="status" aria-live="polite" className={`toast ${notice ? "show" : ""}`}>{notice}</div>
     </div>
   );
 }
@@ -623,6 +568,27 @@ function MasterRegistrationRequests({ requests,open }) {
 function MasterRegistrationDetail({request,busy,review,back}){
   const names={tables:"Tables & Waiters",bookings:"Table Bookings",billing:"Orders & Billing",parcels:"Parcel Orders",menu:"Food & Photos",stock:"Stock Management",finance:"Finance Management",staff:"Staff Management",kitchen:"Chef Portal",juicer:"Juicer Portal"};
   return <div className="registration-detail-page"><PageHead kicker="TENANT APPLICATION" title={request.companyName} sub={`Application #${request.id} · submitted ${new Date(request.createdAt).toLocaleString('en-IN')}`} action={<button className="secondary" onClick={back}><ChevronLeft/>Waiting list</button>}/><section className="panel registration-detail-card"><header><div><span className="registration-company-icon"><Building2/></span><div><small>APPLICATION STATUS</small><Status status={request.status}/></div></div><span>{request.periodMonths} month subscription</span></header><div className="registration-detail-grid"><article><small>BUSINESS DETAILS</small><p><span>Business name</span><b>{request.companyName}</b></p><p><span>Application ID</span><b>#{request.id}</b></p><p><span>Submitted</span><b>{new Date(request.createdAt).toLocaleString('en-IN')}</b></p></article><article><small>FIRST ADMINISTRATOR</small><p><span>Name</span><b>{request.adminName}</b></p><p><span>Email</span><b>{request.email}</b></p><p><span>Mobile</span><b>{request.phone}</b></p></article><article><small>SELECTED PACKAGE</small><p><span>Package</span><b className="capitalize">{request.packageCode}</b></p><p><span>Billing period</span><b>{request.periodMonths} month{request.periodMonths>1?'s':''}</b></p><p><span>Tenant database</span><b>Not created yet</b></p></article></div><div className="registration-detail-modules"><small>PACKAGE MODULES</small><div>{(request.selectedModules||[]).map(key=><span key={key}><CheckCircle2/>{names[key]||key}</span>)}</div></div>{request.reviewNote?<div className="registration-review-note"><small>MASTER REVIEW NOTE</small><p>{request.reviewNote}</p></div>:null}{request.status==='pending'?<footer><button disabled={busy===request.id} onClick={()=>review(request,'reject')}>Reject application</button><button className="primary" disabled={busy===request.id} onClick={()=>review(request,'approve')}><CheckCircle2/>{busy===request.id?'Processing…':'Approve application'}</button></footer>:<footer><Status status={request.status}/><span>{request.completedAt?'Tenant registration completed':request.status==='approved'?'Applicant can now continue setup and payment':'Application review completed'}</span></footer>}</section></div>;
+}
+
+function MasterTurnoverCharts({companies}) {
+  const [selected,setSelected]=useState("all");
+  const visible=selected==="all"?companies:companies.filter(c=>String(c.id)===selected);
+  const totals=new Map();
+  visible.forEach(c=>(c.dailyRevenue||[]).forEach(row=>totals.set(row.date,(totals.get(row.date)||0)+Number(row.total||0))));
+  const days=[...totals].sort(([a],[b])=>a.localeCompare(b)).slice(-14);
+  const peak=Math.max(1,...days.map(([,v])=>v));
+  const comparison=companies.filter(c=>c.online).map(c=>({...c,value:Number(c.revenue||0)})).sort((a,b)=>b.value-a.value);
+  const maxCompany=Math.max(1,...comparison.map(c=>c.value));
+  return <section className="master-turnover" aria-label="Company turnover graphs">
+    <div className="panel"><div className="master-chart-head"><div><span className="eyebrow">PAID COMPANY SALES</span><h2>Turnover by company</h2><p>All-time paid order totals · excludes SaaS fees</p></div></div>
+      {comparison.length?<div className="master-company-bars">{comparison.map(c=><div key={c.id}><div><span>{c.companyName}</span><b>{money(c.value)}</b></div><div className="master-bar-track" role="img" aria-label={`${c.companyName}: ${money(c.value)} turnover`}><span style={{width:`${c.value/maxCompany*100}%`}}/></div></div>)}</div>:<p>No company sales data available.</p>}
+      {comparison.length>0&&!comparison.some(c=>c.value>0)?<p className="master-chart-empty">No paid orders yet. Turnover will appear after payments are recorded.</p>:null}
+      {companies.some(c=>!c.online)?<p>Unavailable companies are excluded from these totals.</p>:null}
+    </div>
+    <div className="panel"><div className="master-chart-head"><div><span className="eyebrow">SERVICE PERFORMANCE</span><h2>Daily turnover</h2><p>Latest 14 reported sales dates · completed paid orders</p></div><label>Company<select value={selected} onChange={e=>setSelected(e.target.value)}><option value="all">All companies</option>{companies.map(c=><option key={c.id} value={String(c.id)}>{c.companyName}</option>)}</select></label></div>
+      {days.length?<div className="master-daily-chart">{days.map(([date,value])=><div key={date}><b>{money(value)}</b><div><span style={{height:`${value/peak*100}%`}} role="img" aria-label={`${date}: ${money(value)}`}/></div><small>{date.slice(5)}</small></div>)}</div>:<p className="master-chart-empty">No completed paid orders in the available history.</p>}
+    </div>
+  </section>;
 }
 
 function MasterNetworkOverview({ companies, invoices, usage }) {
@@ -1059,11 +1025,12 @@ function Shell({ role, user, page, setPage, logout, children, navBadges = {} }) 
             <small>{role} portal</small>
           </div>
         </div>
-        <nav>
+        <nav aria-label={`${role} navigation`}>
           {visibleNav.map(([id, label, Icon]) => (
             <button
               key={id}
               className={page === id ? "active" : ""}
+              aria-current={page === id ? "page" : undefined}
               onClick={() => setPage(id)}
             >
               <Icon size={18} />
@@ -1079,10 +1046,10 @@ function Shell({ role, user, page, setPage, logout, children, navBadges = {} }) 
         <header>
           <div className="global-search">
             <Search size={16} />
-            <input placeholder="Search anything…" />
+            <input placeholder="Search anything…" aria-label="Search workspace" />
           </div>
           <div className="header-actions">
-            <button>
+            <button aria-label="Notifications">
               <Bell size={17} />
             </button>
             <div className="header-user">
@@ -1141,9 +1108,19 @@ function ThemeSelect({ value, onChange, options, placeholder = "Choose an option
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, []);
-  return <div ref={root} className={`theme-select ${open ? "open" : ""} ${disabled ? "disabled" : ""} ${className}`}>
+  function handleKeys(event) {
+    if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setOpen(false); root.current.querySelector("button")?.focus(); return; }
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    if (!open) { setOpen(true); requestAnimationFrame(() => root.current?.querySelector('[role="option"]:not(:disabled)')?.focus()); return; }
+    const items = [...root.current.querySelectorAll('[role="option"]:not(:disabled)')];
+    const current = items.indexOf(document.activeElement);
+    const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : (current + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+    items[next]?.focus();
+  }
+  return <div ref={root} onKeyDown={handleKeys} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }} className={`theme-select ${open ? "open" : ""} ${disabled ? "disabled" : ""} ${className}`}>
     <button type="button" disabled={disabled} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((current) => !current)}><span className={selected ? "" : "placeholder"}>{selected?.label || placeholder}</span><ChevronRight size={15}/></button>
-    {open ? <div className="theme-select-menu" role="listbox">{normalized.map((option) => <button type="button" role="option" aria-selected={String(option.value) === String(value)} className={String(option.value) === String(value) ? "selected" : ""} disabled={option.disabled} key={String(option.value)} onClick={() => { onChange(option.value); setOpen(false); }}><span>{option.label}</span>{option.note ? <small>{option.note}</small> : null}{String(option.value) === String(value) ? <CheckCircle2 size={14}/> : null}</button>)}</div> : null}
+    {open ? <div className="theme-select-menu" role="listbox">{normalized.map((option) => <button type="button" role="option" aria-selected={String(option.value) === String(value)} className={String(option.value) === String(value) ? "selected" : ""} disabled={option.disabled} key={String(option.value)} onClick={() => { onChange(option.value); setOpen(false); root.current.querySelector("button")?.focus(); }}><span>{option.label}</span>{option.note ? <small>{option.note}</small> : null}{String(option.value) === String(value) ? <CheckCircle2 size={14}/> : null}</button>)}</div> : null}
   </div>;
 }
 
@@ -1316,7 +1293,7 @@ function Ring({ value }) {
   return (
     <div
       className="ring"
-      style={{ background: `conic-gradient(#2f6d50 ${value}%,#e8ece7 0)` }}
+      style={{ background: `conic-gradient(var(--color-primary) ${value}%,var(--color-border) 0)` }}
     >
       <span>
         <b>{value}%</b>
@@ -5100,17 +5077,31 @@ function BookingModal({ data, close, refresh, toast, initialDate }) {
   );
 }
 function Modal({ close, children, wide = false, hideClose = false, closeLeft = false }) {
+  const dialog = useRef(null);
+  const closeRef = useRef(close);
+  closeRef.current = close;
+  useEffect(() => {
+    const previous = document.activeElement;
+    const node = dialog.current;
+    const heading = node.querySelector("h1,h2,h3");
+    node.setAttribute("aria-label", heading?.textContent || "Workspace dialog");
+    const focusable = () => [...node.querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href],[tabindex="0"]')].filter(el => el.getClientRects().length);
+    (focusable()[0] || node).focus();
+    const keyboard = event => {
+      if (event.key === "Escape" && !hideClose && !event.target.closest(".theme-select.open")) { event.preventDefault(); event.stopPropagation(); closeRef.current(); }
+      if (event.key !== "Tab") return;
+      const items = focusable(), first = items[0], last = items.at(-1);
+      if (!first) { event.preventDefault(); node.focus(); }
+      else if (event.shiftKey && (document.activeElement === first || document.activeElement === node)) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    node.addEventListener("keydown", keyboard);
+    return () => { node.removeEventListener("keydown", keyboard); if (previous?.isConnected) previous.focus(); };
+  }, [hideClose]);
   return (
-    <div
-      className="modal-wrap"
-      onMouseDown={(e) => !hideClose && e.target === e.currentTarget && close()}
-    >
-      <div className={`modal ${wide ? "wide-modal" : ""}`}>
-        {!hideClose ? (
-          <button className={`modal-close ${closeLeft ? "left" : ""}`} onClick={close}>
-            <X size={18} />
-          </button>
-        ) : null}
+    <div className="modal-wrap" onMouseDown={(e) => !hideClose && e.target === e.currentTarget && close()}>
+      <div ref={dialog} role="dialog" aria-modal="true" tabIndex={-1} className={`modal ${wide ? "wide-modal" : ""}`}>
+        {!hideClose ? <button aria-label="Close dialog" className={`modal-close ${closeLeft ? "left" : ""}`} onClick={close}><X size={18} /></button> : null}
         {children}
       </div>
     </div>
