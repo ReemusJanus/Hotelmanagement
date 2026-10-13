@@ -9,23 +9,19 @@
   "type": "module",
   "scripts": {
     "preinstall": "node scripts/check-runtime-versions.mjs",
-    "dev": "node --watch src/main.js",
-    "start": "node src/main.js",
-    "start:master": "node src/main.js",
+    "dev": "node --env-file=.env --watch src/main.js",
+    "watch": "node --env-file=.env --watch src/main.js",
+    "start": "node --env-file=.env src/main.js",
+    "start:master": "node --env-file=.env src/main.js",
     "test": "node --test test/*.test.js"
   },
   "dependencies": {
-    "@nestjs/common": "11.2.1",
-    "@nestjs/core": "11.2.1",
-    "@nestjs/platform-express": "11.2.1",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "minio": "^8.0.5",
     "multer": "^2.0.2",
+    "pg": "^8.16.3",
     "redis": "5.12.1",
-    "reflect-metadata": "0.2.2",
-    "rxjs": "7.8.2",
-    "ws": "^8.21.3",
-    "pg": "^8.16.3"
+    "ws": "^8.21.3"
   }
 }

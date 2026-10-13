@@ -1,248 +1,336 @@
 import express from 'express';
-import {createRoleRouter} from './server.js';
-import {migrate,closePools} from './database.js';
 import cors from 'cors';
-import {createPool,quoteIdentifier} from './postgres.js';
-import {ensureSchema,tenantDDL,masterDDL,syncSequences} from './schema.js';
 import http from 'node:http';
-import crypto from 'node:crypto';
-import {WebSocketServer,WebSocket} from 'ws';
-import {createNestApplication} from './nest/platform.js';
-import {initializeStorage,ensureStorageFolders,putReport,copyImage,storagePrefix,storageProvider} from './storage.js';
-import {initializeRealtime,publishRealtime,realtimeStatus,closeRealtime} from './realtime.js';
+import { WebSocketServer, WebSocket } from 'ws';
+import { createPool } from './postgres.js';
+import { ensureSchema, tenantDDL, masterDDL } from './schema.js';
+import { migrate, closePools } from './database.js';
+import { initializeStorage, ensureStorageFolders } from './storage.js';
+import { initializeRealtime, publishRealtime, closeRealtime } from './realtime.js';
 
-const app=express(),port=Number(process.env.PORT||5000),masterDb=process.env.MASTER_DB_NAME||'knockout_master';
-const server=http.createServer(app),socketServer=new WebSocketServer({server,path:'/ws'});
-const rootConfig={host:process.env.DB_HOST||'127.0.0.1',port:Number(process.env.DB_PORT||5432),user:process.env.DB_USER||'knockout',password:process.env.DB_PASSWORD||'knockout_pass',enableKeepAlive:true,keepAliveInitialDelay:10000,connectTimeout:Number(process.env.DB_CONNECT_TIMEOUT_MS||10000)};
-const sessionSecret=process.env.MASTER_SESSION_SECRET||`${rootConfig.password}:${masterDb}:knockout-session`;
-let adminPool,masterPool;
-app.use(cors());app.use(express.json({limit:'6mb'}));
-const asyncRoute=fn=>(req,res,next)=>Promise.resolve(fn(req,res,next)).catch(next);
-const ident=value=>{const clean=String(value||'').toLowerCase().trim().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');if(!/^[a-z][a-z0-9_]{1,54}$/.test(clean))throw Object.assign(new Error('Hotel name cannot be converted to a valid database name'),{status:400});return clean};
-const tenantDatabaseName=value=>`tenant_${ident(value)}`;
-const validTenant=value=>/^(?:knockout(?:_[0-9]+)?|tenant_[a-z][a-z0-9_]{1,54})$/.test(String(value||''));
-const defaultModules={tables:true,bookings:true,billing:true,parcels:true,menu:true,stock:true,finance:true,staff:true,kitchen:true,juicer:true};
-const moduleCatalog={tables:['Tables & Waiters',499],bookings:['Table Bookings',299],billing:['Orders & Billing',699],parcels:['Parcel Orders',399],menu:['Food & Photos',299],stock:['Stock Management',499],finance:['Finance Management',599],staff:['Staff Management',399],kitchen:['Chef Portal',499],juicer:['Juicer Portal',299]};
-const packages={starter:['tables','billing','menu','kitchen'],growth:['tables','bookings','billing','parcels','menu','stock','kitchen'],complete:Object.keys(defaultModules)};
-const parseModules=value=>{try{return{...defaultModules,...(typeof value==='string'?JSON.parse(value):value||{})}}catch{return{...defaultModules}}};
-const randomDigits=length=>Array.from({length},()=>crypto.randomInt(0,10)).join('');
-async function generateHotelId(){for(let attempt=0;attempt<200;attempt++){const hotelId=String(crypto.randomInt(1000,10000)),[[used]]=await masterPool.query("SELECT id FROM companies WHERE hotel_id=? LIMIT 1",[hotelId]);if(!used)return hotelId}throw Object.assign(new Error('Unable to allocate a Hotel ID. Please try again.'),{status:503})}
-async function generateTenantPin(databaseName){for(let attempt=0;attempt<200;attempt++){const pin=String(crypto.randomInt(100000,1000000)),[[used]]=await adminPool.query(`SELECT id FROM "${databaseName}".users WHERE pin=? AND deleted_at IS NULL LIMIT 1`,[pin]);if(!used)return pin}throw Object.assign(new Error('Unable to allocate an Admin PIN. Please try again.'),{status:503})}
-const socketDatabase=value=>validTenant(value)?String(value):value==='master'?'master':null;
-const encode=value=>Buffer.from(JSON.stringify(value)).toString('base64url');
-function issuePortalToken(user){const payload=encode({id:user.id,role:user.role,companyDatabase:user.companyDatabase,exp:Date.now()+12*60*60*1000}),signature=crypto.createHmac('sha256',sessionSecret).update(payload).digest('base64url');return `${payload}.${signature}`}
-function verifyPortalToken(value){try{const[payload,signature]=String(value||'').replace(/^Bearer\s+/i,'').split('.'),expected=crypto.createHmac('sha256',sessionSecret).update(payload).digest('base64url');if(!signature||signature.length!==expected.length||!crypto.timingSafeEqual(Buffer.from(signature),Buffer.from(expected)))return null;const data=JSON.parse(Buffer.from(payload,'base64url')),validRole=['admin','waiter','chef','juicer','superadmin'].includes(data.role),validCompany=data.role==='superadmin'||validTenant(data.companyDatabase);return data.exp>Date.now()&&validRole&&validCompany?data:null}catch{return null}}
-function broadcastChange(database,resource='state',details={}){
- const event={type:'state.changed',database,resource,...details,at:new Date().toISOString()},message=JSON.stringify(event);
- for(const client of socketServer.clients)if(client.readyState===WebSocket.OPEN&&(client.database===database||client.database==='master'))client.send(message);
- publishRealtime(event);
+import {
+  validTenant,
+  defaultModules,
+  moduleCatalog,
+  verifyPortalToken
+} from './middleware/auth.js';
+import { errorHandler } from './middleware/tenant.js';
+
+import masterRoutes from './routes/master.routes.js';
+import { createRoleRouter } from './routes/portal.routes.js';
+
+import {
+  initMasterController,
+  syncCompanyUsers,
+  ensureDailyFinanceTables,
+  migrateTenantImages,
+  generateMonthlySaasInvoices
+} from './controllers/master.controller.js';
+
+const app = express();
+const port = Number(process.env.PORT || 5000);
+const masterDb = process.env.MASTER_DB_NAME || 'knockout_master';
+const server = http.createServer(app);
+const socketServer = new WebSocketServer({ server, path: '/ws' });
+
+const rootConfig = {
+  host: process.env.DB_HOST || '127.0.0.1',
+  port: Number(process.env.DB_PORT || 5432),
+  user: process.env.DB_USER || 'knockout',
+  password: process.env.DB_PASSWORD || 'knockout_pass',
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 10000,
+  connectTimeout: Number(process.env.DB_CONNECT_TIMEOUT_MS || 10000)
+};
+
+let adminPool, masterPool;
+
+app.use(cors());
+app.use(express.json({ limit: '6mb' }));
+
+const socketDatabase = value => validTenant(value) ? String(value) : value === 'master' ? 'master' : null;
+
+function broadcastChange(database, resource = 'state', details = {}) {
+  const event = { type: 'state.changed', database, resource, ...details, at: new Date().toISOString() };
+  const message = JSON.stringify(event);
+  for (const client of socketServer.clients) {
+    if (client.readyState === WebSocket.OPEN && (client.database === database || client.database === 'master')) {
+      client.send(message);
+    }
+  }
+  publishRealtime(event);
 }
-function relayChange(event){
- const message=JSON.stringify(event);
- for(const client of socketServer.clients)if(client.readyState===WebSocket.OPEN&&(client.database===event.database||client.database==='master'))client.send(message);
+
+function relayChange(event) {
+  const message = JSON.stringify(event);
+  for (const client of socketServer.clients) {
+    if (client.readyState === WebSocket.OPEN && (client.database === event.database || client.database === 'master')) {
+      client.send(message);
+    }
+  }
 }
-socketServer.on('connection',(socket,request)=>{
- const params=new URL(request.url,'http://localhost').searchParams,database=socketDatabase(params.get('database')),session=verifyPortalToken(params.get('token'));
- const authorized=database==='master'?session?.role==='superadmin':session?.companyDatabase===database&&['admin','waiter','chef','juicer'].includes(session?.role);
- if(!database||!authorized)return socket.close(1008,'Unauthorized live tracking channel');
- socket.database=database;socket.isAlive=true;
- socket.on('pong',()=>{socket.isAlive=true});
- socket.send(JSON.stringify({type:'connected',database,at:new Date().toISOString()}));
+
+async function queueNotice(recipient, channel, subject, message) {
+  await masterPool.query('INSERT INTO notification_outbox (recipient,channel,subject,message) VALUES (?,?,?,?)', [recipient, channel, subject, message]);
+  const url = process.env.NOTIFICATION_WEBHOOK_URL;
+  if (url) {
+    fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ recipient, channel, subject, message })
+    }).catch(() => {});
+  }
+}
+
+socketServer.on('connection', (socket, request) => {
+  const params = new URL(request.url, 'http://localhost').searchParams;
+  const database = socketDatabase(params.get('database'));
+  const session = verifyPortalToken(params.get('token'));
+  const authorized = database === 'master'
+    ? session?.role === 'superadmin'
+    : session?.companyDatabase === database && ['admin', 'waiter', 'chef', 'juicer'].includes(session?.role);
+
+  if (!database || !authorized) return socket.close(1008, 'Unauthorized live tracking channel');
+  socket.database = database;
+  socket.isAlive = true;
+  socket.on('pong', () => { socket.isAlive = true; });
+  socket.send(JSON.stringify({ type: 'connected', database, at: new Date().toISOString() }));
 });
-const socketHeartbeat=setInterval(()=>{for(const socket of socketServer.clients){if(socket.isAlive===false){socket.terminate();continue}socket.isAlive=false;socket.ping()}},25000);
-socketServer.on('close',()=>clearInterval(socketHeartbeat));
-app.use((req,res,next)=>{
- if(['GET','HEAD','OPTIONS'].includes(req.method)||['/api/login','/api/public/resolve-login'].includes(req.path))return next();
- res.on('finish',()=>{if(res.statusCode<400){const database=req.portalSession?.companyDatabase||'master';broadcastChange(database,req.path)}});
- next();
+
+const socketHeartbeat = setInterval(() => {
+  for (const socket of socketServer.clients) {
+    if (socket.isAlive === false) {
+      socket.terminate();
+      continue;
+    }
+    socket.isAlive = false;
+    socket.ping();
+  }
+}, 25000);
+socketServer.on('close', () => clearInterval(socketHeartbeat));
+
+// State change broadcast hook on successful mutations
+app.use((req, res, next) => {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method) || ['/api/login', '/api/public/resolve-login'].includes(req.path)) {
+    return next();
+  }
+  res.on('finish', () => {
+    if (res.statusCode < 400) {
+      const database = req.portalSession?.companyDatabase || 'master';
+      broadcastChange(database, req.path);
+    }
+  });
+  next();
 });
 
-async function activeCompanies(includeSuspended=false){
- const[rows]=await masterPool.query(`SELECT id,company_name "companyName",database_name "databaseName" FROM companies ${includeSuspended?'':"WHERE status='active'"} ORDER BY id`);
- return rows.filter(company=>validTenant(company.databaseName));
+// Role-based portal routers
+const roleRouters = Object.fromEntries(
+  ['admin', 'waiter', 'chef', 'juicer'].map(role => [
+    role,
+    createRoleRouter(role, {
+      onMutation: async req => {
+        if (/^\/api\/staff(?:\/|$)/.test(req.originalUrl) || ['/api/juicer-login', '/api/profile'].includes(req.path)) {
+          await syncCompanyUsers(req.portalSession.companyDatabase);
+        }
+      }
+    })
+  ])
+);
+
+// Portal dispatch middleware under /api
+app.use('/api', async (req, res, next) => {
+  const session = verifyPortalToken(req.headers.authorization);
+  const role = session?.role || '';
+  const portalHeader = String(req.headers['x-portal-role'] || '').toLowerCase();
+
+  if (!session && ['admin', 'waiter', 'chef', 'juicer'].includes(portalHeader) && !['/public/resolve-login', '/login'].includes(req.path)) {
+    return res.status(401).json({ message: 'Your secure session has expired. Sign in with your PIN again.' });
+  }
+
+  if (!['admin', 'waiter', 'chef', 'juicer'].includes(role)) {
+    return next();
+  }
+
+  const [[company]] = await masterPool.query('SELECT status,modules FROM companies WHERE database_name=? LIMIT 1', [session.companyDatabase]);
+  if (!company || company.status !== 'active') {
+    return res.status(403).json({ code: 'COMPANY_SUSPENDED', message: 'This company has been suspended by KnockOUT Master. All company logins are temporarily disabled.' });
+  }
+
+  const { parseModules } = await import('./middleware/auth.js');
+  const modules = parseModules(company.modules);
+  const path = req.path;
+  const moduleKey = path.startsWith('/bookings')
+    ? 'bookings'
+    : path.startsWith('/tables')
+    ? 'tables'
+    : path.startsWith('/finance') || path.startsWith('/supplier-')
+    ? 'finance'
+    : path.startsWith('/inventory') || path.startsWith('/stock-')
+    ? 'stock'
+    : path.startsWith('/menu') || path.startsWith('/combos')
+    ? 'menu'
+    : path.startsWith('/staff') || path.startsWith('/attendance') || path.startsWith('/kitchen-staff')
+    ? 'staff'
+    : null;
+
+  if (path === '/session') return res.json({ modules, companyDatabase: session.companyDatabase, role });
+  if ((role === 'chef' && !modules.kitchen) || (role === 'juicer' && !modules.juicer) || (moduleKey && !modules[moduleKey])) {
+    return res.status(403).json({ code: 'MODULE_DISABLED', message: 'This module is disabled for your hotel by KnockOUT Master.' });
+  }
+
+  req.portalSession = session;
+  req.headers['x-company-database'] = session.companyDatabase;
+  req.headers['x-portal-role'] = role;
+  req.headers['x-portal-user-id'] = String(session.id);
+
+  const previousUrl = req.url;
+  req.url = '/api' + req.url;
+  return roleRouters[role](req, res, error => {
+    req.url = previousUrl;
+    if (error) return next(error);
+    res.status(404).json({ message: 'Unknown portal API route' });
+  });
+});
+
+// Master routes authentication check for master endpoints
+app.use('/api', (req, res, next) => {
+  if (['/live', '/health', '/framework', '/login', '/public/companies', '/public/resolve-login', '/public/company-registrations', '/public/onboarding-status', '/public/complete-registration'].includes(req.path)) {
+    return next();
+  }
+  const session = verifyPortalToken(req.headers.authorization);
+  if (session?.role !== 'superadmin') {
+    return res.status(401).json({ message: 'KnockOUT Master approval is required' });
+  }
+  next();
+});
+
+// Mount master routes
+app.use('/api', masterRoutes);
+
+// Compatibility route for framework check
+app.get('/api/framework', (_req, res) => {
+  res.json({
+    ok: true,
+    framework: 'Express',
+    service: 'knockout-api',
+    architecture: 'single-process-multi-tenant'
+  });
+});
+
+// Global error handler
+app.use(errorHandler);
+
+async function initialize() {
+  adminPool = createPool({
+    ...rootConfig,
+    waitForConnections: true,
+    connectionLimit: Number(process.env.MASTER_ADMIN_POOL_SIZE || 20),
+    maxIdle: Number(process.env.DB_POOL_MAX_IDLE || 10),
+    idleTimeout: Number(process.env.DB_POOL_IDLE_TIMEOUT_MS || 60000),
+    queueLimit: Number(process.env.DB_QUEUE_LIMIT || 500)
+  });
+
+  masterPool = createPool({
+    ...rootConfig,
+    database: masterDb,
+    connectionLimit: Number(process.env.MASTER_DB_POOL_SIZE || 30)
+  });
+
+  initMasterController({ masterPool, adminPool, broadcastChange, queueNotice });
+
+  const initConnection = await adminPool.getConnection();
+  try {
+    await initConnection.beginTransaction();
+    await initConnection.query('SELECT pg_advisory_xact_lock(742918)');
+    await ensureSchema(initConnection, 'knockout', tenantDDL);
+    await ensureSchema(initConnection, masterDb, masterDDL);
+    await initConnection.commit();
+  } catch (error) {
+    await initConnection.rollback();
+    throw error;
+  } finally {
+    initConnection.release();
+  }
+
+  for (const [key, [name, price]] of Object.entries(moduleCatalog)) {
+    await masterPool.query('INSERT INTO module_pricing (module_key,module_name,monthly_price) VALUES (?,?,?) ON CONFLICT DO NOTHING', [key, name, price]);
+  }
+
+  const [[masterCount]] = await masterPool.query('SELECT COUNT(*) count FROM master_users');
+  if (!masterCount.count && process.env.MASTER_BOOTSTRAP_PIN) {
+    await masterPool.query("INSERT INTO master_users (name,pin) VALUES ('KnockOUT Master',?)", [process.env.MASTER_BOOTSTRAP_PIN]);
+  }
+
+  if (process.env.SEED_DEMO_DATA === 'true') {
+    await masterPool.query("INSERT INTO companies (company_name,database_name,cy_db,admin_name,email,status) VALUES ('KnockOUT 1','knockout','knockout','Arjun Kumar','admin@knockout1.local','active') ON CONFLICT DO NOTHING");
+  }
+
+  await masterPool.query("UPDATE companies SET hotel_id=CASE WHEN database_name='knockout' THEN '1234' ELSE lpad((2000+id)::text,4,'0') END WHERE hotel_id IS NULL");
+  await masterPool.query('UPDATE companies SET modules=? WHERE modules IS NULL', [JSON.stringify(defaultModules)]);
+
+  const [companies] = await masterPool.query('SELECT database_name "databaseName" FROM companies');
+  for (const company of companies) {
+    await ensureDailyFinanceTables(company.databaseName);
+    await syncCompanyUsers(company.databaseName);
+  }
+
+  try {
+    await initializeStorage();
+    const [storageCompanies] = await masterPool.query('SELECT company_name "companyName",database_name "databaseName" FROM companies');
+    for (const company of storageCompanies) {
+      await ensureStorageFolders(company.companyName);
+      await migrateTenantImages(company);
+    }
+  } catch (error) {
+    if (process.env.STORAGE_REQUIRED === 'true') throw error;
+    console.error(`Storage unavailable; continuing without object storage: ${error.message}`);
+  }
+
+  await generateMonthlySaasInvoices();
 }
 
-async function findPortalLogins(role,pin,includeInactive=false,hotelId=null){
- const matches=[];
- if(!role||role==='superadmin'){
-  const[[masterUser]]=await masterPool.query(`SELECT id,name FROM master_users WHERE pin=? ${includeInactive?'':'AND active=TRUE'} LIMIT 1`,[String(pin)]);
-  if(masterUser)matches.push({...masterUser,role:'superadmin',companyDatabase:null,companyName:'KnockOUT Master'});
- }
- const params=role?[role,String(pin)]:[String(pin)];
- if(hotelId)params.push(String(hotelId));
- const[users]=await masterPool.query(`SELECT cu.tenant_user_id id,cu.name,cu.role,cu.active "userActive",c.database_name "companyDatabase",c.company_name "companyName",c.hotel_id "hotelId",c.modules,c.status "companyStatus" FROM company_users cu JOIN companies c ON c.id=cu.company_id WHERE ${role?'cu.role=? AND ':''}cu.pin=? ${hotelId?'AND c.hotel_id=? ':''}${includeInactive?'':"AND cu.active=TRUE AND c.status='active'"}`,params);
- users.forEach(user=>{user.modules=parseModules(user.modules)});
- matches.push(...users);
- return matches;
+async function start() {
+  try {
+    if (process.env.RUN_MIGRATIONS !== 'false') await migrate();
+    await initialize();
+    try {
+      await initializeRealtime(relayChange);
+    } catch (error) {
+      if (process.env.REDIS_REQUIRED === 'true') throw error;
+      console.error(`Redis unavailable; using single-instance realtime: ${error.message}`);
+    }
+
+    await new Promise((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(port, '0.0.0.0', resolve);
+    });
+    console.log(`KnockOUT unified API + WebSocket on http://localhost:${port}`);
+    if (process.send) process.send('ready');
+  } catch (error) {
+    console.error('Backend startup failed:', error);
+    await shutdown('startup failure', 1);
+  }
 }
 
-async function syncCompanyUsers(databaseName){
- if(!validTenant(databaseName))return;
- const[[company]]=await masterPool.query("SELECT id FROM companies WHERE database_name=?",[databaseName]);
- if(!company)return;
- const[users]=await adminPool.query(`SELECT id,name,role,pin,phone,email,profile_image_url "profileImageUrl",active FROM "${databaseName}".users WHERE deleted_at IS NULL`);
- const conn=await masterPool.getConnection();
- try{await conn.beginTransaction();await conn.query("DELETE FROM company_users WHERE company_id=?",[company.id]);for(const user of users)await conn.query("INSERT INTO company_users (company_id,tenant_user_id,name,role,pin,phone,email,profile_image_url,active) VALUES (?,?,?,?,?,?,?,?,?)",[company.id,user.id,user.name,user.role,user.pin,user.phone||'',user.email||'',user.profileImageUrl||null,!!user.active]);await conn.commit()}catch(error){await conn.rollback();throw error}finally{conn.release()}
+let stopping = false;
+async function shutdown(signal, exitCode = 0) {
+  if (stopping) return;
+  stopping = true;
+  console.log(`${signal}: draining unified backend`);
+  const timeout = setTimeout(() => process.exit(1), 30000);
+  timeout.unref();
+  clearInterval(socketHeartbeat);
+  for (const socket of socketServer.clients) socket.terminate();
+  socketServer.close();
+  await new Promise(resolve => server.close(resolve));
+  await Promise.allSettled([closeRealtime(), masterPool?.end(), adminPool?.end(), closePools()]);
+  clearTimeout(timeout);
+  process.exit(exitCode);
 }
 
-async function initialize(){
- adminPool=createPool({...rootConfig,waitForConnections:true,connectionLimit:Number(process.env.MASTER_ADMIN_POOL_SIZE||20),maxIdle:Number(process.env.DB_POOL_MAX_IDLE||10),idleTimeout:Number(process.env.DB_POOL_IDLE_TIMEOUT_MS||60000),queueLimit:Number(process.env.DB_QUEUE_LIMIT||500)});
- masterPool=createPool({...rootConfig,database:masterDb,connectionLimit:Number(process.env.MASTER_DB_POOL_SIZE||30)});
- const initConnection=await adminPool.getConnection();
- try {
-   await initConnection.beginTransaction();
-   await initConnection.query('SELECT pg_advisory_xact_lock(742918)');
-   await ensureSchema(initConnection,'knockout',tenantDDL);
-   await ensureSchema(initConnection,masterDb,masterDDL);
-   await initConnection.commit();
- } catch(error) { await initConnection.rollback(); throw error; } finally { initConnection.release(); }
- for(const[key,[name,price]]of Object.entries(moduleCatalog))await masterPool.query('INSERT INTO module_pricing (module_key,module_name,monthly_price) VALUES (?,?,?) ON CONFLICT DO NOTHING',[key,name,price]);
- const[[masterCount]]=await masterPool.query("SELECT COUNT(*) count FROM master_users");
- if(!masterCount.count && process.env.MASTER_BOOTSTRAP_PIN)await masterPool.query("INSERT INTO master_users (name,pin) VALUES ('KnockOUT Master',?)",[process.env.MASTER_BOOTSTRAP_PIN]);
- if(process.env.SEED_DEMO_DATA==='true')await masterPool.query("INSERT INTO companies (company_name,database_name,cy_db,admin_name,email,status) VALUES ('KnockOUT 1','knockout','knockout','Arjun Kumar','admin@knockout1.local','active') ON CONFLICT DO NOTHING");
- await masterPool.query("UPDATE companies SET hotel_id=CASE WHEN database_name='knockout' THEN '1234' ELSE lpad((2000+id)::text,4,'0') END WHERE hotel_id IS NULL");
- await masterPool.query("UPDATE companies SET modules=? WHERE modules IS NULL",[JSON.stringify(defaultModules)]);
- const[companies]=await masterPool.query("SELECT database_name \"databaseName\" FROM companies");
- for(const company of companies){await ensureDailyFinanceTables(company.databaseName);await syncCompanyUsers(company.databaseName)}
- await initializeStorage();
- const[storageCompanies]=await masterPool.query("SELECT company_name \"companyName\",database_name \"databaseName\" FROM companies");
- for(const company of storageCompanies){await ensureStorageFolders(company.companyName);await migrateTenantImages(company)}
- await generateMonthlySaasInvoices();
-}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
-async function generateMonthlySaasInvoices(){
- const billingMonth=new Date().toISOString().slice(0,7)+'-01',[companies]=await masterPool.query("SELECT c.id,c.modules FROM companies c WHERE NOT EXISTS (SELECT 1 FROM tenant_subscriptions s WHERE s.company_id=c.id AND s.status IN ('active','grace') AND NOW()<s.grace_ends_at)"),[pricingRows]=await masterPool.query("SELECT module_key \"moduleKey\",module_name \"moduleName\",monthly_price \"monthlyPrice\" FROM module_pricing"),pricing=Object.fromEntries(pricingRows.map(row=>[row.moduleKey,[row.moduleName,Number(row.monthlyPrice)]]));
- for(const company of companies){const modules=parseModules(company.modules),items=Object.entries(pricing).filter(([key])=>modules[key]!==false).map(([key,[name,price]])=>({key,name,price})),subtotal=items.reduce((sum,item)=>sum+item.price,0),tax=Number((subtotal*.18).toFixed(2));await masterPool.query("INSERT INTO saas_invoices (company_id,billing_month,line_items,subtotal,tax_rate,tax,total) VALUES (?,?,?, ?,18,?,?) ON CONFLICT (company_id,billing_month) DO UPDATE SET line_items=(CASE WHEN saas_invoices.status='due' THEN EXCLUDED.line_items ELSE saas_invoices.line_items END),subtotal=(CASE WHEN saas_invoices.status='due' THEN EXCLUDED.subtotal ELSE saas_invoices.subtotal END),tax=(CASE WHEN saas_invoices.status='due' THEN EXCLUDED.tax ELSE saas_invoices.tax END),total=(CASE WHEN saas_invoices.status='due' THEN EXCLUDED.total ELSE saas_invoices.total END)",[company.id,billingMonth,JSON.stringify(items),subtotal,tax,subtotal+tax])}
-}
-
-async function queueNotice(recipient,channel,subject,message){await masterPool.query("INSERT INTO notification_outbox (recipient,channel,subject,message) VALUES (?,?,?,?)",[recipient,channel,subject,message]);const url=process.env.NOTIFICATION_WEBHOOK_URL;if(url)fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({recipient,channel,subject,message})}).catch(()=>{})}
-async function currentPricing(){const[rows]=await masterPool.query("SELECT module_key \"moduleKey\",module_name \"moduleName\",monthly_price \"monthlyPrice\" FROM module_pricing ORDER BY module_name");return Object.fromEntries(rows.map(row=>[row.moduleKey,{name:row.moduleName,price:Number(row.monthlyPrice)}]))}
-async function generateTemporaryPin(){for(let i=0;i<200;i++){const pin=randomDigits(6),[[used]]=await masterPool.query("SELECT id FROM company_registration_requests WHERE temporary_pin=? AND completed_at IS NULL",[pin]);if(!used)return pin}throw Object.assign(new Error('Unable to generate temporary access PIN'),{status:503})}
-async function enforceSubscriptions(){const[expired]=await masterPool.query("SELECT s.id,s.company_id \"companyId\",c.company_name \"companyName\",c.email,c.phone FROM tenant_subscriptions s JOIN companies c ON c.id=s.company_id WHERE s.status<>'expired' AND NOW()>s.grace_ends_at");for(const row of expired){await masterPool.query("UPDATE tenant_subscriptions SET status='expired' WHERE id=?",[row.id]);await masterPool.query("UPDATE companies SET status='suspended' WHERE id=?",[row.companyId]);await queueNotice(row.email,'email','KnockOUT subscription suspended',`${row.companyName} was suspended because renewal payment was not received during the two-day grace period.`)}const[grace]=await masterPool.query("SELECT s.id,s.company_id \"companyId\",c.company_name \"companyName\",c.email,c.phone,s.expires_at \"expiresAt\" FROM tenant_subscriptions s JOIN companies c ON c.id=s.company_id WHERE s.status='active' AND NOW()>s.expires_at AND NOW()<=s.grace_ends_at");for(const row of grace){await masterPool.query("UPDATE tenant_subscriptions SET status='grace',last_reminder_at=NOW() WHERE id=?",[row.id]);await queueNotice(row.email,'email','KnockOUT renewal payment due',`${row.companyName} subscription has expired. Please renew within two days to avoid suspension.`);if(row.phone)await queueNotice(row.phone,'sms','Renewal due',`KnockOUT subscription expired. Renew within 2 days to keep ${row.companyName} active.`)}}
-
-async function ensureDailyFinanceTables(databaseName){
- if(!validTenant(databaseName))throw new Error('Invalid tenant schema');
- const conn=await adminPool.getConnection();
- try{await conn.beginTransaction();await ensureSchema(conn,databaseName,tenantDDL);await conn.commit()}catch(error){await conn.rollback();throw error}finally{conn.release()}
-}
-
-async function migrateTenantImages(company){
- const prefix=`${storagePrefix(company.companyName)}/images/`;
- const[menu]=await adminPool.query(`SELECT id,image_object "imageObject" FROM "${company.databaseName}".menu_items WHERE image_object IS NOT NULL AND image_object<>''`);
- for(const item of menu){if(item.imageObject.startsWith(prefix))continue;try{const stored=await copyImage(company.companyName,item.imageObject,`menu/${item.id}-${String(item.imageObject).split('/').pop()}`);await adminPool.query(`UPDATE "${company.databaseName}".menu_items SET image_object=?,image_url=? WHERE id=?`,[stored.objectName,stored.url,item.id])}catch{}}
- const[users]=await adminPool.query(`SELECT id,profile_image_object "imageObject" FROM "${company.databaseName}".users WHERE profile_image_object IS NOT NULL AND profile_image_object<>''`);
- for(const user of users){if(user.imageObject.startsWith(prefix))continue;try{const stored=await copyImage(company.companyName,user.imageObject,`profiles/${user.id}-${String(user.imageObject).split('/').pop()}`);await adminPool.query(`UPDATE "${company.databaseName}".users SET profile_image_object=?,profile_image_url=? WHERE id=?`,[stored.objectName,stored.url,user.id])}catch{}}
-}
-
-async function provisionCompany({companyName,adminName,email='',phone='',selectedModules=null}){
- const databaseName=tenantDatabaseName(companyName),tenant=quoteIdentifier(databaseName),master=quoteIdentifier(masterDb);
- if(!adminName)throw Object.assign(new Error('Admin name is required'),{status:400});
- const conn=await adminPool.getConnection();
- try{
-  await conn.beginTransaction();
-  // Serialize tenant provisioning so competing names cannot delete each other's schemas.
-  await conn.query('SELECT pg_advisory_xact_lock(742919)');
-  const[[exists]]=await conn.query(`SELECT id FROM ${master}.companies WHERE company_name=? OR database_name=?`,[companyName,databaseName]);
-  const[[schema]]=await conn.query('SELECT schema_name FROM information_schema.schemata WHERE schema_name=?',[databaseName]);
-  if(exists||schema)throw Object.assign(new Error('This company or tenant schema already exists'),{status:409});
-  await ensureSchema(conn,databaseName,tenantDDL);
-  const hotelId=await generateHotelId(),adminPin=String(crypto.randomInt(100000,1000000));
-  await conn.query(`INSERT INTO ${tenant}.settings (id,hotel_name,tax_rate,cgst_rate,service_charge,currency) VALUES (1,?,2.5,2.5,18,'INR')`,[companyName]);
-  await conn.query(`INSERT INTO ${tenant}.users (name,role,pin,phone,email,active) VALUES (?,'admin',?,?,?,TRUE)`,[adminName,adminPin,phone,email]);
-  await conn.query(`INSERT INTO ${tenant}.menu_items (id,name,category,description,price,icon,image_url,image_object,is_combo,available) SELECT id,name,category,description,price,icon,image_url,image_object,is_combo,available FROM knockout.menu_items`);
-  await conn.query(`INSERT INTO ${tenant}.combo_components (combo_id,menu_id,quantity) SELECT combo_id,menu_id,quantity FROM knockout.combo_components`);
-  await conn.query(`INSERT INTO ${tenant}.inventory (name,category,quantity,unit,min_quantity,cost) SELECT name,category,0,unit,min_quantity,cost FROM knockout.inventory`);
-  await syncSequences(conn,databaseName);
-  const enabledModules=selectedModules?Object.fromEntries(Object.keys(defaultModules).map(key=>[key,selectedModules.includes(key)])):defaultModules;
-  const[result]=await conn.query(`INSERT INTO ${master}.companies (company_name,database_name,cy_db,hotel_id,modules,admin_name,email,phone) VALUES (?,?,?,?,?,?,?,?)`,[companyName,databaseName,databaseName,hotelId,JSON.stringify(enabledModules),adminName,email,phone]);
-  await conn.query(`INSERT INTO ${master}.company_users (company_id,tenant_user_id,name,role,pin,phone,email,profile_image_url,active) SELECT ?,id,name,role,pin,phone,email,profile_image_url,active FROM ${tenant}.users`,[result.insertId]);
-  await ensureStorageFolders(companyName);
-  await conn.commit();
-  return{id:result.insertId,companyName,databaseName,hotelId,adminPin,modules:enabledModules,adminName,email,phone,status:'active'};
- }catch(error){await conn.rollback();throw error}finally{conn.release()}
-}
-
-async function companySummary(company){
- company.modules=parseModules(company.modules);
- try{if(!validTenant(company.databaseName))throw new Error('Invalid tenant database');const db=`"${company.databaseName}"`;const[[users],[orders],[revenue],[stock],[daily]]=await Promise.all([masterPool.query("SELECT tenant_user_id id,name,role,pin,phone,active FROM company_users WHERE company_id=? ORDER BY role,name",[company.id]),adminPool.query(`SELECT COUNT(*) count FROM ${db}.orders WHERE status<>'completed'`),adminPool.query(`SELECT COALESCE(SUM(total),0) total FROM ${db}.orders WHERE payment_status='paid'`),adminPool.query(`SELECT COUNT(*) count FROM ${db}.inventory WHERE quantity<=min_quantity`),adminPool.query(`SELECT to_char(completed_at, 'YYYY-MM-DD') AS day,COUNT(*) bills,COALESCE(SUM(total),0) total FROM ${db}.orders WHERE payment_status='paid' AND completed_at IS NOT NULL GROUP BY to_char(completed_at,'YYYY-MM-DD') ORDER BY day DESC LIMIT 31`)]);return{...company,users:users.map(user=>({...user,active:!!user.active})),staffCount:users.filter(user=>user.active).length,adminLoginActive:users.some(user=>user.role==='admin'&&user.active),activeOrders:orders[0].count,revenue:Number(revenue[0].total),dailyRevenue:daily.map(row=>({date:row.day,bills:row.bills,total:Number(row.total)})),lowStock:stock[0].count,online:true}}catch(error){console.error("Company summary failed:",error.message);return{...company,users:[],staffCount:0,adminLoginActive:false,activeOrders:0,revenue:0,dailyRevenue:[],lowStock:0,online:false}}
-}
-
-const roleRouters=Object.fromEntries(['admin','waiter','chef','juicer'].map(role=>[role,createRoleRouter(role,{onMutation:async req=>{
- if(/^\/api\/staff(?:\/|$)/.test(req.originalUrl)||['/api/juicer-login','/api/profile'].includes(req.path))await syncCompanyUsers(req.portalSession.companyDatabase);
-}})]));
-
-app.use('/api',asyncRoute(async(req,res,next)=>{
- const session=verifyPortalToken(req.headers.authorization),role=session?.role||'';
- if(!session&&['admin','waiter','chef','juicer'].includes(String(req.headers['x-portal-role']||'').toLowerCase())&&!['/public/resolve-login','/login'].includes(req.path))return res.status(401).json({message:'Your secure session has expired. Sign in with your PIN again.'});
- if(!['admin','waiter','chef','juicer'].includes(role))return next();
- const[[company]]=await masterPool.query("SELECT status,modules FROM companies WHERE database_name=? LIMIT 1",[session.companyDatabase]);
- if(!company||company.status!=='active')return res.status(403).json({code:'COMPANY_SUSPENDED',message:'This company has been suspended by KnockOUT Master. All company logins are temporarily disabled.'});
- const modules=parseModules(company.modules),path=req.path,moduleKey=path.startsWith('/bookings')?'bookings':path.startsWith('/tables')?'tables':path.startsWith('/finance')||path.startsWith('/supplier-')?'finance':path.startsWith('/inventory')||path.startsWith('/stock-')?'stock':path.startsWith('/menu')||path.startsWith('/combos')?'menu':path.startsWith('/staff')||path.startsWith('/attendance')||path.startsWith('/kitchen-staff')?'staff':null;
- if(path==='/session')return res.json({modules,companyDatabase:session.companyDatabase,role});
- if((role==='chef'&&!modules.kitchen)||(role==='juicer'&&!modules.juicer)||(moduleKey&&!modules[moduleKey]))return res.status(403).json({code:'MODULE_DISABLED',message:`This module is disabled for your hotel by KnockOUT Master.`});
- req.portalSession=session;
- req.headers['x-company-database']=session.companyDatabase;
- req.headers['x-portal-role']=role;
- req.headers['x-portal-user-id']=String(session.id);
- // Mounted /api middleware sees a stripped URL; role routers retain existing /api paths.
- const previousUrl=req.url;
- req.url='/api'+req.url;
- return roleRouters[role](req,res,error=>{
-  req.url=previousUrl;
-  if(error)return next(error);
-  res.status(404).json({message:'Unknown portal API route'});
- });
-}));
-
-app.use('/api',(req,res,next)=>{if(['/live','/health','/framework','/login','/public/companies','/public/resolve-login','/public/company-registrations','/public/onboarding-status','/public/complete-registration'].includes(req.path))return next();const session=verifyPortalToken(req.headers.authorization);if(session?.role!=='superadmin')return res.status(401).json({message:'KnockOUT Master approval is required'});next()});
-
-app.get('/api/live',(_req,res)=>res.json({ok:true,service:'knockout-api'}));
-app.get('/api/health',asyncRoute(async(_req,res)=>{await masterPool.query("SELECT 1");res.json({ok:true,service:'knockout-api',database:'postgresql',masterSchema:masterDb,realtime:realtimeStatus()})}));
-app.get('/api/public/companies',asyncRoute(async(_req,res)=>{const[rows]=await masterPool.query("SELECT id,company_name \"companyName\",database_name \"databaseName\" FROM companies WHERE status='active' ORDER BY id");res.json(rows)}));
- app.post('/api/public/company-registrations',asyncRoute(async(req,res)=>{const companyName=String(req.body.companyName||'').trim(),adminName=String(req.body.adminName||'').trim(),email=String(req.body.email||'').trim(),phone=String(req.body.phone||'').trim().replace(/[\s()-]/g,''),packageCode=String(req.body.packageCode||'starter'),periodMonths=Number(req.body.periodMonths||1);if(!companyName||!adminName||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!/^\+?[0-9]{8,15}$/.test(phone)||!packages[packageCode]||![1,6,12].includes(periodMonths))return res.status(400).json({message:'Enter valid business details, package, and subscription period'});const databaseName=tenantDatabaseName(companyName);const[[company]]=await masterPool.query("SELECT id FROM companies WHERE company_name=? OR database_name=?",[companyName,databaseName]),[[pending]]=await masterPool.query("SELECT id FROM company_registration_requests WHERE (company_name=? OR email=?) AND completed_at IS NULL AND status IN ('pending','approved') LIMIT 1",[companyName,email]);if(company)return res.status(409).json({message:'This hotel/business name is already registered'});if(pending)return res.status(409).json({message:'An active application already uses this business name or email'});const temporaryPin=await generateTemporaryPin(),selectedModules=packages[packageCode],[result]=await masterPool.query("INSERT INTO company_registration_requests (company_name,hotel_id,admin_name,admin_pin,temporary_pin,package_code,period_months,selected_modules,email,phone) VALUES (?,NULL,?,NULL,?,?,?,?,?,?)",[companyName,adminName,temporaryPin,packageCode,periodMonths,JSON.stringify(selectedModules),email,phone]);const message=`Your KnockOUT application is waiting for approval. Temporary onboarding PIN: ${temporaryPin}. No Hotel ID is required for this temporary PIN.`;await queueNotice(email,'email','KnockOUT application received',message);await queueNotice(phone,'sms','Application received',message);broadcastChange('master','registration.waiting');res.status(201).json({id:result.insertId,status:'pending',temporaryPin,message:'Sent for approval. Your temporary onboarding PIN has been queued to your email and mobile.'})}));
-app.post('/api/public/resolve-login',asyncRoute(async(req,res)=>{await enforceSubscriptions();const hotelId=String(req.body.hotelId||''),pin=String(req.body.pin||'');if(!hotelId||hotelId==='0000'){const[[masterUser]]=await masterPool.query("SELECT id,name FROM master_users WHERE pin=? AND active=TRUE LIMIT 1",[pin]);if(masterUser){const user={...masterUser,role:'superadmin',companyDatabase:null,companyName:'KnockOUT Master',hotelId:'0000'};return res.json({...user,accessToken:issuePortalToken(user)})}if(!hotelId){const[[application]]=await masterPool.query("SELECT id,company_name \"companyName\",admin_name name,status,completed_at \"completedAt\" FROM company_registration_requests WHERE temporary_pin=? AND completed_at IS NULL LIMIT 1",[pin]);if(application)return res.json({...application,role:'applicant',temporaryPin:pin});return res.status(401).json({message:'Invalid Super Admin or temporary onboarding PIN. Hotel staff must enter their Hotel ID.'})}return res.status(401).json({message:'Invalid Master Hotel ID or PIN'})}if(!/^[0-9]{4}$/.test(hotelId)||!/^[0-9]{6}$/.test(pin))return res.status(400).json({message:'Enter your 4-digit Hotel ID and 6-digit PIN'});const matches=await findPortalLogins(null,pin,false,hotelId);if(!matches.length){const blocked=await findPortalLogins(null,pin,true,hotelId),suspended=blocked.find(user=>user.companyStatus==='suspended');if(suspended)return res.status(403).json({code:'COMPANY_SUSPENDED',message:`${suspended.companyName} is suspended. Renew the KnockOUT subscription to restore access.`});return res.status(401).json({message:'Invalid Hotel ID, PIN, or inactive account'})}const user=matches[0];await masterPool.query("INSERT INTO usage_logins (company_id,user_id,role) SELECT id,?,? FROM companies WHERE database_name=?",[user.id,user.role,user.companyDatabase]);res.json({...user,accessToken:issuePortalToken(user)})}));
-app.post('/api/public/onboarding-status',asyncRoute(async(req,res)=>{const[[row]]=await masterPool.query("SELECT id,company_name \"companyName\",admin_name \"adminName\",email,phone,status,package_code \"packageCode\",period_months \"periodMonths\",selected_modules \"selectedModules\",review_note \"reviewNote\",reviewed_at \"reviewedAt\" FROM company_registration_requests WHERE id=? AND temporary_pin=? AND completed_at IS NULL",[req.body.id,String(req.body.pin||'')]);if(!row)return res.status(401).json({message:'Temporary onboarding session is invalid'});row.selectedModules=typeof row.selectedModules==='string'?JSON.parse(row.selectedModules):row.selectedModules;const pricing=await currentPricing(),monthly=row.selectedModules.reduce((sum,key)=>sum+(pricing[key]?.price||0),0),discount=row.periodMonths===12?.10:row.periodMonths===6?.05:0,subtotal=Math.round(monthly*row.periodMonths*(1-discount)),tax=Math.round(subtotal*.18);res.json({...row,monthly,discount,subtotal,tax,total:subtotal+tax})}));
-app.post('/api/public/complete-registration',asyncRoute(async(req,res)=>{const pin=String(req.body.pin||''),[[request]]=await masterPool.query("SELECT id,company_name \"companyName\",admin_name \"adminName\",email,phone,status,package_code \"packageCode\",period_months \"periodMonths\",selected_modules \"selectedModules\" FROM company_registration_requests WHERE id=? AND temporary_pin=? AND completed_at IS NULL",[req.body.id,pin]);if(!request)return res.status(401).json({message:'Temporary onboarding session is invalid'});if(request.status!=='approved')return res.status(409).json({message:'Master approval is required before completing registration'});const paymentReference=String(req.body.paymentReference||'').trim();if(paymentReference.length<5)return res.status(400).json({message:'A valid payment reference is required'});request.selectedModules=typeof request.selectedModules==='string'?JSON.parse(request.selectedModules):request.selectedModules;const setupData={businessType:String(req.body.businessType||''),address:String(req.body.address||''),gstNumber:String(req.body.gstNumber||'')};if(!setupData.businessType||!setupData.address)return res.status(400).json({message:'Business type and address are required'});const company=await provisionCompany(request),period=Number(request.periodMonths),expires=new Date();expires.setMonth(expires.getMonth()+period);const grace=new Date(expires);grace.setDate(grace.getDate()+2);await masterPool.query("INSERT INTO tenant_subscriptions (company_id,package_code,period_months,started_at,expires_at,grace_ends_at) VALUES (?,?,?,NOW(),?,?)",[company.id,request.packageCode,period,expires,grace]);const pricing=await currentPricing(),discount=period===12?.10:period===6?.05:0,items=request.selectedModules.map(key=>({key,name:pricing[key]?.name||key,monthlyPrice:pricing[key]?.price||0,months:period})),monthly=items.reduce((sum,item)=>sum+item.monthlyPrice,0),subtotal=Math.round(monthly*period*(1-discount)),tax=Math.round(subtotal*.18),billingMonth=new Date().toISOString().slice(0,7)+'-01';await masterPool.query("INSERT INTO saas_invoices (company_id,billing_month,line_items,subtotal,tax_rate,tax,total,status,paid_at) VALUES (?,?,?,?,18,?,?,'paid',NOW()) ON CONFLICT (company_id,billing_month) DO UPDATE SET line_items=EXCLUDED.line_items,subtotal=EXCLUDED.subtotal,tax=EXCLUDED.tax,total=EXCLUDED.total,status='paid',paid_at=NOW()",[company.id,billingMonth,JSON.stringify(items),subtotal,tax,subtotal+tax]);await masterPool.query("UPDATE company_registration_requests SET company_id=?,hotel_id=?,admin_pin=?,setup_data=?,payment_reference=?,completed_at=NOW() WHERE id=?",[company.id,company.hotelId,company.adminPin,JSON.stringify(setupData),paymentReference,request.id]);const message=`KnockOUT registration complete. Hotel ID: ${company.hotelId}. New Admin PIN: ${company.adminPin}. Your subscription is active until ${expires.toLocaleDateString('en-IN')}.`;await queueNotice(request.email,'email','Your KnockOUT workspace is ready',message);await queueNotice(request.phone,'sms','KnockOUT access ready',message);broadcastChange('master','registration.completed');res.status(201).json({success:true,hotelId:company.hotelId,adminPin:company.adminPin,companyName:company.companyName,expiresAt:expires})}));
-app.post('/api/login',asyncRoute(async(req,res)=>{const[[user]]=await masterPool.query("SELECT id,name FROM master_users WHERE pin=? AND active=TRUE",[req.body.pin]);if(!user)return res.status(401).json({message:'Invalid KnockOUT Master PIN'});const result={...user,role:'superadmin',companyDatabase:null};res.json({...result,accessToken:issuePortalToken(result)})}));
-app.get('/api/state',asyncRoute(async(_req,res)=>{await enforceSubscriptions();await generateMonthlySaasInvoices();const[companies]=await masterPool.query("SELECT id,company_name \"companyName\",database_name \"databaseName\",hotel_id \"hotelId\",modules,admin_name \"adminName\",email,phone,status,created_at \"createdAt\" FROM companies ORDER BY id"),[masterUsers]=await masterPool.query("SELECT id,name,pin,active,'superadmin' role FROM master_users ORDER BY name"),[registrationRequests]=await masterPool.query("SELECT id,company_name \"companyName\",hotel_id \"hotelId\",admin_name \"adminName\",email,phone,status,package_code \"packageCode\",period_months \"periodMonths\",selected_modules \"selectedModules\",review_note \"reviewNote\",company_id \"companyId\",created_at \"createdAt\",reviewed_at \"reviewedAt\",completed_at \"completedAt\" FROM company_registration_requests ORDER BY (CASE status WHEN 'pending' THEN 1 WHEN 'approved' THEN 2 WHEN 'rejected' THEN 3 ELSE 0 END),id DESC"),[invoices]=await masterPool.query("SELECT i.id,i.company_id \"companyId\",c.company_name \"companyName\",c.hotel_id \"hotelId\",to_char(i.billing_month, 'YYYY-MM') \"billingMonth\",i.line_items \"lineItems\",i.subtotal,i.tax_rate \"taxRate\",i.tax,i.total,i.status,i.paid_at \"paidAt\",i.generated_at \"generatedAt\" FROM saas_invoices i JOIN companies c ON c.id=i.company_id ORDER BY i.billing_month DESC,c.company_name"),[subscriptions]=await masterPool.query("SELECT s.id,s.company_id \"companyId\",c.company_name \"companyName\",s.package_code \"packageCode\",s.period_months \"periodMonths\",s.started_at \"startedAt\",s.expires_at \"expiresAt\",s.grace_ends_at \"graceEndsAt\",s.status FROM tenant_subscriptions s JOIN companies c ON c.id=s.company_id ORDER BY s.id DESC"),[usage]=await masterPool.query("SELECT company_id \"companyId\",COUNT(*) \"totalLogins\",COUNT(DISTINCT user_id) \"uniqueUsers\",MAX(logged_in_at) \"lastLogin\" FROM usage_logins GROUP BY company_id");res.json({companies:await Promise.all(companies.map(companySummary)),masterUsers,registrationRequests:registrationRequests.map(request=>({...request,selectedModules:typeof request.selectedModules==='string'?JSON.parse(request.selectedModules):request.selectedModules||[]})),invoices:invoices.map(invoice=>({...invoice,lineItems:typeof invoice.lineItems==='string'?JSON.parse(invoice.lineItems):invoice.lineItems,subtotal:Number(invoice.subtotal),tax:Number(invoice.tax),total:Number(invoice.total)})),subscriptions,usage,moduleCatalog:Object.fromEntries(Object.entries(moduleCatalog).map(([key,[name,price]])=>[key,{name,price}])),masterName:'KnockOUT Master'})}));
-app.post('/api/companies',asyncRoute(async(req,res)=>res.status(201).json(await provisionCompany(req.body))));
-app.post('/api/company-registrations/:id/approve',asyncRoute(async(req,res)=>{const[[request]]=await masterPool.query("SELECT id,company_name \"companyName\",email,phone,status FROM company_registration_requests WHERE id=?",[req.params.id]);if(!request)return res.status(404).json({message:'Registration request not found'});if(request.status!=='pending')return res.status(409).json({message:`This registration is already ${request.status}`});await masterPool.query("UPDATE company_registration_requests SET status='approved',review_note=?,reviewed_at=NOW() WHERE id=?",[String(req.body.reviewNote||''),request.id]);await queueNotice(request.email,'email','KnockOUT application approved',`Your application for ${request.companyName} is approved. Sign in with your temporary PIN to complete setup and payment.`);if(request.phone)await queueNotice(request.phone,'sms','Application approved',`KnockOUT approved ${request.companyName}. Use your temporary PIN to finish registration.`);broadcastChange('master','registration.approved');res.json({ok:true,status:'approved',request})}));
-app.patch('/api/companies/:id/modules',asyncRoute(async(req,res)=>{const key=String(req.body.module||''),enabled=req.body.enabled;if(!(key in defaultModules)||typeof enabled!=='boolean')return res.status(400).json({message:'Invalid module setting'});const[[company]]=await masterPool.query("SELECT database_name \"databaseName\",modules FROM companies WHERE id=?",[req.params.id]);if(!company)return res.status(404).json({message:'Company not found'});const modules={...parseModules(company.modules),[key]:enabled};await masterPool.query("UPDATE companies SET modules=? WHERE id=?",[JSON.stringify(modules),req.params.id]);broadcastChange(company.databaseName,'company.modules',{modules,changedModule:key,enabled});res.json({ok:true,modules})}));
-app.patch('/api/saas-invoices/:id/status',asyncRoute(async(req,res)=>{if(!['due','paid'].includes(req.body.status))return res.status(400).json({message:'Invalid invoice status'});const[result]=await masterPool.query("UPDATE saas_invoices SET status=?,paid_at=(CASE WHEN ?='paid' THEN NOW() ELSE NULL END) WHERE id=?",[req.body.status,req.body.status,req.params.id]);if(!result.affectedRows)return res.status(404).json({message:'Invoice not found'});broadcastChange('master','saas.billing');res.json({ok:true,status:req.body.status})}));
-app.post('/api/company-registrations/:id/reject',asyncRoute(async(req,res)=>{const[result]=await masterPool.query("UPDATE company_registration_requests SET status='rejected',review_note=?,reviewed_at=NOW() WHERE id=? AND status='pending'",[String(req.body.reviewNote||'Not approved by Master'),req.params.id]);if(!result.affectedRows)return res.status(409).json({message:'Registration request is missing or already reviewed'});res.json({ok:true,status:'rejected'})}));
-app.patch('/api/companies/:id/status',asyncRoute(async(req,res)=>{if(!['active','suspended'].includes(req.body.status))return res.status(400).json({message:'Invalid company status'});const[[company]]=await masterPool.query("SELECT company_name \"companyName\",database_name \"databaseName\" FROM companies WHERE id=?",[req.params.id]);if(!company)return res.status(404).json({message:'Company not found'});await masterPool.query("UPDATE companies SET status=? WHERE id=?",[req.body.status,req.params.id]);broadcastChange(company.databaseName,'company.status');res.json({ok:true,status:req.body.status,companyName:company.companyName,loginsEnabled:req.body.status==='active'})}));
-app.patch('/api/companies/:companyId/users/:userId/pin',asyncRoute(async(req,res)=>{const pin=String(req.body.pin||'');if(!/^[0-9]{6}$/.test(pin))return res.status(400).json({message:'PIN must contain exactly 6 digits'});const[[company]]=await masterPool.query("SELECT id,company_name \"companyName\",database_name \"databaseName\" FROM companies WHERE id=?",[req.params.companyId]);if(!company||!validTenant(company.databaseName))return res.status(404).json({message:'Company not found'});const[[user]]=await adminPool.query(`SELECT id,name FROM "${company.databaseName}".users WHERE id=? AND deleted_at IS NULL`,[req.params.userId]);if(!user)return res.status(404).json({message:'User not found'});const[[used]]=await adminPool.query(`SELECT id,name FROM "${company.databaseName}".users WHERE pin=? AND id<>? AND deleted_at IS NULL LIMIT 1`,[pin,user.id]);if(used)return res.status(409).json({message:`This PIN is already assigned to ${used.name} in ${company.companyName}`});await adminPool.query(`UPDATE "${company.databaseName}".users SET pin=? WHERE id=?`,[pin,user.id]);await syncCompanyUsers(company.databaseName);res.json({ok:true,userId:user.id,name:user.name,pin})}));
-app.patch('/api/master-users/:userId/pin',asyncRoute(async(req,res)=>{const pin=String(req.body.pin||'');if(!/^[0-9]{6}$/.test(pin))return res.status(400).json({message:'PIN must contain exactly 6 digits'});const[[user]]=await masterPool.query("SELECT id,name FROM master_users WHERE id=?",[req.params.userId]);if(!user)return res.status(404).json({message:'Master user not found'});const matches=await findPortalLogins(null,pin,true),used=matches.find(match=>match.role!=='superadmin'||Number(match.id)!==Number(user.id));if(used)return res.status(409).json({message:`This PIN is already assigned to ${used.name} at ${used.companyName}`});await masterPool.query("UPDATE master_users SET pin=? WHERE id=?",[pin,user.id]);res.json({ok:true,userId:user.id,name:user.name,pin})}));
-app.delete('/api/companies/:id',asyncRoute(async(req,res)=>{const[[company]]=await masterPool.query("SELECT id,company_name \"companyName\",database_name \"databaseName\" FROM companies WHERE id=?",[req.params.id]);if(!company)return res.status(404).json({message:'Company not found'});if(company.databaseName==='knockout')return res.status(409).json({message:'The protected primary tenant cannot be deleted'});if(!validTenant(company.databaseName))return res.status(400).json({message:'Invalid tenant database'});if(req.body.companyName!==company.companyName)return res.status(400).json({message:'Type the exact hotel name to confirm deletion'});await adminPool.query(`DROP SCHEMA "${company.databaseName}" CASCADE`);await masterPool.query("DELETE FROM companies WHERE id=?",[company.id]);res.json({ok:true,deleted:company.companyName})}));
-app.get('/api/module-pricing',asyncRoute(async(_req,res)=>res.json(await currentPricing())));
-app.patch('/api/module-pricing/:key',asyncRoute(async(req,res)=>{const key=String(req.params.key),price=Number(req.body.price);if(!(key in moduleCatalog)||!Number.isFinite(price)||price<0)return res.status(400).json({message:'Enter a valid module price'});await masterPool.query("UPDATE module_pricing SET monthly_price=? WHERE module_key=?",[price,key]);await generateMonthlySaasInvoices();broadcastChange('master','saas.pricing');res.json({ok:true,key,price})}));
-app.post('/api/reports',asyncRoute(async(req,res)=>{if(!req.body.filename||typeof req.body.content!=='string')return res.status(400).json({message:'Report filename and content are required'});const stored=await putReport('knockout',req.body.filename,req.body.content,req.body.contentType||'text/csv;charset=utf-8');res.status(201).json({...stored,provider:storageProvider})}));
-app.use((error,_req,res,_next)=>{console.error(error);res.status(error.status||500).json({message:error.message||'Master server error'})});
-
-let nestApplication;
-async function start(){
- try{
-  if(process.env.RUN_MIGRATIONS!=='false')await migrate();
-  await initialize();
-  try{await initializeRealtime(relayChange)}catch(error){if(process.env.REDIS_REQUIRED==='true')throw error;console.error(`Redis unavailable; using single-instance realtime: ${error.message}`)}
-  nestApplication=await createNestApplication(app,'knockout-api');
-  await nestApplication.init();
-  await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,'0.0.0.0',resolve)});
-  console.log(`KnockOUT unified API + WebSocket on http://localhost:${port}`);
-  if(process.send)process.send('ready');
- }catch(error){console.error('Backend startup failed:',error);await shutdown('startup failure',1)}
-}
-let stopping=false;
-async function shutdown(signal,exitCode=0){
- if(stopping)return;stopping=true;
- console.log(`${signal}: draining unified backend`);
- const timeout=setTimeout(()=>process.exit(1),30000);timeout.unref();
- clearInterval(socketHeartbeat);
- for(const socket of socketServer.clients)socket.terminate();
- socketServer.close();
- await new Promise(resolve=>server.close(resolve));
- await Promise.allSettled([closeRealtime(),masterPool?.end(),adminPool?.end(),closePools(),nestApplication?.close()]);
- clearTimeout(timeout);process.exit(exitCode);
-}
-process.on('SIGTERM',()=>shutdown('SIGTERM'));process.on('SIGINT',()=>shutdown('SIGINT'));
 start();
+
+export { app, server };
