@@ -1,0 +1,42 @@
+import express from 'express';
+import systemRoutes from './systemRoutes.js';
+import authRoutes from './authRoutes.js';
+import bookingRoutes from './bookingRoutes.js';
+import orderRoutes from './orderRoutes.js';
+import parcelRoutes from './parcelRoutes.js';
+import tableRoutes from './tableRoutes.js';
+import inventoryRoutes from './inventoryRoutes.js';
+import stockRequestRoutes from './stockRequestRoutes.js';
+import financeRoutes from './financeRoutes.js';
+import supplierPurchaseRoutes from './supplierPurchaseRoutes.js';
+import settingsRoutes from './settingsRoutes.js';
+import staffRoutes from './staffRoutes.js';
+import attendanceRoutes from './attendanceRoutes.js';
+import kitchenStaffRoutes from './kitchenStaffRoutes.js';
+import juicerLoginRoutes from './juicerLoginRoutes.js';
+import menuRoutes from './menuRoutes.js';
+import comboRoutes from './comboRoutes.js';
+import reportRoutes from './reportRoutes.js';
+
+const router = express.Router();
+
+router.use('/api', systemRoutes);
+router.use('/api', authRoutes);
+router.use('/api/bookings', bookingRoutes);
+router.use('/api/orders', orderRoutes);
+router.use('/api/parcels', parcelRoutes);
+router.use('/api/tables', tableRoutes);
+router.use('/api/inventory', inventoryRoutes);
+router.use('/api/stock-requests', stockRequestRoutes);
+router.use('/api/finance', financeRoutes);
+router.use('/api/supplier-purchases', supplierPurchaseRoutes);
+router.use('/api/settings', settingsRoutes);
+router.use('/api/staff', staffRoutes);
+router.use('/api/attendance', attendanceRoutes);
+router.use('/api/kitchen-staff', kitchenStaffRoutes);
+router.use('/api/juicer-login', juicerLoginRoutes);
+router.use('/api/menu', menuRoutes);
+router.use('/api/combos', comboRoutes);
+router.use('/api/reports', reportRoutes);
+
+export default router;
