@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import pg from 'pg';
+import crypto from 'node:crypto';
 import {WebSocket} from 'ws';
 import {fileURLToPath} from 'node:url';
 const root=fileURLToPath(new URL('../',import.meta.url));
@@ -12,7 +13,7 @@ test('PostgreSQL service flows through actual APIs',{skip:!process.env.PG_INTEGR
  const control=new pg.Client({host:process.env.DB_HOST,port:Number(process.env.DB_PORT),user:process.env.DB_USER,password:process.env.DB_PASSWORD,database:process.env.PGDATABASE||'knockout'});
  await control.connect();await control.query(`CREATE DATABASE "${db}"`);
  const children=[];let logs='';const clients=[];
- const env={...process.env,PGDATABASE:db,DB_NAME:'knockout',MASTER_DB_NAME:'knockout_master',SEED_DEMO_DATA:'true',MASTER_BOOTSTRAP_PIN:'654321',REDIS_URL:'',STATE_CACHE_TTL_MS:'100',NOTIFICATION_WEBHOOK_URL:'',SMS_WEBHOOK_URL:'',EMAIL_WEBHOOK_URL:''};
+ const env={...process.env,MASTER_SESSION_SECRET:'isolated-test-signing-key-not-for-deployment',PGDATABASE:db,DB_NAME:'knockout',MASTER_DB_NAME:'knockout_master',SEED_DEMO_DATA:'true',MASTER_BOOTSTRAP_PIN:'654321',REDIS_URL:'',STATE_CACHE_TTL_MS:'100',NOTIFICATION_WEBHOOK_URL:'',SMS_WEBHOOK_URL:'',EMAIL_WEBHOOK_URL:''};
  const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
  async function launch(){
   const port=56100;
@@ -39,9 +40,25 @@ test('PostgreSQL service flows through actual APIs',{skip:!process.env.PG_INTEGR
   }
   await request('anonymous','/state',{status:401,headers:{'x-portal-role':'admin','x-company-database':'knockout'}});
   await request('anonymous','/state',{token:'invalid',status:401});
+  const expiredPayload=Buffer.from(JSON.stringify({id:1,role:'admin',companyDatabase:'knockout',exp:Date.now()-1000})).toString('base64url');
+  const expired=expiredPayload+'.'+crypto.createHmac('sha256',env.MASTER_SESSION_SECRET).update(expiredPayload).digest('base64url');
+  await request('anonymous','/state',{token:expired,status:401});
+  await request('anonymous','/state',{token:tokens.admin+'.extra',status:401});
+  await request('anonymous','/public/resolve-login',{method:'POST',body:{pin:'invalid'},headers:{Origin:'https://evil.example'},status:403});
+
   assert.equal(children.length,1);
-  for(const role of ['waiter','chef','juicer']){const view=await request(role,'/state');assert.equal(view.users,undefined);assert.equal(view.financeEntries,undefined)}
+  for(const role of ['waiter','chef','juicer']){const view=await request(role,'/state');assert.equal(view.users,undefined);assert.equal(view.financeEntries,undefined);assert.equal(view.supplierPurchases,undefined);assert.equal(view.supplierPayments,undefined)}
   await request('waiter','/companies',{status:404});
+  await request('waiter','/settings',{method:'PUT',body:{hotelName:'Unauthorized'},status:403});
+  await request('chef','/menu/1/image',{method:'POST',body:{},status:403});
+  await request('waiter','/orders',{method:'POST',body:{tableId:1,items:[{menuId:1,qty:-1}]},status:400});
+  const otherWaiter=(await fixture.query("INSERT INTO knockout.users(name,role,pin) VALUES('Other Waiter','waiter','999991') RETURNING id")).rows[0];
+  await request('waiter',`/attendance/${otherWaiter.id}`,{status:403});
+  await request('waiter',`/attendance/${otherWaiter.id}/check-in`,{method:'POST',body:{},status:403});
+  await fixture.query("UPDATE knockout_master.company_users SET active=false WHERE role='juicer'");
+  await request('juicer','/state',{status:401});
+  await fixture.query("UPDATE knockout_master.company_users SET active=true WHERE role='juicer'");
+
 
   assert.equal((await request('admin','/health')).database,'postgresql');
   const state=await request('admin','/state');assert(state.settings.hotelName);assert(state.menu[0].imageUrl!==undefined);assert.equal(typeof state.users[0].id,'number');
@@ -79,8 +96,14 @@ test('PostgreSQL service flows through actual APIs',{skip:!process.env.PG_INTEGR
   const tenantState=await request('master','/state',{token:login.accessToken});assert.equal(tenantState.settings.hotelName,'Postgres Test Company');assert.equal(tenantState.orders.length,0);
   const views=await Promise.all(Array.from({length:12},(_,i)=>request(i%2?'admin':'master','/state',{token:i%2?tokens.admin:login.accessToken,headers:{'x-company-database':i%2?company.databaseName:'knockout','x-portal-role':'admin'}})));
   views.forEach((view,i)=>assert.equal(view.settings.hotelName,i%2?state.settings.hotelName:'Postgres Test Company'));
-  const profile=new FormData();profile.set('name','Updated Owner');profile.set('email','owner@example.com');profile.set('image',new Blob(['fixture'],{type:'image/png'}),'avatar.png');
+  const profile=new FormData();profile.set('name','Updated Owner');profile.set('email','owner@example.com');profile.set('image',new Blob([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64')],{type:'image/png'}),'avatar.png');
   const upload=await fetch('http://127.0.0.1:56100/api/profile',{method:'PATCH',headers:{authorization:`Bearer ${login.accessToken}`},body:profile});assert.equal(upload.status,200,await upload.clone().text());
+  const badImage=new FormData();badImage.set('name','Owner');badImage.set('image',new Blob(['<svg/>'],{type:'image/png'}),'fake.png');
+  assert.equal((await fetch('http://127.0.0.1:56100/api/profile',{method:'PATCH',headers:{authorization:`Bearer ${login.accessToken}`},body:badImage})).status,400);
+  for(const [database,token,origin] of [['knockout',login.accessToken,undefined],[company.databaseName,'invalid',undefined],[company.databaseName,login.accessToken,'https://evil.example']]){
+   const denied=new WebSocket(`ws://127.0.0.1:56100/ws?database=${database}&token=${token}`,origin?{origin}:{});
+   assert.equal((await once(denied,'close'))[0],1008);
+  }
   const relogin=await request('anonymous','/public/resolve-login',{method:'POST',body:{hotelId:company.hotelId,pin:company.adminPin}});assert.equal(relogin.name,'Updated Owner');
   const socket=new WebSocket(`ws://127.0.0.1:56100/ws?database=${company.databaseName}&token=${login.accessToken}`);
   const connected=await once(socket,'message');assert.equal(JSON.parse(connected[0]).type,'connected');
@@ -98,6 +121,10 @@ test('PostgreSQL service flows through actual APIs',{skip:!process.env.PG_INTEGR
   await fixture.query("UPDATE knockout_master.companies SET status='suspended' WHERE id=$1",[company.id]);
   await request('master','/state',{token:login.accessToken,status:403});
   await request('master',`/companies/${company.id}`,{method:'DELETE',body:{companyName:'Postgres Test Company'}});
+  let throttled=false;
+  for(let n=0;n<65;n++){const response=await fetch('http://127.0.0.1:56100/api/public/resolve-login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({hotelId:'0000',pin:'000000'})});if(response.status===429){assert(response.headers.get('retry-after'));throttled=true;break;}assert.equal(response.status,401);}
+  assert(throttled,'Authentication brute-force attempts must be throttled');
+
  }finally{
   await Promise.all(children.map(async child=>{if(child.exitCode!==null)return;child.kill('SIGTERM');await Promise.race([once(child,'exit'),sleep(2000)]);if(child.exitCode===null){child.kill('SIGKILL');assert.fail('Unified backend did not shut down gracefully')}assert.equal(child.exitCode,0,logs.slice(-1500))}));
   for(const client of clients)await client.end();

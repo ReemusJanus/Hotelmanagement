@@ -1,3 +1,4 @@
+import {requireProductionSecrets,originAllowed,securityHeaders,createAttemptLimiter,safeError} from './security.js';
 import express from 'express';
 import {createRoleRouter} from './server.js';
 import {migrate,closePools} from './database.js';
@@ -11,12 +12,23 @@ import {createNestApplication} from './nest/platform.js';
 import {initializeStorage,ensureStorageFolders,putReport,copyImage,storagePrefix,storageProvider} from './storage.js';
 import {initializeRealtime,publishRealtime,realtimeStatus,closeRealtime} from './realtime.js';
 
+requireProductionSecrets();
 const app=express(),port=Number(process.env.PORT||5000),masterDb=process.env.MASTER_DB_NAME||'knockout_master';
-const server=http.createServer(app),socketServer=new WebSocketServer({server,path:'/ws'});
+const server=http.createServer(app),socketServer=new WebSocketServer({server,path:'/ws',maxPayload:16*1024});
 const rootConfig={host:process.env.DB_HOST||'127.0.0.1',port:Number(process.env.DB_PORT||5432),user:process.env.DB_USER||'knockout',password:process.env.DB_PASSWORD||'knockout_pass',enableKeepAlive:true,keepAliveInitialDelay:10000,connectTimeout:Number(process.env.DB_CONNECT_TIMEOUT_MS||10000)};
 const sessionSecret=process.env.MASTER_SESSION_SECRET||`${rootConfig.password}:${masterDb}:knockout-session`;
 let adminPool,masterPool;
-app.use(cors());app.use(express.json({limit:'6mb'}));
+app.disable('x-powered-by');app.use(securityHeaders);
+app.use((req,res,next)=>{if(!originAllowed(req.headers.origin,req))return res.status(403).json({message:'Origin is not allowed'});next()});
+app.use(cors({origin:true,methods:['GET','POST','PUT','PATCH','DELETE','OPTIONS'],allowedHeaders:['Content-Type','Authorization','X-Company-Database','X-Portal-Role','X-Portal-User-Id']}));
+app.use(express.json({limit:'6mb'}));
+app.use((req,res,next)=>{res.on('finish',()=>{
+ if(!['POST','PUT','PATCH','DELETE'].includes(req.method))return;
+ const session=verifyPortalToken(req.headers.authorization);
+ console.info(JSON.stringify({event:'api_mutation',method:req.method,route:req.route?.path||'unmatched',status:res.statusCode,role:session?.role||'anonymous',userId:session?.id,tenant:session?.companyDatabase}));
+});next()});
+app.use(['/api/login','/api/public/resolve-login','/api/public/onboarding-status'],createAttemptLimiter({limit:60,windowMs:60000}));
+app.use(['/api/public/company-registrations','/api/public/complete-registration'],createAttemptLimiter({limit:20,windowMs:60000}));
 const asyncRoute=fn=>(req,res,next)=>Promise.resolve(fn(req,res,next)).catch(next);
 const ident=value=>{const clean=String(value||'').toLowerCase().trim().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');if(!/^[a-z][a-z0-9_]{1,54}$/.test(clean))throw Object.assign(new Error('Hotel name cannot be converted to a valid database name'),{status:400});return clean};
 const tenantDatabaseName=value=>`tenant_${ident(value)}`;
@@ -31,7 +43,12 @@ async function generateTenantPin(databaseName){for(let attempt=0;attempt<200;att
 const socketDatabase=value=>validTenant(value)?String(value):value==='master'?'master':null;
 const encode=value=>Buffer.from(JSON.stringify(value)).toString('base64url');
 function issuePortalToken(user){const payload=encode({id:user.id,role:user.role,companyDatabase:user.companyDatabase,exp:Date.now()+12*60*60*1000}),signature=crypto.createHmac('sha256',sessionSecret).update(payload).digest('base64url');return `${payload}.${signature}`}
-function verifyPortalToken(value){try{const[payload,signature]=String(value||'').replace(/^Bearer\s+/i,'').split('.'),expected=crypto.createHmac('sha256',sessionSecret).update(payload).digest('base64url');if(!signature||signature.length!==expected.length||!crypto.timingSafeEqual(Buffer.from(signature),Buffer.from(expected)))return null;const data=JSON.parse(Buffer.from(payload,'base64url')),validRole=['admin','waiter','chef','juicer','superadmin'].includes(data.role),validCompany=data.role==='superadmin'||validTenant(data.companyDatabase);return data.exp>Date.now()&&validRole&&validCompany?data:null}catch{return null}}
+function verifyPortalToken(value){try{const parts=String(value||'').replace(/^Bearer\s+/i,'').split('.');if(parts.length!==2)return null;const[payload,signature]=parts,expected=crypto.createHmac('sha256',sessionSecret).update(payload).digest('base64url');if(!signature||signature.length!==expected.length||!crypto.timingSafeEqual(Buffer.from(signature),Buffer.from(expected)))return null;const data=JSON.parse(Buffer.from(payload,'base64url')),validRole=['admin','waiter','chef','juicer','superadmin'].includes(data.role),validCompany=data.role==='superadmin'||validTenant(data.companyDatabase);return Number.isSafeInteger(data.id)&&data.id>0&&Number.isFinite(data.exp)&&data.exp>Date.now()&&validRole&&validCompany?data:null}catch{return null}}
+async function sessionIsActive(session){
+ if(!session||session.exp<=Date.now())return false;
+ const [[account]]=session.role==='superadmin'?await masterPool.query('SELECT id FROM master_users WHERE id=? AND active=TRUE',[session.id]):await masterPool.query("SELECT cu.id FROM company_users cu JOIN companies c ON c.id=cu.company_id WHERE cu.tenant_user_id=? AND cu.role=? AND cu.active=TRUE AND c.database_name=? AND c.status='active'",[session.id,session.role,session.companyDatabase]);
+ return Boolean(account);
+}
 function broadcastChange(database,resource='state',details={}){
  const event={type:'state.changed',database,resource,...details,at:new Date().toISOString()},message=JSON.stringify(event);
  for(const client of socketServer.clients)if(client.readyState===WebSocket.OPEN&&(client.database===database||client.database==='master'))client.send(message);
@@ -41,15 +58,17 @@ function relayChange(event){
  const message=JSON.stringify(event);
  for(const client of socketServer.clients)if(client.readyState===WebSocket.OPEN&&(client.database===event.database||client.database==='master'))client.send(message);
 }
-socketServer.on('connection',(socket,request)=>{
+socketServer.on('connection',async(socket,request)=>{
+ if(!originAllowed(request.headers.origin,request))return socket.close(1008,'Origin is not allowed');
  const params=new URL(request.url,'http://localhost').searchParams,database=socketDatabase(params.get('database')),session=verifyPortalToken(params.get('token'));
  const authorized=database==='master'?session?.role==='superadmin':session?.companyDatabase===database&&['admin','waiter','chef','juicer'].includes(session?.role);
  if(!database||!authorized)return socket.close(1008,'Unauthorized live tracking channel');
- socket.database=database;socket.isAlive=true;
+ try{if(!await sessionIsActive(session))return socket.close(1008,'Inactive session');}catch{return socket.close(1011,'Session check failed');}
+ socket.database=database;socket.session=session;socket.isAlive=true;
  socket.on('pong',()=>{socket.isAlive=true});
  socket.send(JSON.stringify({type:'connected',database,at:new Date().toISOString()}));
 });
-const socketHeartbeat=setInterval(()=>{for(const socket of socketServer.clients){if(socket.isAlive===false){socket.terminate();continue}socket.isAlive=false;socket.ping()}},25000);
+const socketHeartbeat=setInterval(()=>{for(const socket of socketServer.clients){if(socket.session?.exp<=Date.now()){socket.close(1008,'Session expired');continue;}if(socket.isAlive===false){socket.terminate();continue}if(socket.session)sessionIsActive(socket.session).then(active=>{if(!active)socket.close(1008,'Inactive session')}).catch(()=>socket.close(1011,'Session check failed'));socket.isAlive=false;socket.ping()}},25000);
 socketServer.on('close',()=>clearInterval(socketHeartbeat));
 app.use((req,res,next)=>{
  if(['GET','HEAD','OPTIONS'].includes(req.method)||['/api/login','/api/public/resolve-login'].includes(req.path))return next();
@@ -172,6 +191,12 @@ const roleRouters=Object.fromEntries(['admin','waiter','chef','juicer'].map(role
 }})]));
 
 app.use('/api',asyncRoute(async(req,res,next)=>{
+ const current=verifyPortalToken(req.headers.authorization);
+ if(current){
+  const [[account]]=current.role==='superadmin'?await masterPool.query('SELECT id FROM master_users WHERE id=? AND active=TRUE',[current.id]):await masterPool.query('SELECT cu.id FROM company_users cu JOIN companies c ON c.id=cu.company_id WHERE cu.tenant_user_id=? AND cu.role=? AND cu.active=TRUE AND c.database_name=?',[current.id,current.role,current.companyDatabase]);
+  if(!account)return res.status(401).json({message:'Your account is inactive. Sign in again.'});
+ }
+
  const session=verifyPortalToken(req.headers.authorization),role=session?.role||'';
  if(!session&&['admin','waiter','chef','juicer'].includes(String(req.headers['x-portal-role']||'').toLowerCase())&&!['/public/resolve-login','/login'].includes(req.path))return res.status(401).json({message:'Your secure session has expired. Sign in with your PIN again.'});
  if(!['admin','waiter','chef','juicer'].includes(role))return next();
@@ -217,7 +242,7 @@ app.delete('/api/companies/:id',asyncRoute(async(req,res)=>{const[[company]]=awa
 app.get('/api/module-pricing',asyncRoute(async(_req,res)=>res.json(await currentPricing())));
 app.patch('/api/module-pricing/:key',asyncRoute(async(req,res)=>{const key=String(req.params.key),price=Number(req.body.price);if(!(key in moduleCatalog)||!Number.isFinite(price)||price<0)return res.status(400).json({message:'Enter a valid module price'});await masterPool.query("UPDATE module_pricing SET monthly_price=? WHERE module_key=?",[price,key]);await generateMonthlySaasInvoices();broadcastChange('master','saas.pricing');res.json({ok:true,key,price})}));
 app.post('/api/reports',asyncRoute(async(req,res)=>{if(!req.body.filename||typeof req.body.content!=='string')return res.status(400).json({message:'Report filename and content are required'});const stored=await putReport('knockout',req.body.filename,req.body.content,req.body.contentType||'text/csv;charset=utf-8');res.status(201).json({...stored,provider:storageProvider})}));
-app.use((error,_req,res,_next)=>{console.error(error);res.status(error.status||500).json({message:error.message||'Master server error'})});
+app.use(safeError);
 
 let nestApplication;
 async function start(){

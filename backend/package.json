@@ -15,17 +15,17 @@
     "test": "node --test test/*.test.js"
   },
   "dependencies": {
-    "@nestjs/common": "11.2.1",
-    "@nestjs/core": "11.2.1",
-    "@nestjs/platform-express": "11.2.1",
+    "@nestjs/common": "11.2.7",
+    "@nestjs/core": "11.2.7",
+    "@nestjs/platform-express": "11.2.7",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "minio": "^8.0.5",
-    "multer": "^2.0.2",
+    "multer": "2.4.0",
+    "pg": "^8.16.3",
     "redis": "5.12.1",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2",
-    "ws": "^8.21.3",
-    "pg": "^8.16.3"
+    "ws": "^8.21.3"
   }
 }
