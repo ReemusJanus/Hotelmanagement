@@ -9,16 +9,21 @@ export async function initializeRealtime(onMessage){
  handler=onMessage;
  const url=String(process.env.REDIS_URL||'').trim();
  if(!url)return {provider:'memory',ready:false};
- publisher=createClient({url,socket:{reconnectStrategy:retries=>Math.min(retries*100,3000)}});
- subscriber=publisher.duplicate();
- publisher.on('error',error=>console.error('Redis publisher:',error.message));
- subscriber.on('error',error=>console.error('Redis subscriber:',error.message));
- await Promise.all([publisher.connect(),subscriber.connect()]);
- await subscriber.subscribe(channel,raw=>{
-  try{const event=JSON.parse(raw);if(event.instanceId!==instanceId)handler?.(event)}catch(error){console.error('Invalid realtime event:',error.message)}
- });
- ready=true;
- return {provider:'redis',ready:true};
+ const pub=createClient({url,socket:{reconnectStrategy:retries=>{if(!ready)return false;return Math.min(retries*100,3000)}}});
+ const sub=pub.duplicate();
+ pub.on('error',error=>{if(ready)console.error('Redis publisher:',error.message)});
+ sub.on('error',error=>{if(ready)console.error('Redis subscriber:',error.message)});
+ try{
+  await Promise.all([pub.connect(),sub.connect()]);
+  await sub.subscribe(channel,raw=>{
+   try{const event=JSON.parse(raw);if(event.instanceId!==instanceId)handler?.(event)}catch(error){console.error('Invalid realtime event:',error.message)}
+  });
+  publisher=pub;subscriber=sub;ready=true;
+  return {provider:'redis',ready:true};
+ }catch(error){
+  await Promise.allSettled([pub.disconnect(),sub.disconnect()]);
+  throw error;
+ }
 }
 
 export function publishRealtime(event){

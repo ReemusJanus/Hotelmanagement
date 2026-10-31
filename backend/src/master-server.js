@@ -13,7 +13,7 @@ import {initializeStorage,ensureStorageFolders,putReport,copyImage,storagePrefix
 import {initializeRealtime,publishRealtime,realtimeStatus,closeRealtime} from './realtime.js';
 
 requireProductionSecrets();
-const app=express(),port=Number(process.env.PORT||5000),masterDb=process.env.MASTER_DB_NAME||'knockout_master';
+const app=express(),port=Number(process.env.PORT||process.env.BACKEND_PORT||5000),masterDb=process.env.MASTER_DB_NAME||'knockout_master';
 const server=http.createServer(app),socketServer=new WebSocketServer({server,path:'/ws',maxPayload:16*1024});
 const rootConfig={host:process.env.DB_HOST||'127.0.0.1',port:Number(process.env.DB_PORT||5432),user:process.env.DB_USER||'knockout',password:process.env.DB_PASSWORD||'knockout_pass',enableKeepAlive:true,keepAliveInitialDelay:10000,connectTimeout:Number(process.env.DB_CONNECT_TIMEOUT_MS||10000)};
 const sessionSecret=process.env.MASTER_SESSION_SECRET||`${rootConfig.password}:${masterDb}:knockout-session`;
@@ -123,9 +123,14 @@ async function initialize(){
  await masterPool.query("UPDATE companies SET modules=? WHERE modules IS NULL",[JSON.stringify(defaultModules)]);
  const[companies]=await masterPool.query("SELECT database_name \"databaseName\" FROM companies");
  for(const company of companies){await ensureDailyFinanceTables(company.databaseName);await syncCompanyUsers(company.databaseName)}
- await initializeStorage();
- const[storageCompanies]=await masterPool.query("SELECT company_name \"companyName\",database_name \"databaseName\" FROM companies");
- for(const company of storageCompanies){await ensureStorageFolders(company.companyName);await migrateTenantImages(company)}
+ try{
+  await initializeStorage();
+  const[storageCompanies]=await masterPool.query("SELECT company_name \"companyName\",database_name \"databaseName\" FROM companies");
+  for(const company of storageCompanies){await ensureStorageFolders(company.companyName);await migrateTenantImages(company)}
+ }catch(error){
+  if(process.env.STORAGE_REQUIRED==='true')throw error;
+  console.error(`Storage unavailable; image persistence disabled: ${error.message}`);
+ }
  await generateMonthlySaasInvoices();
 }
 
@@ -175,7 +180,7 @@ async function provisionCompany({companyName,adminName,email='',phone='',selecte
   const enabledModules=selectedModules?Object.fromEntries(Object.keys(defaultModules).map(key=>[key,selectedModules.includes(key)])):defaultModules;
   const[result]=await conn.query(`INSERT INTO ${master}.companies (company_name,database_name,cy_db,hotel_id,modules,admin_name,email,phone) VALUES (?,?,?,?,?,?,?,?)`,[companyName,databaseName,databaseName,hotelId,JSON.stringify(enabledModules),adminName,email,phone]);
   await conn.query(`INSERT INTO ${master}.company_users (company_id,tenant_user_id,name,role,pin,phone,email,profile_image_url,active) SELECT ?,id,name,role,pin,phone,email,profile_image_url,active FROM ${tenant}.users`,[result.insertId]);
-  await ensureStorageFolders(companyName);
+  try{await ensureStorageFolders(companyName)}catch(e){if(process.env.STORAGE_REQUIRED==='true')throw e}
   await conn.commit();
   return{id:result.insertId,companyName,databaseName,hotelId,adminPin,modules:enabledModules,adminName,email,phone,status:'active'};
  }catch(error){await conn.rollback();throw error}finally{conn.release()}
