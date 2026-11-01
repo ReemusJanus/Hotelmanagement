@@ -4,6 +4,7 @@ import App from './App';
 import AnimatedUI from './AnimatedUI';
 import './styles.css';
 import './knockout.css';
+import './theme.css';
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <AnimatedUI />

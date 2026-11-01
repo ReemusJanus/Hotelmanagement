@@ -57,7 +57,10 @@ services:
       retries: 20
 
   minio:
-    image: minio/minio:latest
+    # Use the existing local image; the upstream registry image is unavailable.
+    # On another machine, load this image first or set MINIO_IMAGE to an available image.
+    image: ${MINIO_IMAGE:-knockout-minio:local}
+    pull_policy: never
     container_name: knockout-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"

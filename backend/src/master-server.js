@@ -153,7 +153,7 @@ app.use('/api', async (req, res, next) => {
 
   const [[company]] = await masterPool.query('SELECT status,modules FROM companies WHERE database_name=? LIMIT 1', [session.companyDatabase]);
   if (!company || company.status !== 'active') {
-    return res.status(403).json({ code: 'COMPANY_SUSPENDED', message: 'This company has been suspended by KnockOUT Master. All company logins are temporarily disabled.' });
+    return res.status(403).json({ code: 'COMPANY_SUSPENDED', message: 'This company has been suspended by Byteberrytech Master. All company logins are temporarily disabled.' });
   }
 
   const { parseModules } = await import('./middleware/auth.js');
@@ -175,7 +175,7 @@ app.use('/api', async (req, res, next) => {
 
   if (path === '/session') return res.json({ modules, companyDatabase: session.companyDatabase, role });
   if ((role === 'chef' && !modules.kitchen) || (role === 'juicer' && !modules.juicer) || (moduleKey && !modules[moduleKey])) {
-    return res.status(403).json({ code: 'MODULE_DISABLED', message: 'This module is disabled for your hotel by KnockOUT Master.' });
+    return res.status(403).json({ code: 'MODULE_DISABLED', message: 'This module is disabled for your hotel by Byteberrytech Master.' });
   }
 
   req.portalSession = session;
@@ -199,7 +199,7 @@ app.use('/api', (req, res, next) => {
   }
   const session = verifyPortalToken(req.headers.authorization);
   if (session?.role !== 'superadmin') {
-    return res.status(401).json({ message: 'KnockOUT Master approval is required' });
+    return res.status(401).json({ message: 'Byteberrytech Master approval is required' });
   }
   next();
 });
@@ -258,7 +258,7 @@ async function initialize() {
 
   const [[masterCount]] = await masterPool.query('SELECT COUNT(*) count FROM master_users');
   if (!masterCount.count && process.env.MASTER_BOOTSTRAP_PIN) {
-    await masterPool.query("INSERT INTO master_users (name,pin) VALUES ('KnockOUT Master',?)", [process.env.MASTER_BOOTSTRAP_PIN]);
+    await masterPool.query("INSERT INTO master_users (name,pin) VALUES ('Byteberrytech Master',?)", [process.env.MASTER_BOOTSTRAP_PIN]);
   }
 
   if (process.env.SEED_DEMO_DATA === 'true') {
@@ -304,7 +304,7 @@ async function start() {
       server.once('error', reject);
       server.listen(port, '0.0.0.0', resolve);
     });
-    console.log(`KnockOUT unified API + WebSocket on http://localhost:${port}`);
+    console.log(`Byteberrytech unified API + WebSocket on http://localhost:${port}`);
     if (process.send) process.send('ready');
   } catch (error) {
     console.error('Backend startup failed:', error);

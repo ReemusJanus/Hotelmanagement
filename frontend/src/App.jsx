@@ -1,3 +1,4 @@
+import LandingStory from "./LandingStory";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   LayoutDashboard,
@@ -129,7 +130,7 @@ function CompanyApp() {
         return updated;
       });
       if ((user?.role === "chef" && message.modules.kitchen === false) || (user?.role === "juicer" && message.modules.juicer === false)) {
-        window.dispatchEvent(new CustomEvent("knockout:session-revoked", {detail:{message:"This portal was disabled by KnockOUT Master."}}));
+        window.dispatchEvent(new CustomEvent("knockout:session-revoked", {detail:{message:"This portal was disabled by Byteberrytech Master."}}));
         return;
       }
     }
@@ -172,7 +173,7 @@ function CompanyApp() {
   if (!data)
     return (
       <div className="loading">
-        <span className="logo">K</span>
+        <span className="logo">B</span>
         <p>Opening your portal…</p>
       </div>
     );
@@ -210,66 +211,7 @@ function CompanyApp() {
   );
 }
 
-function PublicLanding({ login, register }) {
-  useEffect(() => {
-    const elements = document.querySelectorAll(".landing-signatures, .landing-section-head, .landing-feature-grid article, .landing-visit>div, .landing-visit-details>*");
-    elements.forEach((element, index) => {
-      element.classList.add("landing-reveal");
-      element.style.setProperty("--reveal-delay", `${Math.min(index % 4, 3) * 90}ms`);
-    });
-    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
-      if (entry.isIntersecting) {
-        entry.target.classList.add("is-visible");
-        observer.unobserve(entry.target);
-      }
-    }), { threshold: .14, rootMargin: "0px 0px -45px" });
-    elements.forEach((element) => observer.observe(element));
-    return () => observer.disconnect();
-  }, []);
-  return <main className="public-landing">
-    <nav className="landing-nav">
-      <button className="landing-brand" onClick={() => window.scrollTo({top:0,behavior:"smooth"})}><img src="/knockout-logo.png" alt="KnockOUT logo"/><span><b>KnockOUT</b><small>HOSPITALITY OPERATING SYSTEM</small></span></button>
-      <div><a href="#platform">Platform</a><a href="#businesses">Businesses</a><a href="#operations">Operations</a><button className="landing-register-nav" onClick={register}>Register</button><button className="landing-login" onClick={login}>Login <ArrowRight size={15}/></button></div>
-    </nav>
-    <section className="landing-hero">
-      <div className="landing-hero-copy">
-        <span className="landing-pill"><i/> ONE PLATFORM · EVERY LOCATION</span>
-        <h1>Run hospitality <em>beautifully.</em></h1>
-        <p>A modular SaaS operating system for restaurants, cafés, hotels, food courts, and cloud kitchens. Connect every order, table, kitchen station, employee, stock item, and bill in one live workspace.</p>
-        <blockquote className="landing-hero-quote">“Less operational noise. More time for exceptional hospitality.”</blockquote>
-        <div className="landing-hero-actions"><a className="landing-explore" href="#platform">Explore the platform <ArrowRight/></a></div>
-        <div className="landing-trust"><span><CheckCircle2/> Isolated hotel workspaces</span><span><CheckCircle2/> Live order tracking</span><span><CheckCircle2/> Role-based access</span></div>
-      </div>
-      <div className="landing-food-visual">
-        <img src="/hospitality-platform-hero-v1.png" alt="Café, restaurant and hotel businesses managed with KnockOUT"/>
-        <div className="landing-food-shine"/>
-        <span className="landing-food-edition">CAFÉ · RESTAURANT · HOTEL</span>
-        <div className="landing-dish-label broasted"><small>LIVE OPERATIONS</small><b>Orders to service</b><span>Every round tracked in real time</span></div>
-        <div className="landing-dish-label alfaham"><small>BUSINESS CONTROL</small><b>One clear overview</b><span>Revenue · stock · teams · billing</span></div>
-        <div className="landing-food-seal"><Gauge/><span><b>Always in sync</b><small>Web and mobile workspaces</small></span></div>
-      </div>
-    </section>
-    <section className="landing-signatures" id="businesses">
-      <div><span className="eyebrow">BUILT FOR HOSPITALITY</span><h2>One system that adapts to your business.</h2></div>
-      <div className="landing-signature-copy"><p>Start with the modules you need and enable more as you grow. Each property receives its own Hotel ID, isolated data, staff access, configuration, and operating dashboard.</p><blockquote>Restaurants · Cafés · Hotels · Cloud kitchens · Multi-location groups</blockquote></div>
-      <span className="landing-signature-mark">S<span>A</span></span>
-    </section>
-    <section className="landing-platform" id="platform">
-      <div className="landing-section-head"><span className="eyebrow">THE COMPLETE PLATFORM</span><h2>Everything your service team needs</h2><p>Purpose-built portals keep every role focused while sharing the same live operational truth.</p></div>
-      <div className="landing-feature-grid">
-        <article><Armchair/><span>01</span><h3>Tables &amp; Waiters</h3><p>Take orders by service round, follow each handoff, add more items, and send completed tables to billing.</p></article>
-        <article><ChefHat/><span>02</span><h3>Kitchen Display</h3><p>Separate table and parcel queues with live ticket counts, preparation timers, and individual round status.</p></article>
-        <article><Package/><span>03</span><h3>Parcel Operations</h3><p>Manage takeaway orders, scheduled collections, kitchen progress, handoff, payment, and order history.</p></article>
-        <article><TrendingUp/><span>04</span><h3>Business Intelligence</h3><p>See revenue, bills, stock alerts, staff attendance, and live service health from the admin dashboard.</p></article>
-      </div>
-    </section>
-    <section className="landing-visit" id="operations">
-      <div><span className="eyebrow">CONTROL WITHOUT COMPLEXITY</span><h2>From first order to final bill.</h2><p>Every status change reaches the right portal through live socket updates.</p></div>
-      <div className="landing-visit-details"><span><ShoppingCart/><b>Capture every order</b><small>New rounds remain separate and easy to audit</small></span><span><Clock3/><b>Track every handoff</b><small>Preparing, ready, collected, received, and complete</small></span><span><Settings/><b>Choose every module</b><small>Super Admin controls access for each business</small></span></div>
-    </section>
-    <footer className="landing-footer"><span><img src="/knockout-logo.png" alt=""/><b>KnockOUT</b></span><p>Powered by KnockOUT</p><small>© 2026 KnockOUT SaaS</small></footer>
-  </main>;
-}
+function PublicLanding(props) { return <LandingStory {...props}/>; }
 
 function Login({ onLogin }) {
   const routeFromPath = () => location.pathname === "/login" ? "login" : location.pathname === "/register" ? "register" : "landing";
@@ -322,13 +264,13 @@ function Login({ onLogin }) {
   return (
     <main className="web-auth otp-entry">
       <header className="otp-web-brand">
-        <span className="logo">K</span>
-        <b>KnockOUT</b>
+        <span className="logo">B</span>
+        <b>Byteberrytech</b>
         <small>UNIVERSAL ACCESS · ONE APPLICATION</small>
       </header>
       <section className={`web-otp-card ${verified ? "verified" : ""}`}>
         <i />
-        <div className="otp-premium-mark"><span>K</span><div><b>KnockOUT Access</b><small>Secure multi-tenant gateway</small></div><em>ENCRYPTED</em></div>
+        <div className="otp-premium-mark"><span>B</span><div><b>Byteberrytech Access</b><small>Secure multi-tenant gateway</small></div><em>ENCRYPTED</em></div>
         <span className="eyebrow">SAAS HOTEL ACCESS</span>
         <h1>{verified ? "Access verified" : "Enter Hotel ID & PIN"}</h1>
         <p>
@@ -375,8 +317,8 @@ function Login({ onLogin }) {
 function PublicCompanyRegistration({ back }) {
   const[form,setForm]=useState({companyName:"",adminName:"",email:"",phone:"",packageCode:"starter",periodMonths:1}),[busy,setBusy]=useState(false),[error,setError]=useState(""),[submitted,setSubmitted]=useState(null);
   async function submit(event){event.preventDefault();setBusy(true);setError("");try{setSubmitted(await submitCompanyRegistration(form))}catch(err){setError(err.message)}finally{setBusy(false)}}
-  const plans={starter:{name:"Starter",copy:"Tables, billing, menu and kitchen"},growth:{name:"Growth",copy:"Adds bookings, parcels and stock"},complete:{name:"Complete",copy:"Every KnockOUT module"}};
-  return <main className="web-auth public-registration-page"><header className="otp-web-brand"><span className="logo">K</span><b>KnockOUT</b><small>NEW TENANT APPLICATION</small></header><section className="public-registration-card">{submitted?<div className="registration-success"><span><CheckCircle2/></span><span className="eyebrow">APPLICATION #{submitted.id}</span><h1>Sent for approval</h1><p>Your request is saved in the Master waiting list. We sent a temporary onboarding PIN to your email and mobile. Use it <b>without a Hotel ID</b> to follow approval and finish setup.</p><div className="temporary-pin-card"><small>TEMPORARY ONBOARDING PIN</small><strong>{submitted.temporaryPin}</strong><span>Development preview · delivery is recorded in the notification outbox</span></div><button className="primary wide" onClick={()=>{history.pushState({},"","/login");location.reload()}}>Continue to temporary login</button><button className="secondary wide" onClick={back}>Return to landing page</button></div>:<><button className="web-back registration-back" onClick={back}><ChevronLeft/>Back to landing page</button><span className="eyebrow">TENANT REGISTRATION · STEP 1</span><h1>Choose how your business runs</h1><p>Tell us who you are, select a package and subscription period. No tenant database is created until approval, completed setup and payment.</p><form className="public-registration-form" onSubmit={submit}><label>HOTEL / BUSINESS NAME<input value={form.companyName} onChange={(e)=>setForm({...form,companyName:e.target.value})} placeholder="Example: Grand Palm Café" required/></label><label>ADMINISTRATOR NAME<input value={form.adminName} onChange={(e)=>setForm({...form,adminName:e.target.value})} placeholder="Full name" required/></label><label>ADMIN EMAIL<input type="email" value={form.email} onChange={(e)=>setForm({...form,email:e.target.value})} placeholder="admin@business.com" required/></label><label>PHONE NUMBER<input value={form.phone} onChange={(e)=>setForm({...form,phone:e.target.value})} placeholder="9876543210" inputMode="tel" required/></label><fieldset className="registration-packages full"><legend>SELECT PACKAGE</legend>{Object.entries(plans).map(([key,plan])=><button type="button" key={key} className={form.packageCode===key?"selected":""} onClick={()=>setForm({...form,packageCode:key})}><b>{plan.name}</b><small>{plan.copy}</small>{form.packageCode===key?<CheckCircle2/>:null}</button>)}</fieldset><fieldset className="registration-period full"><legend>SUBSCRIPTION PERIOD</legend>{[[1,"1 month"],[6,"6 months · 5% saving"],[12,"1 year · 10% saving"]].map(([months,label])=><button type="button" key={months} className={form.periodMonths===months?"selected":""} onClick={()=>setForm({...form,periodMonths:months})}>{label}</button>)}</fieldset><div className="registration-process full"><span><b>1</b>Waiting list</span><i/><span><b>2</b>Master approval</span><i/><span><b>3</b>Setup & payment</span><i/><span><b>4</b>Workspace</span></div>{error?<div className="form-error full">{error}</div>:null}<button className="primary wide full" disabled={busy}>{busy?"Sending application…":"Submit for approval"}</button></form></>}</section></main>;
+  const plans={starter:{name:"Starter",copy:"Tables, billing, menu and kitchen"},growth:{name:"Growth",copy:"Adds bookings, parcels and stock"},complete:{name:"Complete",copy:"Every Byteberrytech module"}};
+  return <main className="web-auth public-registration-page"><header className="otp-web-brand"><span className="logo">B</span><b>Byteberrytech</b><small>NEW TENANT APPLICATION</small></header><section className="public-registration-card">{submitted?<div className="registration-success"><span><CheckCircle2/></span><span className="eyebrow">APPLICATION #{submitted.id}</span><h1>Sent for approval</h1><p>Your request is saved in the Master waiting list. We sent a temporary onboarding PIN to your email and mobile. Use it <b>without a Hotel ID</b> to follow approval and finish setup.</p><div className="temporary-pin-card"><small>TEMPORARY ONBOARDING PIN</small><strong>{submitted.temporaryPin}</strong><span>Development preview · delivery is recorded in the notification outbox</span></div><button className="primary wide" onClick={()=>{history.pushState({},"","/login");location.reload()}}>Continue to temporary login</button><button className="secondary wide" onClick={back}>Return to landing page</button></div>:<><button className="web-back registration-back" onClick={back}><ChevronLeft/>Back to landing page</button><span className="eyebrow">TENANT REGISTRATION · STEP 1</span><h1>Choose how your business runs</h1><p>Tell us who you are, select a package and subscription period. No tenant database is created until approval, completed setup and payment.</p><form className="public-registration-form" onSubmit={submit}><label>HOTEL / BUSINESS NAME<input value={form.companyName} onChange={(e)=>setForm({...form,companyName:e.target.value})} placeholder="Example: Grand Palm Café" required/></label><label>ADMINISTRATOR NAME<input value={form.adminName} onChange={(e)=>setForm({...form,adminName:e.target.value})} placeholder="Full name" required/></label><label>ADMIN EMAIL<input type="email" value={form.email} onChange={(e)=>setForm({...form,email:e.target.value})} placeholder="admin@business.com" required/></label><label>PHONE NUMBER<input value={form.phone} onChange={(e)=>setForm({...form,phone:e.target.value})} placeholder="9876543210" inputMode="tel" required/></label><fieldset className="registration-packages full"><legend>SELECT PACKAGE</legend>{Object.entries(plans).map(([key,plan])=><button type="button" key={key} className={form.packageCode===key?"selected":""} onClick={()=>setForm({...form,packageCode:key})}><b>{plan.name}</b><small>{plan.copy}</small>{form.packageCode===key?<CheckCircle2/>:null}</button>)}</fieldset><fieldset className="registration-period full"><legend>SUBSCRIPTION PERIOD</legend>{[[1,"1 month"],[6,"6 months · 5% saving"],[12,"1 year · 10% saving"]].map(([months,label])=><button type="button" key={months} className={form.periodMonths===months?"selected":""} onClick={()=>setForm({...form,periodMonths:months})}>{label}</button>)}</fieldset><div className="registration-process full"><span><b>1</b>Waiting list</span><i/><span><b>2</b>Master approval</span><i/><span><b>3</b>Setup & payment</span><i/><span><b>4</b>Workspace</span></div>{error?<div className="form-error full">{error}</div>:null}<button className="primary wide full" disabled={busy}>{busy?"Sending application…":"Submit for approval"}</button></form></>}</section></main>;
 }
 
 function ApplicantOnboarding({user,logout}){
@@ -385,8 +327,8 @@ function ApplicantOnboarding({user,logout}){
   const refresh=useCallback(()=>getOnboardingStatus(user.id,user.temporaryPin).then(setStatus).catch(err=>setError(err.message)),[user.id,user.temporaryPin]);
   useEffect(()=>{refresh();const timer=setInterval(refresh,10000);return()=>clearInterval(timer)},[refresh]);
   async function finish(event){event.preventDefault();setBusy(true);setError("");try{setComplete(await completeCompanyRegistration({...form,id:user.id,pin:user.temporaryPin}))}catch(err){setError(err.message)}finally{setBusy(false)}}
-  if(complete)return <main className="web-auth public-registration-page"><section className="public-registration-card registration-success"><span><CheckCircle2/></span><span className="eyebrow">WORKSPACE ACTIVATED</span><h1>Welcome to KnockOUT</h1><p>Your isolated tenant database and first Administrator account have now been created.</p><div className="credential-result"><span>HOTEL ID <b>{complete.hotelId}</b></span><span>NEW ADMIN PIN <b>{complete.adminPin}</b></span></div><p>Permanent credentials were queued to your email and mobile. Your temporary PIN is now disabled.</p><button className="primary wide" onClick={logout}>Login with permanent credentials</button></section></main>;
-  return <main className="web-auth public-registration-page"><header className="otp-web-brand"><span className="logo">K</span><b>KnockOUT</b><small>SECURE ONBOARDING</small></header><section className="public-registration-card onboarding-card">{!status?<div className="approval-wait"><span className="otp-spinner"/><h1>Opening your application</h1>{error?<div className="form-error">{error}</div>:null}</div>:status.status==='pending'?<div className="approval-wait applicant-waiting-view"><span className="approval-pulse"><Clock3/></span><span className="eyebrow">APPLICATION #{user.id}</span><h1>Waiting for approval</h1><p>Your application has reached KnockOUT Master. This page updates automatically after it is reviewed.</p><div className="applicant-details"><span><small>BUSINESS</small><b>{status.companyName}</b></span><span><small>ADMINISTRATOR</small><b>{status.adminName}</b></span><span><small>EMAIL</small><b>{status.email}</b></span><span><small>MOBILE</small><b>{status.phone}</b></span><span><small>PACKAGE</small><b>{status.packageCode}</b></span><span><small>SUBSCRIPTION</small><b>{status.periodMonths} month{status.periodMonths>1?'s':''}</b></span></div><div className="applicant-module-list"><small>SELECTED MODULES</small><div>{(status.selectedModules||[]).map(key=><span key={key}><CheckCircle2/>{moduleNames[key]||key}</span>)}</div></div>{error?<div className="form-error">{error}</div>:null}</div>:status.status==='rejected'?<div className="approval-wait"><AlertTriangle/><h1>Application not approved</h1><p>{status.reviewNote||"Contact KnockOUT support for more information."}</p></div>:<><button className="web-back registration-back" onClick={logout}><ChevronLeft/>Exit onboarding</button><span className="eyebrow">APPROVED · COMPLETE REGISTRATION</span><h1>Set up {status.companyName}</h1><p>Complete the company profile and confirm payment. Your tenant database is created only after this step succeeds.</p><div className="onboarding-summary"><span><small>PACKAGE</small><b>{status.packageCode}</b></span><span><small>PERIOD</small><b>{status.periodMonths} month{status.periodMonths>1?'s':''}</b></span><span><small>MODULES</small><b>{status.selectedModules.length}</b></span><span><small>TOTAL WITH GST</small><b>{money(status.total)}</b></span></div><form className="public-registration-form" onSubmit={finish}><label>BUSINESS TYPE<select value={form.businessType} onChange={e=>setForm({...form,businessType:e.target.value})}><option>Restaurant</option><option>Café</option><option>Hotel</option><option>Cloud Kitchen</option><option>Food Court</option></select></label><label>GST NUMBER (OPTIONAL)<input value={form.gstNumber} onChange={e=>setForm({...form,gstNumber:e.target.value})}/></label><label className="full">BUSINESS ADDRESS<textarea value={form.address} onChange={e=>setForm({...form,address:e.target.value})} required/></label><label className="full">PAYMENT REFERENCE<input value={form.paymentReference} onChange={e=>setForm({...form,paymentReference:e.target.value})} placeholder="Transaction / payment reference" required/><small>Payment gateway reference confirms the selected package purchase.</small></label>{error?<div className="form-error full">{error}</div>:null}<button className="primary wide full" disabled={busy}>{busy?"Creating secure workspace…":`Pay ${money(status.total)} & activate workspace`}</button></form></>}</section></main>;
+  if(complete)return <main className="web-auth public-registration-page"><section className="public-registration-card registration-success"><span><CheckCircle2/></span><span className="eyebrow">WORKSPACE ACTIVATED</span><h1>Welcome to Byteberrytech</h1><p>Your isolated tenant database and first Administrator account have now been created.</p><div className="credential-result"><span>HOTEL ID <b>{complete.hotelId}</b></span><span>NEW ADMIN PIN <b>{complete.adminPin}</b></span></div><p>Permanent credentials were queued to your email and mobile. Your temporary PIN is now disabled.</p><button className="primary wide" onClick={logout}>Login with permanent credentials</button></section></main>;
+  return <main className="web-auth public-registration-page"><header className="otp-web-brand"><span className="logo">B</span><b>Byteberrytech</b><small>SECURE ONBOARDING</small></header><section className="public-registration-card onboarding-card">{!status?<div className="approval-wait"><span className="otp-spinner"/><h1>Opening your application</h1>{error?<div className="form-error">{error}</div>:null}</div>:status.status==='pending'?<div className="approval-wait applicant-waiting-view"><span className="approval-pulse"><Clock3/></span><span className="eyebrow">APPLICATION #{user.id}</span><h1>Waiting for approval</h1><p>Your application has reached Byteberrytech Master. This page updates automatically after it is reviewed.</p><div className="applicant-details"><span><small>BUSINESS</small><b>{status.companyName}</b></span><span><small>ADMINISTRATOR</small><b>{status.adminName}</b></span><span><small>EMAIL</small><b>{status.email}</b></span><span><small>MOBILE</small><b>{status.phone}</b></span><span><small>PACKAGE</small><b>{status.packageCode}</b></span><span><small>SUBSCRIPTION</small><b>{status.periodMonths} month{status.periodMonths>1?'s':''}</b></span></div><div className="applicant-module-list"><small>SELECTED MODULES</small><div>{(status.selectedModules||[]).map(key=><span key={key}><CheckCircle2/>{moduleNames[key]||key}</span>)}</div></div>{error?<div className="form-error">{error}</div>:null}</div>:status.status==='rejected'?<div className="approval-wait"><AlertTriangle/><h1>Application not approved</h1><p>{status.reviewNote||"Contact Byteberrytech support for more information."}</p></div>:<><button className="web-back registration-back" onClick={logout}><ChevronLeft/>Exit onboarding</button><span className="eyebrow">APPROVED · COMPLETE REGISTRATION</span><h1>Set up {status.companyName}</h1><p>Complete the company profile and confirm payment. Your tenant database is created only after this step succeeds.</p><div className="onboarding-summary"><span><small>PACKAGE</small><b>{status.packageCode}</b></span><span><small>PERIOD</small><b>{status.periodMonths} month{status.periodMonths>1?'s':''}</b></span><span><small>MODULES</small><b>{status.selectedModules.length}</b></span><span><small>TOTAL WITH GST</small><b>{money(status.total)}</b></span></div><form className="public-registration-form" onSubmit={finish}><label>BUSINESS TYPE<select value={form.businessType} onChange={e=>setForm({...form,businessType:e.target.value})}><option>Restaurant</option><option>Café</option><option>Hotel</option><option>Cloud Kitchen</option><option>Food Court</option></select></label><label>GST NUMBER (OPTIONAL)<input value={form.gstNumber} onChange={e=>setForm({...form,gstNumber:e.target.value})}/></label><label className="full">BUSINESS ADDRESS<textarea value={form.address} onChange={e=>setForm({...form,address:e.target.value})} required/></label><label className="full">PAYMENT REFERENCE<input value={form.paymentReference} onChange={e=>setForm({...form,paymentReference:e.target.value})} placeholder="Transaction / payment reference" required/><small>Payment gateway reference confirms the selected package purchase.</small></label>{error?<div className="form-error full">{error}</div>:null}<button className="primary wide full" disabled={busy}>{busy?"Creating secure workspace…":`Pay ${money(status.total)} & activate workspace`}</button></form></>}</section></main>;
 }
 
 function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
@@ -481,7 +423,7 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
       setActionBusy(false);
     }
   }
-  async function reviewRegistration(request,status){setReviewBusy(request.id);try{await api(`/company-registrations/${request.id}/${status}`,{method:"POST",body:JSON.stringify({reviewNote:status==="reject"?"Application declined by KnockOUT Master":"Approved by KnockOUT Master"})});await refresh();toast(status==="approve"?`${request.companyName} approved · applicant can now complete setup and payment`:`${request.companyName} registration rejected`)}catch(error){toast(error.message)}finally{setReviewBusy(null)}}
+  async function reviewRegistration(request,status){setReviewBusy(request.id);try{await api(`/company-registrations/${request.id}/${status}`,{method:"POST",body:JSON.stringify({reviewNote:status==="reject"?"Application declined by Byteberrytech Master":"Approved by Byteberrytech Master"})});await refresh();toast(status==="approve"?`${request.companyName} approved · applicant can now complete setup and payment`:`${request.companyName} registration rejected`)}catch(error){toast(error.message)}finally{setReviewBusy(null)}}
   if (!user)
     return (
       <MasterLogin
@@ -495,8 +437,8 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
   if (!data)
     return (
       <div className="loading">
-        <span className="logo">K</span>
-        <p>Opening KnockOUT Master…</p>
+        <span className="logo">B</span>
+        <p>Opening Byteberrytech Master…</p>
       </div>
     );
   const companies = data.companies || [],
@@ -518,9 +460,9 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
     <div className="master-shell">
       <aside>
         <div className="brand">
-          <span className="logo">K</span>
+          <span className="logo">B</span>
           <div>
-            <b>KnockOUT</b>
+            <b>Byteberrytech</b>
             <small>MASTER CONTROL</small>
           </div>
         </div>
@@ -539,13 +481,13 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
         <header>
           <div>
             <span className="eyebrow">MULTI-COMPANY CONTROL</span>
-            <h2>KnockOUT Master</h2>
+            <h2>Byteberrytech Master</h2>
           </div>
           <div className="master-header-actions">
             <button className="master-pending-counter" onClick={()=>{setSelectedCompanyId(null);setSelectedRegistrationId(pendingRegistrations[0]?.id||null)}}><Bell size={15}/><span><b>{pendingRegistrations.length}</b><small>Pending registrations</small></span></button>
             <div className="header-user">
-              <span className="header-avatar">KM</span>
-              <span className="header-user-copy"><b>KnockOUT Master</b><small>Super Admin</small></span>
+              <span className="header-avatar">BT</span>
+              <span className="header-user-copy"><b>Byteberrytech Master</b><small>Super Admin</small></span>
               <button onClick={logoutMaster} title="Logout"><LogOut size={17}/></button>
             </div>
           </div>
@@ -559,7 +501,7 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
             {companySection === "revenue" ? <MasterBilling invoices={(data.invoices||[]).filter((invoice)=>invoice.companyId===selectedCompany.id)} companies={[selectedCompany]} setStatus={setInvoiceStatus}/> : null}
             {companySection === "controls" ? <CompanyControls company={selectedCompany} status={status} toggleModule={toggleModule} setMasterAction={setMasterAction}/> : null}
           </> : <>
-          <PageHead kicker="EXECUTIVE COMMAND" title="Company Network" sub="A live operational view of every company in the KnockOUT group." />
+          <PageHead kicker="EXECUTIVE COMMAND" title="Company Network" sub="A live operational view of every company in the Byteberrytech group." />
           <MasterRegistrationRequests requests={registrationRequests} open={request=>setSelectedRegistrationId(request.id)}/>
           <MasterNetworkOverview companies={companies} invoices={data.invoices||[]} usage={data.usage||[]}/>
           <div className="master-directory-toolbar">
@@ -592,7 +534,7 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
           <MasterBilling invoices={data.invoices||[]} companies={companies} setStatus={setInvoiceStatus}/>
           </>}
         </div>
-        <footer className="powered-by-knockout">Powered by <b>KnockOUT</b></footer>
+        <footer className="powered-by-knockout">Powered by <b>Byteberrytech</b></footer>
       </main>
       {masterAction ? (
         <MasterActionModal
@@ -634,7 +576,7 @@ function MasterNetworkOverview({ companies, invoices, usage }) {
   return <>
     <div className="stats master-stats master-network-stats">
       <Stat icon={Building2} label="Companies" value={companies.length} note={`${companies.filter((company)=>company.status==="active").length} active tenants`}/>
-      <Stat icon={TrendingUp} label="KnockOUT monthly revenue" value={money(totalRevenue)} note={`${money(collectedRevenue)} subscription fees collected`}/>
+      <Stat icon={TrendingUp} label="Byteberrytech monthly revenue" value={money(totalRevenue)} note={`${money(collectedRevenue)} subscription fees collected`}/>
       <Stat icon={ReceiptText} label="Live orders" value={activeOrders} note="Across the company network"/>
       <Stat icon={Users} label="Software users" value={activeUsers} note={`${totalLogins} successful logins tracked`}/>
     </div>
@@ -738,7 +680,7 @@ function MasterUsers({ company, changePin }) {
               <tr key={`${company.id}-${user.id}`}>
                 <td>
                   <b>{user.name}</b>
-                  <small>{user.phone || "Secure KnockOUT account"}</small>
+                  <small>{user.phone || "Secure Byteberrytech account"}</small>
                 </td>
                 <td>
                   <span className={`designation ${user.role}`}>
@@ -845,12 +787,12 @@ function MasterPinModal({ entry, close, refresh, toast }) {
 
 function MasterBilling({ invoices, companies, setStatus }) {
   const months=[...new Set((invoices||[]).map((invoice)=>invoice.billingMonth))].sort().reverse(),[month,setMonth]=useState(months[0]||new Date().toISOString().slice(0,7)),rows=(invoices||[]).filter((invoice)=>invoice.billingMonth===month&&companies.some((company)=>company.id===invoice.companyId)),subtotal=rows.reduce((sum,row)=>sum+row.subtotal,0),tax=rows.reduce((sum,row)=>sum+row.tax,0),total=rows.reduce((sum,row)=>sum+row.total,0),paid=rows.filter((row)=>row.status==='paid').reduce((sum,row)=>sum+row.total,0);
-  const exportReport=()=>exportCsv(`knockout-saas-billing-${month}.csv`,[["KnockOUT SaaS monthly billing report",month],["Company","Hotel ID","Enabled modules","Subtotal","GST","Total","Status"],...rows.map((row)=>[row.companyName,row.hotelId,(row.lineItems||[]).map((item)=>item.name).join(" + "),row.subtotal,row.tax,row.total,row.status]),[],["Summary"],["Subtotal",subtotal],["GST",tax],["Invoiced",total],["Collected",paid],["Outstanding",total-paid]]);
+  const exportReport=()=>exportCsv(`byteberrytech-saas-billing-${month}.csv`,[["Byteberrytech SaaS monthly billing report",month],["Company","Hotel ID","Enabled modules","Subtotal","GST","Total","Status"],...rows.map((row)=>[row.companyName,row.hotelId,(row.lineItems||[]).map((item)=>item.name).join(" + "),row.subtotal,row.tax,row.total,row.status]),[],["Summary"],["Subtotal",subtotal],["GST",tax],["Invoiced",total],["Collected",paid],["Outstanding",total-paid]]);
   return <section className="master-revenue-panel master-billing-panel">
-    <header className="master-billing-head"><div><span className="eyebrow">KNOCKOUT COMPANY REVENUE</span><h2>Monthly SaaS billing</h2><p>Subscription invoices are generated from each tenant’s activated KnockOUT modules. Hotel food sales are not included.</p></div><div><label>Billing month<select value={month} onChange={(event)=>setMonth(event.target.value)}>{months.map((value)=><option key={value} value={value}>{new Date(`${value}-01T12:00:00`).toLocaleDateString("en-IN",{month:"long",year:"numeric"})}</option>)}</select></label><button className="secondary" onClick={exportReport} disabled={!rows.length}><FileDown size={15}/> Export monthly report</button></div></header>
+    <header className="master-billing-head"><div><span className="eyebrow">BYTEBERRYTECH COMPANY REVENUE</span><h2>Monthly SaaS billing</h2><p>Subscription invoices are generated from each tenant’s activated Byteberrytech modules. Hotel food sales are not included.</p></div><div><label>Billing month<select value={month} onChange={(event)=>setMonth(event.target.value)}>{months.map((value)=><option key={value} value={value}>{new Date(`${value}-01T12:00:00`).toLocaleDateString("en-IN",{month:"long",year:"numeric"})}</option>)}</select></label><button className="secondary" onClick={exportReport} disabled={!rows.length}><FileDown size={15}/> Export monthly report</button></div></header>
     <MasterPricingSlab/>
     <div className="stats master-stats master-billing-stats"><Stat icon={ReceiptText} label="Invoices" value={rows.length} note={`${rows.filter((row)=>row.status==='due').length} awaiting payment`}/><Stat icon={TrendingUp} label="SaaS revenue" value={money(total)} note="Module fees including GST"/><Stat icon={CheckCircle2} label="Collected" value={money(paid)} note="Paid tenant invoices"/><Stat icon={Wallet} label="Outstanding" value={money(total-paid)} note="Subscription fees due" tone={total-paid>0?"warning":""}/></div>
-    {rows.length?<div className="master-revenue-scroll"><table className="master-revenue-table master-billing-table"><thead><tr><th>Tenant</th><th>Activated modules</th><th>Subtotal</th><th>GST</th><th>Total</th><th>Payment</th></tr></thead><tbody>{rows.map((invoice)=><tr key={invoice.id}><th>{invoice.companyName}<small>Hotel ID {invoice.hotelId}</small></th><td><div className="invoice-module-chips">{(invoice.lineItems||[]).map((item)=><span key={item.key}>{item.name}<b>{money(item.price)}</b></span>)}</div></td><td><b>{money(invoice.subtotal)}</b></td><td><b>{money(invoice.tax)}</b><small>{invoice.taxRate}% GST</small></td><td><strong>{money(invoice.total)}</strong></td><td><button className={`invoice-status ${invoice.status}`} onClick={()=>setStatus(invoice,invoice.status==='paid'?'due':'paid')}>{invoice.status==='paid'?<CheckCircle2 size={14}/>:<Clock3 size={14}/>} {invoice.status==='paid'?'Paid':'Mark paid'}</button></td></tr>)}</tbody><tfoot><tr><th colSpan="4">Monthly KnockOUT revenue</th><td><strong>{money(total)}</strong><small>{money(paid)} collected</small></td><td><b>{money(total-paid)} due</b></td></tr></tfoot></table></div>:<div className="master-revenue-empty">No subscription invoices are available for this month.</div>}
+    {rows.length?<div className="master-revenue-scroll"><table className="master-revenue-table master-billing-table"><thead><tr><th>Tenant</th><th>Activated modules</th><th>Subtotal</th><th>GST</th><th>Total</th><th>Payment</th></tr></thead><tbody>{rows.map((invoice)=><tr key={invoice.id}><th>{invoice.companyName}<small>Hotel ID {invoice.hotelId}</small></th><td><div className="invoice-module-chips">{(invoice.lineItems||[]).map((item)=><span key={item.key}>{item.name}<b>{money(item.price)}</b></span>)}</div></td><td><b>{money(invoice.subtotal)}</b></td><td><b>{money(invoice.tax)}</b><small>{invoice.taxRate}% GST</small></td><td><strong>{money(invoice.total)}</strong></td><td><button className={`invoice-status ${invoice.status}`} onClick={()=>setStatus(invoice,invoice.status==='paid'?'due':'paid')}>{invoice.status==='paid'?<CheckCircle2 size={14}/>:<Clock3 size={14}/>} {invoice.status==='paid'?'Paid':'Mark paid'}</button></td></tr>)}</tbody><tfoot><tr><th colSpan="4">Monthly Byteberrytech revenue</th><td><strong>{money(total)}</strong><small>{money(paid)} collected</small></td><td><b>{money(total-paid)} due</b></td></tr></tfoot></table></div>:<div className="master-revenue-empty">No subscription invoices are available for this month.</div>}
   </section>;
 }
 function MasterPricingSlab(){
@@ -881,8 +823,8 @@ function MasterLogin({ login }) {
   return (
     <main className="master-login">
       <section>
-        <span className="logo">K</span>
-        <span className="eyebrow">KNOCKOUT MASTER</span>
+        <span className="logo">B</span>
+        <span className="eyebrow">BYTEBERRYTECH MASTER</span>
         <h1>
           One master.
           <br />
@@ -1053,7 +995,7 @@ function Shell({ role, user, page, setPage, logout, children, navBadges = {} }) 
     <div className="shell">
       <aside>
         <div className="brand">
-          <span className="logo">K</span>
+          <span className="logo">B</span>
           <div>
             <b>{user.companyName || "Your hotel"}</b>
             <small>{role} portal</small>
@@ -1095,7 +1037,7 @@ function Shell({ role, user, page, setPage, logout, children, navBadges = {} }) 
           </div>
         </header>
         <div className="page">{children}</div>
-        <footer className="powered-by-knockout">Powered by <b>KnockOUT</b></footer>
+        <footer className="powered-by-knockout">Powered by <b>Byteberrytech</b></footer>
       </main>
       {profileOpen?<ProfileEditor user={profile} close={()=>setProfileOpen(false)} saved={(updated)=>{const next={...user,...updated};setProfile(next);sessionStorage.setItem("knockout-portal-user",JSON.stringify(next));window.dispatchEvent(new CustomEvent("knockout:profile-updated",{detail:next}));setProfileOpen(false)}}/>:null}
     </div>
@@ -1854,7 +1796,7 @@ function FoodManager({ data, refresh, toast }) {
       <PageHead
         kicker="MENU ASSET LIBRARY"
         title="Food & Photos"
-        sub="Upload food photography to the KnockOUT MinIO library."
+        sub="Upload food photography to the Byteberrytech MinIO library."
       />
       <div className="food-grid">
         {data.menu.map((item) => (
@@ -3695,7 +3637,7 @@ function MonthlyRevenueReport({ data, year, monthIndex }) {
     paymentMix = Object.entries(orders.reduce((result, order) => { const method = order.paymentMethod || "Unspecified"; result[method] = (result[method] || 0) + Number(order.total || 0); return result; }, {})),
     maxRevenue = Math.max(1, ...daily.map((day) => day.total));
   const exportMonth = () => exportCsv(`knockout-revenue-${prefix}.csv`, [
-    ["KnockOUT monthly revenue report", prefix], ["Metric", "Amount"], ["Bill revenue", revenue], ["Other income", income], ["Operating expenses", expenses], ["Dealer payments", dealerPayments], ["Net cash", net], ["Paid bills", orders.length], [], ["Date", "Bills", "Revenue"], ...daily.map((day) => [day.key, day.bills, day.total]), [], ["Payment method", "Revenue"], ...paymentMix,
+    ["Byteberrytech monthly revenue report", prefix], ["Metric", "Amount"], ["Bill revenue", revenue], ["Other income", income], ["Operating expenses", expenses], ["Dealer payments", dealerPayments], ["Net cash", net], ["Paid bills", orders.length], [], ["Date", "Bills", "Revenue"], ...daily.map((day) => [day.key, day.bills, day.total]), [], ["Payment method", "Revenue"], ...paymentMix,
   ]);
   return <section className="panel monthly-revenue-report">
     <header><div><span className="eyebrow">MONTHLY PERFORMANCE</span><h2>{new Date(year,monthIndex,1).toLocaleDateString("en-IN",{month:"long",year:"numeric"})} revenue report</h2><p>Complete paid-bill revenue, inflow, outflow, and daily sales performance.</p></div><button className="secondary" onClick={exportMonth}><FileDown size={14}/> Export monthly CSV</button></header>
@@ -3784,7 +3726,7 @@ function DailyFinanceDetails({
   }
   function exportDailyReport(){
     exportCsv(`knockout-finance-${date}.csv`,[
-      ["KnockOUT finance report",date],["Metric","Amount"],["Bill revenue",billTotal],["Other income",otherIncome],["General expenses",generalExpense],["Dealer payments",dealerPaid],["Net cash",netCash],[],["Bills"],["Bill","Type","Customer","Payment","Total","Completed"],...dailyBills.map((o)=>[o.id,o.orderType,o.guestName,o.paymentMethod,o.total,o.completedAt]),[],["Income and expenses"],["Date","Type","Category","Description","Payment","Reference","Amount"],...dailyEntries.map((x)=>[dateKey(x.entryDate),x.entryType,x.category,x.description,x.paymentMethod,x.reference,x.amount])
+      ["Byteberrytech finance report",date],["Metric","Amount"],["Bill revenue",billTotal],["Other income",otherIncome],["General expenses",generalExpense],["Dealer payments",dealerPaid],["Net cash",netCash],[],["Bills"],["Bill","Type","Customer","Payment","Total","Completed"],...dailyBills.map((o)=>[o.id,o.orderType,o.guestName,o.paymentMethod,o.total,o.completedAt]),[],["Income and expenses"],["Date","Type","Category","Description","Payment","Reference","Amount"],...dailyEntries.map((x)=>[dateKey(x.entryDate),x.entryType,x.category,x.description,x.paymentMethod,x.reference,x.amount])
     ]);
   }
   return (
@@ -5597,14 +5539,9 @@ async function openPrinter(event) {
 function BillReceipt({ table, order, data, bill }) {
   return (
     <div className="receipt parcel-print-receipt">
-      <img
-        className="receipt-watermark"
-        src="/knockout-bill-watermark.png"
-        alt=""
-        aria-hidden="true"
-      />
+
       <div className="receipt-brand">
-        <img className="receipt-logo" src="/knockout-logo.png" alt="KnockOUT" />
+
         <h2>{data.settings.hotelName}</h2>
         <p>Tax Invoice · Bill #{billNumber(order)}</p>
       </div>
