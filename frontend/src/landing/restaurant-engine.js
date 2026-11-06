@@ -149,25 +149,15 @@ export function createRestaurant(canvas, { hero = false, onFailure = () => {} } 
   const positions=[[10,10,13],[.5,16,7],[9,9,12],[8,8,11],[8,7,10],[10,8,10],[11,8,11],[6,10,12],[11,12,15],[11,11,16]];
   let desired=0,current=0,visible=true,dead=false,frame=0,first=true,qualitySamples=0,slowFrames=0;
   const look=new THREE.Vector3(),cam=new THREE.Vector3(),nextLook=new THREE.Vector3(),nextCam=new THREE.Vector3();
-  const framingPoints=[];
-  for(const x of [-5.7,5.7])for(const y of [-.4,3.3])for(const z of [-4.1,4.1])framingPoints.push(new THREE.Vector3(x,y,z));
-  const projected=new THREE.Vector3();
   function draw(){
     frame=0;if(dead||!visible||document.hidden)return;
-    const start=performance.now();current=first||Math.floor(current)!==Math.floor(desired)?desired:THREE.MathUtils.lerp(current,desired,.16);first=false;
+    const start=performance.now();current=first?desired:THREE.MathUtils.lerp(current,desired,.16);first=false;
     const i=Math.min(9,Math.floor(current)),fraction=Math.min(1,current-i),next=Math.min(9,i+1),blend=THREE.MathUtils.smoothstep(fraction,.4,1);
     cam.fromArray(positions[i]).lerp(nextCam.fromArray(positions[next]),blend);
     look.fromArray(targets[i]).lerp(nextLook.fromArray(targets[next]),blend);
     if(hero){cam.set(12-current*.65,10-current*.2,15-current*.45);look.set(0,0,0);world.rotation.y=-.15+current*.025;}else world.rotation.y=0;
-
-    if(!hero){look.multiplyScalar(.25);look.y=.6;}
+    if(!hero)cam.sub(look).multiplyScalar(1.22).add(look);
     camera.position.copy(cam);camera.lookAt(look);
-    if(!hero){
-      camera.zoom=1;camera.updateProjectionMatrix();camera.updateMatrixWorld();
-      let extent=0;
-      for(const point of framingPoints){projected.copy(point).project(camera);extent=Math.max(extent,Math.abs(projected.x),Math.abs(projected.y));}
-      camera.zoom=THREE.MathUtils.clamp(.9/extent,.5,2.5);camera.updateProjectionMatrix();
-    }
     guest.visible=hero||i<2;guest.position.set(-1+Math.min(current,1)*3.2,0,3.4-Math.min(current,1)*1.4);
     waiter.visible=hero||i===2||i===3;
     entrance.material.emissiveIntensity=i===0?.8:.15;

@@ -35,7 +35,7 @@ export const roles = [
 ];
 
 export const questions = [
-  ['What does KnockOUT manage?', 'Restaurant tables and table bookings, dine-in and parcel orders, food and juice preparation, billing, menus, inventory, finance and staff operations.'],
+  ['What does Byteberrytech manage?', 'Restaurant tables and table bookings, dine-in and parcel orders, food and juice preparation, billing, menus, inventory, finance and staff operations.'],
   ['Is this a hotel room booking system?', 'The current product focuses on food-service operations. Reservations are for restaurant tables, not hotel rooms or guest stays.'],
   ['Can my team use it on mobile?', 'Yes. Web and mobile workspaces have role-specific tools. Some features differ by platform; staff attendance is available in the mobile app.'],
   ['Does stock reduce automatically when a dish is sold?', 'No. Inventory reflects recorded purchases, usage, waste and adjustments. The stock story illustrates a recorded usage movement, not an automatic recipe-based deduction.'],

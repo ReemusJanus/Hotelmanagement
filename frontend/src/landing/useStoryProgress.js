@@ -3,16 +3,14 @@ import { useEffect, useRef, useState } from 'react';
 // One scroll listener schedules at most one measurement per frame. React only
 // updates at chapter boundaries; the renderer receives fractional progress.
 export function useStoryProgress(root, scene, reduced) {
-  const [{active,phase},setSceneState] = useState({active:0,phase:0});
+  const [active, setActive] = useState(0);
   const progress = useRef(0);
   useEffect(() => {
-    let frame = 0, disposed = false;
+    let frame = 0;
     const update = () => {
       frame = 0;
       const articles = [...root.current.querySelectorAll('[data-lux-chapter]')];
-      const headerHeight=root.current.querySelector(".lux-header").getBoundingClientRect().height;
-      root.current.style.setProperty("--lux-header-offset", `${headerHeight+16}px`);
-      const anchor = headerHeight + (innerHeight-headerHeight) * .4;
+      const anchor = innerHeight * .48;
       let value = 0;
       for (let i = 0; i < articles.length; i++) {
         const rect = articles[i].getBoundingClientRect();
@@ -22,20 +20,17 @@ export function useStoryProgress(root, scene, reduced) {
       const phase = Math.min(3, Math.floor((value % 1) * 4));
       root.current.dataset.phase = String(phase);
       root.current.style.setProperty('--lux-phase', String(value % 1));
-      const active=Math.min(articles.length - 1, Math.floor(value));
-      setSceneState(previous=>previous.active===active&&previous.phase===phase?previous:{active,phase});
+      setActive(Math.min(articles.length - 1, Math.floor(value)));
       scene.current?.seek(reduced ? Math.floor(value) : value);
       root.current.style.setProperty('--lux-progress', String(Math.min(1, value / articles.length)));
     };
-    const schedule = () => { if (!disposed && !frame) frame = requestAnimationFrame(update); };
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(update); };
     addEventListener('scroll', schedule, { passive: true });
     addEventListener('resize', schedule);
-    const observer=new ResizeObserver(schedule);observer.observe(root.current.querySelector(".lux-header"));
-    addEventListener("pageshow",schedule);document.fonts.ready.then(schedule);
     update();
-    return () => { disposed=true;observer.disconnect();removeEventListener("pageshow",schedule);cancelAnimationFrame(frame); removeEventListener('scroll', schedule); removeEventListener('resize', schedule); };
+    return () => { cancelAnimationFrame(frame); removeEventListener('scroll', schedule); removeEventListener('resize', schedule); };
   }, [root, scene, reduced]);
-  return { active, phase, progress };
+  return { active, progress };
 }
 
 export function useReducedMotion() {

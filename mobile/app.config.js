@@ -1,14 +1,14 @@
 export default {
   expo: {
-    name: 'KnockOUT',
+    name: 'Byteberrytech',
     slug: 'knockout-hospitality',
     version: '2.0.0',
-    icon: './assets/knockout-logo.png',
+    icon: './assets/byteberrytech-logo.png',
     orientation: 'portrait',
     platforms: ['ios', 'android'],
     userInterfaceStyle: 'dark',
     splash: {
-      image: './assets/knockout-logo.png',
+      image: './assets/byteberrytech-logo.png',
       resizeMode: 'contain',
       backgroundColor: '#090a08'
     },
@@ -21,7 +21,7 @@ export default {
     android: {
       package: 'com.knockout.hospitality',
       adaptiveIcon: {
-        foregroundImage: './assets/knockout-logo.png',
+        foregroundImage: './assets/byteberrytech-logo.png',
         backgroundColor: '#090a08'
       },
       edgeToEdgeEnabled: true
