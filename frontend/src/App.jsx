@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import LandingStory from "./LandingStory";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -122,6 +123,10 @@ function CompanyApp() {
     }
   }, [user?.id, user?.role, refresh]);
   const handleLiveChange = useCallback((message) => {
+    if (message?.action === "item_unavailable") {
+      const loc = message.tableNumber ? `Table ${message.tableNumber}` : (message.orderType === "parcel" ? `Parcel #${message.orderId}` : `Order #${message.orderId}`);
+      toast(`⚠️ Kitchen Alert · ${loc}: "${message.itemName}" is Out of Stock / Not Available!`);
+    }
     if (message?.resource === "company.modules" && message.modules) {
       setUser((current) => {
         if (!current) return current;
@@ -229,7 +234,7 @@ function Login({ onLogin }) {
     return () => removeEventListener("popstate", update);
   }, []);
   useEffect(() => {
-    if (hotelId.length === 4 && pin.length === 6 && !busy) { submit(); return; }
+    if (hotelId.length === 4 && pin.length >= 4 && !busy) { const timer = setTimeout(() => submit(), 550); return () => clearTimeout(timer); }
     if (!hotelId && pin.length >= 4 && pin.length <= 6 && !busy) {
       const timer = setTimeout(() => submit(), 550);
       return () => clearTimeout(timer);
@@ -238,7 +243,7 @@ function Login({ onLogin }) {
   async function submit(e) {
     e?.preventDefault();
     const masterAttempt = !hotelId && pin.length >= 4 && pin.length <= 6;
-    if ((!masterAttempt && (hotelId.length !== 4 || pin.length !== 6)) || busy) return;
+    if ((!masterAttempt && (hotelId.length !== 4 || pin.length < 4 || pin.length > 6)) || busy) return;
     setBusy(true);
     setError("");
     try {
@@ -1299,7 +1304,9 @@ function AdminTables({ data, refresh, toast, user }) {
     [creating, setCreating] = useState(false),
     [billOrder, setBillOrder] = useState(null),
     [payOrder, setPayOrder] = useState(null),
+    [statusFilter, setStatusFilter] = useState("all"),
     table = data.tables.find((t) => t.id === selected);
+  const filteredTables = statusFilter === "all" ? data.tables : data.tables.filter((t) => t.status === statusFilter);
   return (
     <>
       <PageHead
@@ -1312,9 +1319,9 @@ function AdminTables({ data, refresh, toast, user }) {
           </button>
         }
       />
-      <TableSummary data={data} />
+      <TableSummary data={data} activeFilter={statusFilter} onFilterChange={setStatusFilter} />
       <div className="table-grid">
-        {data.tables.map((t) => (
+        {filteredTables.map((t) => (
           <TableCard
             key={t.id}
             table={t}
@@ -1393,21 +1400,37 @@ function AdminTables({ data, refresh, toast, user }) {
     </>
   );
 }
-function TableSummary({ data }) {
+function TableSummary({ data, activeFilter = "all", onFilterChange }) {
+  const current = activeFilter || "all";
+  const handleClick = (status) => {
+    if (!onFilterChange) return;
+    onFilterChange(current === status ? "all" : status);
+  };
   return (
     <div className="summary-strip">
       {["available", "occupied", "reserved", "cleaning"].map((s) => (
-        <div key={s}>
+        <button
+          key={s}
+          type="button"
+          className={`summary-strip-btn ${current === s ? "active" : ""}`}
+          onClick={() => handleClick(s)}
+          title={`Filter by ${s} tables`}
+        >
           <i className={s} />
           <b>{data.tables.filter((t) => t.status === s).length}</b>
           <span>{s}</span>
-        </div>
+        </button>
       ))}
-      <div>
+      <button
+        type="button"
+        className={`summary-strip-btn ${current === "all" ? "active" : ""}`}
+        onClick={() => handleClick("all")}
+        title="Show all tables"
+      >
         <Armchair size={17} />
         <b>{data.tables.length}</b>
         <span>Total tables</span>
-      </div>
+      </button>
     </div>
   );
 }
@@ -1461,6 +1484,16 @@ function TableCard({ table, order, data, onClick, onBill, onPay }) {
         {paymentRequested ? (
           <div className="table-payment-alert">
             <Bell size={15} /> Waiter sent this table for billing
+          </div>
+        ) : null}
+        {order?.items?.some((it) => {
+          const isNew = (order.status || "new") === "new" && (it.itemStatus || "new") === "new";
+          if (!isNew) return false;
+          const m = data.menu.find((x) => x.id === it.menuId);
+          return !m?.available || it.note?.includes("[NOT AVAILABLE]");
+        }) ? (
+          <div className="table-unavailable-alert">
+            <AlertTriangle size={13} /> Kitchen: Dish Out of Stock
           </div>
         ) : null}
         {order && !paymentRequested ? (
@@ -2487,13 +2520,27 @@ function ParcelPaymentModal({ order, title, copy, action, close }) {
 }
 function ParcelBuilder({ data, user, close, refresh, toast }) {
   const [cart, setCart] = useState([]),
+    [cat, setCat] = useState("All"),
+    [query, setQuery] = useState(""),
     [customer, setCustomer] = useState(""),
     [phone, setPhone] = useState(""),
     [paymentMethod, setPaymentMethod] = useState("");
+  const categories = ["All", ...new Set(data.menu.map((m) => m.category))];
+  const visibleMenu = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return data.menu.filter((m) => {
+      const matchCat = cat === "All" || m.category === cat;
+      const matchQuery =
+        !q ||
+        m.name.toLowerCase().includes(q) ||
+        (m.category && m.category.toLowerCase().includes(q));
+      return matchCat && matchQuery;
+    });
+  }, [data.menu, cat, query]);
   function add(id) {
     setCart((c) => {
       const found = c.find((i) => i.menuId === id);
-      return found ? c : [...c, { menuId: id, qty: 1, note: "" }];
+      return found ? c.filter((i) => i.menuId !== id) : [...c, { menuId: id, qty: 1, note: "" }];
     });
   }
   function change(id, delta) {
@@ -2543,19 +2590,68 @@ function ParcelBuilder({ data, user, close, refresh, toast }) {
         />
       </div>
       <div className="order-builder">
-        <div className="menu-list">
-          {data.menu.map((m) => (
-            <button key={m.id} disabled={!m.available} className={`${cart.some((item) => item.menuId === m.id) ? "selected-food" : ""} ${!m.available ? "dish-disabled" : ""}`} onClick={() => add(m.id)}>
-              <span>
-                {m.imageUrl ? <img src={m.imageUrl} alt="" /> : m.icon}
-              </span>
-              <div>
-                <b>{m.name}</b>
-                <small>{m.category}</small>
+        <div className="order-builder-menu">
+          <div className="menu-search-bar">
+            <Search size={14} />
+            <input
+              type="text"
+              placeholder="Search menu items…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            {query ? (
+              <button
+                type="button"
+                className="menu-search-clear"
+                onClick={() => setQuery("")}
+                title="Clear search"
+              >
+                <X size={13} />
+              </button>
+            ) : null}
+          </div>
+          <div className="category-row">
+            {categories.map((c) => (
+              <button
+                className={cat === c ? "active" : ""}
+                onClick={() => setCat(c)}
+                key={c}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+          <div className="menu-list">
+            {visibleMenu.length ? (
+              visibleMenu.map((m) => (
+                <button key={m.id} disabled={!m.available} className={`${cart.some((item) => item.menuId === m.id) ? "selected-food" : ""} ${!m.available ? "dish-disabled" : ""}`} onClick={() => add(m.id)}>
+                  <span>
+                    {m.imageUrl ? <img src={m.imageUrl} alt="" /> : m.icon}
+                  </span>
+                  <div>
+                    <b>{m.name}</b>
+                    <small>{m.category}</small>
+                  </div>
+                  <strong>{!m.available ? "Unavailable" : cart.some((item) => item.menuId === m.id) ? <><CheckCircle2 size={14}/> Selected</> : money(m.price)}</strong>
+                </button>
+              ))
+            ) : (
+              <div className="menu-empty-search">
+                <UtensilsCrossed size={24} />
+                <p>No dishes found for "{query}"{cat !== "All" ? ` in ${cat}` : ""}</p>
+                <div className="menu-empty-actions">
+                  {cat !== "All" ? (
+                    <button type="button" onClick={() => setCat("All")}>
+                      Search all categories
+                    </button>
+                  ) : null}
+                  <button type="button" onClick={() => { setQuery(""); setCat("All"); }}>
+                    Clear search
+                  </button>
+                </div>
               </div>
-              <strong>{!m.available ? "Unavailable" : cart.some((item) => item.menuId === m.id) ? <><CheckCircle2 size={14}/> Selected</> : money(m.price)}</strong>
-            </button>
-          ))}
+            )}
+          </div>
         </div>
         <aside className="order-cart">
           <h3>Parcel basket</h3>
@@ -4861,8 +4957,41 @@ function RoleOverview({ role, data, user, setPage }) {
 
 function Waiter({ data, refresh, user, logout, toast }) {
   const [page, setPage] = useState("overview"),
-    [selected, setSelected] = useState(null);
+    [selected, setSelected] = useState(null),
+    [statusFilter, setStatusFilter] = useState("all"),
+    [dismissedAlerts, setDismissedAlerts] = useState([]);
   const table = data.tables.find((t) => t.id === selected);
+  const filteredTables = useMemo(() => {
+    if (!statusFilter || statusFilter === "all") return data.tables;
+    return data.tables.filter((t) => t.status === statusFilter);
+  }, [data.tables, statusFilter]);
+  const dismissAlert = (alert) => {
+    setDismissedAlerts((prev) => [...prev, `${alert.orderId}-${alert.menuId}`]);
+  };
+  const unavailableAlerts = useMemo(() => {
+    const list = [];
+    (data.orders || []).filter((o) => (o.status || "new") === "new").forEach((o) => {
+      const t = data.tables.find((tbl) => tbl.id === o.tableId);
+      (o.items || []).forEach((it) => {
+        const isNewItem = (it.itemStatus || "new") === "new";
+        if (!isNewItem) return;
+        const m = data.menu.find((x) => x.id === it.menuId);
+        if (!m?.available || it.note?.includes("[NOT AVAILABLE]")) {
+          if (!list.some(existing => existing.orderId === o.id && existing.menuId === it.menuId)) {
+            list.push({
+              orderId: o.id,
+              tableId: o.tableId,
+              menuId: it.menuId,
+              tableNumber: t?.number || o.id,
+              itemName: m?.name || "Dish",
+              qty: it.qty,
+            });
+          }
+        }
+      });
+    });
+    return list;
+  }, [data.orders, data.menu, data.tables]);
   return (
     <Shell
       role="waiter"
@@ -4882,9 +5011,42 @@ function Waiter({ data, refresh, user, logout, toast }) {
             title="Tables & Service"
             sub="Select a table to take an order or generate its bill."
           />
-          <TableSummary data={data} />
+          <TableSummary
+            data={data}
+            activeFilter={statusFilter}
+            onFilterChange={setStatusFilter}
+          />
+          {unavailableAlerts.filter((a) => !dismissedAlerts.includes(`${a.orderId}-${a.menuId}`)).length > 0 ? (
+            <div className="waiter-kitchen-alerts">
+              {unavailableAlerts
+                .filter((a) => !dismissedAlerts.includes(`${a.orderId}-${a.menuId}`))
+                .map((a, idx) => (
+                  <div key={`${a.orderId}-${a.menuId}-${idx}`} className="waiter-kitchen-alert-card">
+                    <AlertTriangle size={18} className="alert-icon" />
+                    <div className="alert-info">
+                      <strong>Kitchen Alert: Table {a.tableNumber}</strong>
+                      <span><b>{a.itemName}</b> (QTY {a.qty}) was marked <em>Not Available / Out of Stock</em> by the kitchen. Please notify the guests!</span>
+                    </div>
+                    <div className="alert-card-actions">
+                      <button className="alert-action-btn" onClick={() => setSelected(a.tableId)}>
+                        Open Table {a.tableNumber}
+                      </button>
+                      <button
+                        type="button"
+                        className="alert-dismiss-btn"
+                        onClick={() => dismissAlert(a)}
+                        title="Dismiss alert"
+                        aria-label="Dismiss alert"
+                      >
+                        <X size={15} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          ) : null}
           <div className="table-grid waiter-grid">
-            {data.tables.map((t) => (
+            {filteredTables.map((t) => (
               <TableCard
                 key={t.id}
                 table={t}
@@ -5041,13 +5203,13 @@ function BookingModal({ data, close, refresh, toast, initialDate }) {
     </Modal>
   );
 }
-function Modal({ close, children, wide = false, hideClose = false, closeLeft = false }) {
-  return (
+function Modal({ close, children, wide = false, hideClose = false, closeLeft = false, className = "" }) {
+  const content = (
     <div
       className="modal-wrap"
       onMouseDown={(e) => !hideClose && e.target === e.currentTarget && close()}
     >
-      <div className={`modal ${wide ? "wide-modal" : ""}`}>
+      <div className={`modal ${wide ? "wide-modal" : ""} ${className}`.trim()}>
         {!hideClose ? (
           <button className={`modal-close ${closeLeft ? "left" : ""}`} onClick={close}>
             <X size={18} />
@@ -5057,10 +5219,12 @@ function Modal({ close, children, wide = false, hideClose = false, closeLeft = f
       </div>
     </div>
   );
+  return typeof document !== "undefined" ? createPortal(content, document.body) : content;
 }
 function TableDrawer({ table, data, user, close, refresh, toast }) {
   const order = data.orders.find((o) => o.id === table.orderId),
     [mode, setMode] = useState(order ? "history" : "order"),
+    [targetBatch, setTargetBatch] = useState(null),
     [handoffBusy, setHandoffBusy] = useState("");
   async function updateRoundHandoff(batchNo, status) {
     setHandoffBusy(`${batchNo}-${status}`);
@@ -5098,7 +5262,7 @@ function TableDrawer({ table, data, user, close, refresh, toast }) {
             </button>
             <button
               className={mode === "order" ? "active" : ""}
-              onClick={() => setMode("order")}
+              onClick={() => { setTargetBatch(null); setMode("order"); }}
             >
               Add new order
             </button>
@@ -5114,6 +5278,52 @@ function TableDrawer({ table, data, user, close, refresh, toast }) {
         ) : null}
       </div>
       <TableStatusControls table={table} refresh={refresh} toast={toast} />
+      {(() => {
+        const isNewOrder = (order?.status || "new") === "new";
+        if (!isNewOrder) return null;
+        const unavail = order?.items?.filter((it) => {
+          const isNewItem = (it.itemStatus || "new") === "new";
+          if (!isNewItem) return false;
+          const m = data.menu.find((x) => x.id === it.menuId);
+          return !m?.available || it.note?.includes("[NOT AVAILABLE]");
+        }) || [];
+        if (!unavail.length) return null;
+        async function removeDrawerItem(it) {
+          try {
+            await api(`/orders/${order.id}/items/${it.menuId}?batchNo=${it.batchNo || 1}`, { method: "DELETE" });
+            await refresh();
+            const m = data.menu.find(x => x.id === it.menuId);
+            toast(`Removed ${m?.name || "dish"} from order`);
+          } catch (e) {
+            toast(e.message);
+          }
+        }
+        return (
+          <div className="drawer-dish-alert">
+            <AlertTriangle size={18} />
+            <div className="drawer-dish-alert-body">
+              <strong>Kitchen Alert: Item Out of Stock</strong>
+              <p>Chef marked <b>{unavail.map(it => data.menu.find(x => x.id === it.menuId)?.name || "Dish").join(", ")}</b> as Not Available / Out of Stock. Please inform the table!</p>
+            </div>
+            <div className="drawer-dish-alert-actions">
+              {unavail.map((it, idx) => {
+                const m = data.menu.find(x => x.id === it.menuId);
+                return (
+                  <button
+                    key={`${it.menuId}-${idx}`}
+                    type="button"
+                    className="drawer-alert-remove-btn"
+                    onClick={() => removeDrawerItem(it)}
+                    title={`Remove ${m?.name || "dish"} from order`}
+                  >
+                    <X size={12} /> Remove ${m?.name || "item"}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
       {mode === "order" ? (
         table.status === "cleaning" && !order ? (
           <div className="service-handoff table-cleaning-lock">
@@ -5127,12 +5337,13 @@ function TableDrawer({ table, data, user, close, refresh, toast }) {
             data={data}
             user={user}
             existing={order}
+            targetBatchNo={targetBatch}
             refresh={refresh}
             toast={toast}
             close={close}
           />
       ) : mode === "history" ? (
-        <WaiterOrderRounds order={order} data={data} table={table} busy={handoffBusy} confirmRoundReceived={(batchNo) => updateRoundHandoff(batchNo, "received")} addOrder={() => setMode("order")} openBill={() => setMode("bill")} />
+        <WaiterOrderRounds order={order} data={data} table={table} busy={handoffBusy} confirmRoundReceived={(batchNo) => updateRoundHandoff(batchNo, "received")} addOrder={(b) => { setTargetBatch(b || 1); setMode("order"); }} openBill={() => setMode("bill")} refresh={refresh} toast={toast} />
       ) : mode === "bill" ? (
         <Bill
           table={table}
@@ -5182,11 +5393,41 @@ function TableDrawer({ table, data, user, close, refresh, toast }) {
     </Modal>
   );
 }
-function WaiterOrderRounds({ order, data, table, busy, confirmRoundReceived, addOrder, openBill }) {
+function WaiterOrderRounds({ order, data, table, busy, confirmRoundReceived, addOrder, openBill, refresh, toast }) {
+  const [removeBusy, setRemoveBusy] = useState("");
+
+  async function handleRemoveItem(item, batchNo) {
+    const menu = data.menu.find((m) => m.id === item.menuId);
+    const itemName = menu?.name || "Dish";
+    setRemoveBusy(`${item.menuId}-${batchNo}`);
+    try {
+      await api(`/orders/${order.id}/items/${item.menuId}?batchNo=${batchNo}`, {
+        method: "DELETE",
+      });
+      if (refresh) await refresh();
+      if (toast) toast(`Removed ${itemName} from Order #${order.id}`);
+    } catch (e) {
+      if (toast) toast(e.message);
+    } finally {
+      setRemoveBusy("");
+    }
+  }
   const batches = [...new Set(order.items.map((item) => Number(item.batchNo) || 1))]
     .sort((a, b) => b - a)
     .map((batchNo) => {
-      const items = order.items.filter((item) => (Number(item.batchNo) || 1) === batchNo);
+      const rawItems = order.items.filter((item) => (Number(item.batchNo) || 1) === batchNo);
+      const items = [];
+      for (const it of rawItems) {
+        const found = items.find((x) => x.menuId === it.menuId);
+        if (found) {
+          found.qty = (Number(found.qty) || 0) + (Number(it.qty) || 0);
+          if (it.note && !found.note?.includes(it.note)) {
+            found.note = found.note ? `${found.note} · ${it.note}` : it.note;
+          }
+        } else {
+          items.push({ ...it, qty: Number(it.qty) || 0 });
+        }
+      }
       const status = items.every((item) => item.itemStatus === "ready")
         ? "ready"
         : items.every((item) => (item.itemStatus || "new") === "new")
@@ -5204,9 +5445,25 @@ function WaiterOrderRounds({ order, data, table, busy, confirmRoundReceived, add
     <section className="waiter-order-rounds">
       <header>
         <div><span className="eyebrow">TABLE ORDER HISTORY</span><h3>Order #{order.id}</h3></div>
-        <small>{batches.length} separate kitchen round{batches.length === 1 ? "" : "s"}</small>
+        <div className="waiter-history-header-side">
+          <small>{batches.length} separate kitchen round{batches.length === 1 ? "" : "s"}</small>
+          <button type="button" className="waiter-add-items-btn" onClick={() => addOrder(batches[0]?.status === "new" ? (batches[0]?.batchNo || 1) : (batches.length + 1))}>
+            <Plus size={15} /> Add items
+          </button>
+        </div>
       </header>
-      {allReceived ? <div className="service-handoff-actions waiter-history-actions"><button className="secondary" onClick={addOrder}><Plus size={16}/> Add new order</button><button className="primary" onClick={openBill}><ReceiptText size={16}/> Complete & billing</button></div> : null}
+      <div className="service-handoff-actions waiter-history-actions">
+        {batches[0]?.status === "new" ? (
+          <button type="button" className="secondary" onClick={() => addOrder(batches[0]?.batchNo || 1)}>
+            <Plus size={16} /> Add items to Round {batches[0]?.batchNo || 1}
+          </button>
+        ) : null}
+        {allReceived ? (
+          <button type="button" className="primary" onClick={openBill}>
+            <ReceiptText size={16} /> Complete & billing
+          </button>
+        ) : null}
+      </div>
       <div className="waiter-round-list">
         {batches.map((batch, index) => (
           <article key={batch.batchNo} className={`waiter-round-card ${batch.displayStatus}`}>
@@ -5216,13 +5473,45 @@ function WaiterOrderRounds({ order, data, table, busy, confirmRoundReceived, add
             </header>
             {batch.items.map((item, itemIndex) => {
               const menu = data.menu.find((entry) => entry.id === item.menuId);
-              return <div className="waiter-round-line" key={`${item.menuId}-${itemIndex}`}><span><b>{item.qty}×</b>{menu?.name || "Menu item"}</span><em>{item.itemStatus || "new"}</em></div>;
+              const isNewRound = (batch.status || "new") === "new";
+              const isNewOrder = (order.status || "new") === "new";
+              const isNewItem = (item.itemStatus || "new") === "new";
+              const isUnavail = isNewRound && isNewOrder && isNewItem && (!menu?.available || item.note?.includes("[NOT AVAILABLE]"));
+              const canRemove = (isNewRound || isNewOrder) && isNewItem;
+              const isRemoving = removeBusy === `${item.menuId}-${batch.batchNo}`;
+              return <div className={`waiter-round-line ${isUnavail ? "item-out-of-stock" : ""}`} key={`${item.menuId}-${itemIndex}`}>
+                <span>
+                  <b>{item.qty}×</b>{menu?.name || "Menu item"}
+                  {isUnavail ? <strong className="round-unavailable-tag"><AlertTriangle size={11}/> Out of stock</strong> : null}
+                </span>
+                <div className="waiter-round-line-end">
+                  <em>{isUnavail ? "Not Available" : (item.itemStatus || batch.status || "new")}</em>
+                  {canRemove ? (
+                    <button
+                      type="button"
+                      className="waiter-item-remove-btn"
+                      disabled={isRemoving}
+                      onClick={() => handleRemoveItem(item, batch.batchNo)}
+                      title={`Remove ${menu?.name || "item"} from order`}
+                    >
+                      {isRemoving ? "…" : <X size={13} />}
+                    </button>
+                  ) : null}
+                </div>
+              </div>;
             })}
             <div className="waiter-round-handoff">
               <span className={batch.status === "ready" ? "done" : "active"}><ChefHat size={15}/> {batch.status === "ready" ? "Kitchen ready" : "Preparing"}</span>
               <span className={["collected", "received"].includes(batch.handoffStatus) ? "done" : ""}><Package size={15}/> {batch.handoffStatus === "pending" ? "Awaiting collection" : "Collected"}</span>
               <span className={batch.handoffStatus === "received" ? "done" : ""}><Armchair size={15}/> {batch.handoffStatus === "received" ? `Received at Table ${table.number}` : "Awaiting table receipt"}</span>
             </div>
+            {batch.status === "new" ? (
+              <div className="waiter-round-card-footer">
+                <button type="button" className="waiter-round-add-item-btn" onClick={() => addOrder(batch.batchNo)}>
+                  <Plus size={13} /> Add items to Round {batch.batchNo}
+                </button>
+              </div>
+            ) : null}
             {batch.handoffStatus === "collected" ? <button className="primary waiter-received-action" disabled={!!busy} onClick={() => confirmRoundReceived(batch.batchNo)}><CheckCircle2 size={16}/>{busy === `${batch.batchNo}-received` ? "Updating…" : `Confirm Round ${batch.batchNo} received`}</button> : null}
           </article>
         ))}
@@ -5272,15 +5561,37 @@ function TableStatusControls({ table, refresh, toast }) {
     </div>
   );
 }
-function OrderBuilder({ table, data, user, existing, refresh, toast, close }) {
+function OrderBuilder({ table, data, user, existing, targetBatchNo = null, refresh, toast, close }) {
+  const existingBatches = useMemo(() => {
+    if (!existing?.items?.length) return [1];
+    return [...new Set(existing.items.map((i) => Number(i.batchNo) || 1))].sort((a, b) => a - b);
+  }, [existing]);
+  const latestBatch = existingBatches[existingBatches.length - 1] || 1;
+  const nextNewBatch = latestBatch + 1;
+  const latestBatchItems = existing?.items?.filter((i) => (Number(i.batchNo) || 1) === latestBatch) || [];
+  const latestBatchIsNew = latestBatchItems.length > 0 && latestBatchItems.every((i) => (i.itemStatus || "new") === "new");
+  const defaultBatch = targetBatchNo || (latestBatchIsNew ? latestBatch : nextNewBatch);
+  const [chosenBatch, setChosenBatch] = useState(defaultBatch);
   const [cart, setCart] = useState([]),
     [cat, setCat] = useState("All"),
+    [query, setQuery] = useState(""),
     [sending, setSending] = useState(false);
   const categories = ["All", ...new Set(data.menu.map((m) => m.category))];
+  const visibleMenu = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return data.menu.filter((m) => {
+      const matchCat = cat === "All" || m.category === cat;
+      const matchQuery =
+        !q ||
+        m.name.toLowerCase().includes(q) ||
+        (m.category && m.category.toLowerCase().includes(q));
+      return matchCat && matchQuery;
+    });
+  }, [data.menu, cat, query]);
   function add(id) {
     setCart((c) => {
       const x = c.find((i) => i.menuId === id);
-      return x ? c : [...c, { menuId: id, qty: 1, note: "" }];
+      return x ? c.filter((i) => i.menuId !== id) : [...c, { menuId: id, qty: 1, note: "" }];
     });
   }
   function qty(id, d) {
@@ -5298,7 +5609,7 @@ function OrderBuilder({ table, data, user, existing, refresh, toast, close }) {
         method: "POST",
         body: JSON.stringify(
           existing
-            ? { items: cart }
+            ? { items: cart, batchNo: chosenBatch }
             : {
                 tableId: table.id,
                 guestName: table.guestName || "Walk-in Guest",
@@ -5309,7 +5620,7 @@ function OrderBuilder({ table, data, user, existing, refresh, toast, close }) {
       });
       await refresh();
       toast(
-        existing ? "Additional order sent to kitchen" : "Order sent to kitchen",
+        existing ? `Items added to Round ${chosenBatch} for Table ${table.number}` : "Order sent to kitchen",
       );
       close();
     } catch (e) {
@@ -5320,7 +5631,26 @@ function OrderBuilder({ table, data, user, existing, refresh, toast, close }) {
   }
   return (
     <div className="order-builder">
-      <div>
+      <div className="order-builder-menu">
+        <div className="menu-search-bar">
+          <Search size={14} />
+          <input
+            type="text"
+            placeholder="Search menu items…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          {query ? (
+            <button
+              type="button"
+              className="menu-search-clear"
+              onClick={() => setQuery("")}
+              title="Clear search"
+            >
+              <X size={13} />
+            </button>
+          ) : null}
+        </div>
         <div className="category-row">
           {categories.map((c) => (
             <button
@@ -5333,9 +5663,8 @@ function OrderBuilder({ table, data, user, existing, refresh, toast, close }) {
           ))}
         </div>
         <div className="menu-list">
-          {data.menu
-            .filter((m) => cat === "All" || m.category === cat)
-            .map((m) => (
+          {visibleMenu.length ? (
+            visibleMenu.map((m) => (
               <button
                 key={m.id}
                 disabled={!m.available}
@@ -5351,16 +5680,61 @@ function OrderBuilder({ table, data, user, existing, refresh, toast, close }) {
                 </div>
                 <strong>{!m.available ? "Not available" : cart.some((item) => item.menuId === m.id) ? <><CheckCircle2 size={14}/> Selected</> : money(m.price)}</strong>
               </button>
-            ))}
+            ))
+          ) : (
+            <div className="menu-empty-search">
+              <UtensilsCrossed size={24} />
+              <p>No dishes found for "{query}"{cat !== "All" ? ` in ${cat}` : ""}</p>
+              <div className="menu-empty-actions">
+                {cat !== "All" ? (
+                  <button type="button" onClick={() => setCat("All")}>
+                    Search all categories
+                  </button>
+                ) : null}
+                <button type="button" onClick={() => { setQuery(""); setCat("All"); }}>
+                  Clear search
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
       <aside className="order-cart">
-        <h3>{existing ? "Add a second order" : "New order"}</h3>
+        <h3>{existing ? `Add items to Round ${chosenBatch}` : "New order"}</h3>
         <p>
           {existing
-            ? `Order #${existing.id} remains open · select extra items`
+            ? `Table ${table.number} · Adding items to Round ${chosenBatch}`
             : "Add menu items for this table"}
         </p>
+        {existing ? (
+          <div className="order-round-picker">
+            <span>Add to kitchen round:</span>
+            <div className="order-round-tabs">
+              {existingBatches.map((b) => {
+                const bItems = existing.items.filter((i) => (Number(i.batchNo) || 1) === b);
+                const isBNew = bItems.length > 0 && bItems.every((i) => (i.itemStatus || "new") === "new");
+                if (!isBNew) return null;
+                return (
+                  <button
+                    key={b}
+                    type="button"
+                    className={chosenBatch === b ? "active" : ""}
+                    onClick={() => setChosenBatch(b)}
+                  >
+                    Round {b} {b === latestBatch ? "(Current)" : ""}
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                className={chosenBatch === nextNewBatch ? "active" : ""}
+                onClick={() => setChosenBatch(nextNewBatch)}
+              >
+                + New Round ({nextNewBatch})
+              </button>
+            </div>
+          </div>
+        ) : null}
         {existing ? (
           <div className="existing-order-summary">
             <b>Already ordered</b>
@@ -5374,11 +5748,17 @@ function OrderBuilder({ table, data, user, existing, refresh, toast, close }) {
           {cart.length ? (
             cart.map((i) => {
               const m = data.menu.find((x) => x.id === i.menuId);
+              const alreadyInRound = existing?.items?.find(
+                (ex) => (Number(ex.batchNo) || 1) === chosenBatch && ex.menuId === i.menuId
+              );
               return (
                 <div key={i.menuId}>
                   <div>
                     <b>{m.name}</b>
-                    <small>{money(m.price)} each</small>
+                    <small>
+                      {money(m.price)} each
+                      {alreadyInRound ? ` · (${alreadyInRound.qty} currently in Round ${chosenBatch})` : ""}
+                    </small>
                   </div>
                   <span>
                     <button onClick={() => qty(i.menuId, -1)}>
@@ -5877,7 +6257,7 @@ function Chef({ data, refresh, user, logout, toast }) {
       </div>
       <div className="kitchen-grid">
         {shown.map((o) => (
-          <KitchenTicket key={o.batchKey} order={o} data={data} status={status} collect={collect} />
+          <KitchenTicket key={o.batchKey} order={o} data={data} status={status} collect={collect} refresh={refresh} toast={toast} />
         ))}
       </div>
       {!shown.length && (
@@ -5934,7 +6314,7 @@ function Juicer({ data, refresh, user, logout, toast }) {
   return <Shell role="juicer" user={user} page={page} setPage={setPage} logout={logout} navBadges={navBadges}>
     <PageHead kicker="LIVE JUICE STATION" title={page === "ready" ? "Ready Juices" : page === "parcel-queue" ? "Parcel Queue" : "Table Orders"} sub={`${orders.length} live juice tickets · tracked separately for tables and parcels.`}/>
     <div className="kitchen-summary"><span><i className="new"/><b>{active.filter(o=>o.status==="new").length}</b> New</span><span><i className="preparing"/><b>{active.filter(o=>o.status==="preparing").length}</b> Preparing</span><span><i className="ready"/><b>{active.filter(o=>o.status==="ready").length}</b> Ready</span></div>
-    <div className="kitchen-grid">{orders.map(order=><KitchenTicket key={order.batchKey} order={order} data={data} status={status} departmentLabel="juice items"/>)}</div>
+    <div className="kitchen-grid">{orders.map(order=><KitchenTicket key={order.batchKey} order={order} data={data} status={status} departmentLabel="juice items" refresh={refresh} toast={toast}/>)}</div>
     {!orders.length?<div className="empty-state"><CupSoda/><h3>Juice station is clear</h3><p>No juice items in this queue right now.</p></div>:null}
   </Shell>;
 }
@@ -6140,10 +6520,38 @@ function KitchenStaffEditor({ member, user, close, refresh, toast }) {
     </Modal>
   );
 }
-function KitchenTicket({ order, data, status, collect, departmentLabel = "food items" }) {
+function KitchenTicket({ order, data, status, collect, departmentLabel = "food items", refresh, toast }) {
   const table = data.tables.find((t) => t.id === order.tableId),
     isParcel = order.orderType === "parcel",
-    [expanded, setExpanded] = useState(false);
+    [expanded, setExpanded] = useState(false),
+    [busyItemId, setBusyItemId] = useState(null);
+
+  async function markUnavailable(menuItem, item) {
+    if (!menuItem?.id) return;
+    setBusyItemId(menuItem.id);
+    try {
+      await api(`/orders/${order.id}/items/${menuItem.id}/unavailable`, {
+        method: "POST",
+        body: JSON.stringify({ batchNo: order.batchNo }),
+      });
+      if (refresh) await refresh();
+      if (toast) toast(`${menuItem.name} marked Out of Stock · Waiter notified`);
+    } catch (err) {
+      try {
+        await api(`/menu/${menuItem.id}/availability`, {
+          method: "PATCH",
+          body: JSON.stringify({ available: false }),
+        });
+        if (refresh) await refresh();
+        if (toast) toast(`${menuItem.name} marked Out of Stock`);
+      } catch (e2) {
+        if (toast) toast(e2.message || err.message);
+      }
+    } finally {
+      setBusyItemId(null);
+    }
+  }
+
   return (
     <>
       <button className={`chef-order-summary ${order.status} ${isParcel ? "parcel" : ""}`} onClick={() => setExpanded(true)}>
@@ -6154,7 +6562,7 @@ function KitchenTicket({ order, data, status, collect, departmentLabel = "food i
         <ChevronRight size={18}/>
       </button>
       {expanded ? (
-        <Modal close={() => setExpanded(false)} closeLeft>
+        <Modal close={() => setExpanded(false)} closeLeft className="chef-ticket-modal">
           <div className="chef-detail-head">
             <span className={isParcel ? "parcel-label" : "chef-table-number"}>{isParcel ? "PARCEL ORDER" : <>TABLE <b>{table?.number}</b></>}</span>
             <div><small>ORDER / KITCHEN ROUND</small><h2>#{order.id} · {order.batchNo}</h2></div>
@@ -6166,14 +6574,58 @@ function KitchenTicket({ order, data, status, collect, departmentLabel = "food i
             <div className="chef-food-columns" aria-hidden="true">
               <span>Food item</span>
               <span>Quantity</span>
+              <span>Stock action</span>
             </div>
-            {order.items.map((i,index) => {
-              const m=data.menu.find((x)=>x.id===i.menuId);
-              return <div className="chef-food-line" key={`${i.menuId}-${index}`}>
-                <span className="chef-food-name">{m?.name}<small>{m?.isCombo?m.components.map((c)=>c.quantity+"× "+c.name).join(" + "):i.note}</small></span>
-                <strong className="chef-food-quantity"><small>QTY</small>{i.qty}</strong>
-              </div>;
-            })}
+            {(() => {
+              const consolidatedItems = [];
+              for (const it of order.items) {
+                const found = consolidatedItems.find((x) => x.menuId === it.menuId);
+                if (found) {
+                  found.qty = (Number(found.qty) || 0) + (Number(it.qty) || 0);
+                  if (it.note && !found.note?.includes(it.note)) {
+                    found.note = found.note ? `${found.note} · ${it.note}` : it.note;
+                  }
+                } else {
+                  consolidatedItems.push({ ...it, qty: Number(it.qty) || 0 });
+                }
+              }
+              return consolidatedItems.map((i, index) => {
+                const m = data.menu.find((x) => x.id === i.menuId);
+                const isNewOrder = (order.status || "new") === "new";
+                const isNewItem = (i.itemStatus || "new") === "new";
+                const isNew = isNewOrder && isNewItem;
+                const isUnavailable = isNew && (!m?.available || i.note?.includes("[NOT AVAILABLE]"));
+                const canMarkUnavailable = isNew;
+                return <div className={`chef-food-line ${isUnavailable ? "dish-out" : ""}`} key={`${i.menuId}-${index}`}>
+                  <span className="chef-food-name">
+                    {m?.name}
+                    <small>{m?.isCombo?m.components.map((c)=>c.quantity+"× "+c.name).join(" + "):i.note}</small>
+                  </span>
+                  <strong className="chef-food-quantity"><small>QTY</small>{i.qty}</strong>
+                  {canMarkUnavailable ? (
+                    m?.available ? (
+                      <button
+                        type="button"
+                        className="chef-item-unavailable-btn"
+                        disabled={busyItemId === i.menuId}
+                        onClick={() => markUnavailable(m, i)}
+                        title={`Mark ${m?.name} out of stock & notify waiter`}
+                      >
+                        {busyItemId === i.menuId ? "Updating…" : "Not Available"}
+                      </button>
+                    ) : (
+                      <span className="chef-item-unavailable-badge">
+                        Out of Stock
+                      </span>
+                    )
+                  ) : (
+                    <span className="chef-item-status-badge">
+                      {i.itemStatus || order.status || "preparing"}
+                    </span>
+                  )}
+                </div>;
+              });
+            })()}
           </div>
           {order.status === "new" ? <button className="primary wide" onClick={() => status(order.id,"preparing",order.batchNo)}>Start preparing <ArrowRight size={15}/></button> : null}
           {order.status === "preparing" ? <button className="ready-btn wide" onClick={() => status(order.id,"ready",order.batchNo)}><CheckCircle2 size={16}/> Mark ready for {isParcel?"Admin":"service"}</button> : null}

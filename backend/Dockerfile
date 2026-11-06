@@ -6,6 +6,7 @@ WORKDIR /app
 COPY package*.json ./
 COPY scripts ./scripts
 RUN npm install --omit=dev
+RUN touch .env
 COPY src ./src
 EXPOSE 5000
 CMD ["npm", "start"]

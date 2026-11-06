@@ -45,7 +45,9 @@ export function createRoleRouter(portalRole, { onMutation = async () => {} } = {
   // Orders
   router.post('/api/orders', asyncRoute(tenantController.createOrder));
   router.post('/api/orders/:id/items', asyncRoute(tenantController.addOrderItems));
+  router.delete('/api/orders/:id/items/:menuId', asyncRoute(tenantController.deleteOrderItem));
   router.patch('/api/orders/:id/items/status', asyncRoute(tenantController.updateOrderItemStatus));
+  router.post('/api/orders/:id/items/:menuId/unavailable', asyncRoute(tenantController.markOrderItemUnavailable));
   router.patch('/api/orders/:id/batches/:batchNo/handoff', asyncRoute(tenantController.updateBatchHandoff));
   router.patch('/api/orders/:id/status', asyncRoute(tenantController.updateOrderStatus));
   router.post('/api/orders/:id/request-bill', asyncRoute(tenantController.requestBill));

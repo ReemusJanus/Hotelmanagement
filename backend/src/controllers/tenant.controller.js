@@ -228,9 +228,20 @@ export async function createOrder(req, res) {
     if (activeBooking) throw Object.assign(new Error('This table is locked for a confirmed reservation at the current time'), { status: 409 });
     const [result] = await conn.query("INSERT INTO orders (table_id,guest_name,waiter,status,payment_status,created_at) VALUES (?,?,?,'new','unpaid',NOW())", [table.id, req.body.guestName || table.guest_name || 'Walk-in Guest', req.body.waiter || 'Waiter']);
     for (const item of req.body.items) {
+      const qty = Math.max(1, Number(item.qty) || 1), note = item.note || '';
       const [[menu]] = await conn.query('SELECT price FROM menu_items WHERE id=? AND available=TRUE', [item.menuId]);
       if (!menu) throw new Error('Menu item unavailable');
-      await conn.query('INSERT INTO order_items (order_id,menu_id,quantity,note,price) VALUES (?,?,?,?,?)', [result.insertId, item.menuId, item.qty, item.note || '', menu.price]);
+      const [existingLines] = await conn.query(
+        'SELECT id, quantity, note FROM order_items WHERE order_id=? AND menu_id=? AND batch_no=1 ORDER BY id ASC FOR UPDATE',
+        [result.insertId, item.menuId]
+      );
+      if (existingLines.length > 0) {
+        const primary = existingLines[0];
+        const newQty = Number(primary.quantity) + qty;
+        await conn.query('UPDATE order_items SET quantity=? WHERE id=?', [newQty, primary.id]);
+      } else {
+        await conn.query('INSERT INTO order_items (order_id,menu_id,quantity,note,price,batch_no) VALUES (?,?,?,?,?,1)', [result.insertId, item.menuId, qty, note, menu.price]);
+      }
     }
     await conn.query("UPDATE restaurant_tables SET status='occupied',guest_name=?,booking_time='',order_id=? WHERE id=?", [req.body.guestName || table.guest_name || 'Walk-in Guest', result.insertId, table.id]);
     await conn.commit();
@@ -253,14 +264,45 @@ export async function addOrderItems(req, res) {
     if (!order) throw Object.assign(new Error('Order not found'), { status: 404 });
     if (['billing_requested', 'completed'].includes(order.status)) throw Object.assign(new Error('This order is already in billing'), { status: 409 });
     const [[latest]] = await conn.query('SELECT COALESCE(MAX(batch_no),0) "batchNo" FROM order_items WHERE order_id=?', [order.id]);
-    const batchNo = Number(latest.batchNo) + 1;
+    const maxBatch = Number(latest.batchNo) || 1;
+    // If client specifies batchNo, use it; otherwise default to existing round instead of forcing next round
+    const batchNo = req.body.batchNo ? Number(req.body.batchNo) : maxBatch;
     for (const item of req.body.items) {
       const qty = Math.max(1, Number(item.qty) || 1), note = item.note || '';
       const [[menu]] = await conn.query('SELECT price FROM menu_items WHERE id=? AND available=TRUE', [item.menuId]);
       if (!menu) throw Object.assign(new Error('Menu item unavailable'), { status: 400 });
-      await conn.query('INSERT INTO order_items (order_id,menu_id,quantity,note,price,batch_no) VALUES (?,?,?,?,?,?)', [order.id, item.menuId, qty, note, menu.price, batchNo]);
+
+      // Check if this menu item already exists in this round (batch)
+      const [existingLines] = await conn.query(
+        'SELECT id, quantity, note, production_status FROM order_items WHERE order_id=? AND menu_id=? AND batch_no=? ORDER BY id ASC FOR UPDATE',
+        [order.id, item.menuId, batchNo]
+      );
+
+      if (existingLines.length > 0) {
+        // Increase quantity of existing item in this round instead of inserting a duplicate row
+        const primary = existingLines[0];
+        const newQty = Number(primary.quantity) + qty;
+        let combinedNote = primary.note || '';
+        if (note && !combinedNote.includes(note)) {
+          combinedNote = combinedNote ? `${combinedNote} · ${note}` : note;
+        }
+        await conn.query(
+          "UPDATE order_items SET quantity=?, note=?, production_status=CASE WHEN production_status='ready' THEN 'new' ELSE production_status END, handoff_status='pending' WHERE id=?",
+          [newQty, combinedNote, primary.id]
+        );
+        // Consolidate any duplicate lines if they existed
+        for (let i = 1; i < existingLines.length; i++) {
+          await conn.query('UPDATE order_items SET quantity = quantity + ? WHERE id=?', [existingLines[i].quantity, primary.id]);
+          await conn.query('DELETE FROM order_items WHERE id=?', [existingLines[i].id]);
+        }
+      } else {
+        await conn.query(
+          "INSERT INTO order_items (order_id,menu_id,quantity,note,price,batch_no,production_status,handoff_status) VALUES (?,?,?,?,?,?,'new','pending')",
+          [order.id, item.menuId, qty, note, menu.price, batchNo]
+        );
+      }
     }
-    await conn.query("UPDATE orders SET status='new' WHERE id=?", [order.id]);
+    await conn.query("UPDATE orders SET status='new' WHERE id=? AND status IN ('new','preparing','ready')", [order.id]);
     await conn.commit();
     res.status(201).json({ id: order.id, batchNo, bill: await billFor(order.id) });
   } catch (e) {
@@ -286,6 +328,108 @@ export async function updateOrderItemStatus(req, res) {
     const orderStatus = await refreshOrderProductionStatus(req.params.id, conn);
     await conn.commit();
     res.json({ ok: true, status, orderStatus, batchNo, updatedItems: ids.length });
+  } catch (e) {
+    await conn.rollback();
+    throw e;
+  } finally {
+    conn.release();
+  }
+}
+
+export async function markOrderItemUnavailable(req, res) {
+  const role = req.portalSession.role;
+  if (!['admin', 'chef', 'juicer'].includes(role)) return res.status(403).json({ message: 'Chef, Juicer, or Admin access required' });
+  const orderId = Number(req.params.id);
+  const menuId = Number(req.params.menuId);
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[item]] = await conn.query('SELECT id,name,category FROM menu_items WHERE id=?', [menuId]);
+    if (!item) throw Object.assign(new Error('Menu item not found'), { status: 404 });
+    if (role === 'juicer' && !isJuiceCategory(item.category)) {
+      throw Object.assign(new Error('Juicers can only update juice availability'), { status: 403 });
+    }
+
+    // 1. Mark menu item unavailable (out of stock)
+    await conn.query('UPDATE menu_items SET available=FALSE WHERE id=?', [menuId]);
+
+    // 2. Add [NOT AVAILABLE] note to order_items for this order (only if still in 'new' status)
+    await conn.query(`UPDATE order_items SET note = CASE
+      WHEN note LIKE '%[NOT AVAILABLE]%' THEN note
+      WHEN note != '' THEN CONCAT(note, ' · [NOT AVAILABLE]')
+      ELSE '[NOT AVAILABLE]'
+    END WHERE order_id=? AND menu_id=? AND production_status='new'`, [orderId, menuId]);
+
+    // 3. Look up order and table info for real-time notification
+    const [[order]] = await conn.query('SELECT o.id,o.table_id "tableId",o.order_type "orderType",o.waiter,t.table_number "tableNumber" FROM orders o LEFT JOIN restaurant_tables t ON t.id=o.table_id WHERE o.id=?', [orderId]);
+
+    await conn.commit();
+
+    // Store details for WebSocket broadcast
+    res.locals.broadcastDetails = {
+      action: 'item_unavailable',
+      orderId,
+      menuId,
+      itemName: item.name,
+      tableNumber: order?.tableNumber || null,
+      tableId: order?.tableId || null,
+      waiter: order?.waiter || null,
+      orderType: order?.orderType || 'dine_in'
+    };
+
+    res.json({
+      ok: true,
+      orderId,
+      menuId,
+      itemName: item.name,
+      tableNumber: order?.tableNumber || null,
+      tableId: order?.tableId || null,
+      waiter: order?.waiter || null
+    });
+  } catch (e) {
+    await conn.rollback();
+    throw e;
+  } finally {
+    conn.release();
+  }
+}
+
+export async function deleteOrderItem(req, res) {
+  const role = req.portalSession.role;
+  if (!['waiter', 'admin'].includes(role)) return res.status(403).json({ message: 'Waiter or Admin access required' });
+  const orderId = Number(req.params.id);
+  const menuId = Number(req.params.menuId);
+  const batchNo = req.query.batchNo ? Number(req.query.batchNo) : null;
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[order]] = await conn.query('SELECT id,status,table_id "tableId" FROM orders WHERE id=? FOR UPDATE', [orderId]);
+    if (!order) throw Object.assign(new Error('Order not found'), { status: 404 });
+    if (['billing_requested', 'completed'].includes(order.status)) {
+      throw Object.assign(new Error('Cannot remove items from an order in billing or completed'), { status: 409 });
+    }
+
+    let deleteQuery = 'DELETE FROM order_items WHERE order_id=? AND menu_id=?';
+    const deleteParams = [orderId, menuId];
+    if (batchNo) {
+      deleteQuery += ' AND batch_no=?';
+      deleteParams.push(batchNo);
+    }
+    const [result] = await conn.query(deleteQuery, deleteParams);
+    if (!result.affectedRows) throw Object.assign(new Error('Item not found in order'), { status: 404 });
+
+    const [remaining] = await conn.query('SELECT id FROM order_items WHERE order_id=?', [orderId]);
+    if (remaining.length > 0) {
+      await refreshOrderProductionStatus(orderId, conn);
+    } else {
+      if (order.tableId) {
+        await conn.query("UPDATE restaurant_tables SET status='available', guest_name='', order_id=NULL WHERE id=? AND order_id=?", [order.tableId, orderId]);
+      }
+      await conn.query("UPDATE orders SET status='completed' WHERE id=?", [orderId]);
+    }
+
+    await conn.commit();
+    res.json({ ok: true, orderId, menuId, remainingCount: remaining.length });
   } catch (e) {
     await conn.rollback();
     throw e;

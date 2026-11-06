@@ -331,7 +331,7 @@ export async function resolveLogin(req, res) {
     return res.status(401).json({ message: 'Invalid Master Hotel ID or PIN' });
   }
 
-  if (!/^[0-9]{4}$/.test(hotelId) || !/^[0-9]{6}$/.test(pin)) {
+  if (!/^[0-9]{4}$/.test(hotelId) || !/^[0-9]{4,6}$/.test(pin)) {
     return res.status(400).json({ message: 'Enter your 4-digit Hotel ID and 6-digit PIN' });
   }
 

@@ -117,7 +117,7 @@ app.use((req, res, next) => {
   res.on('finish', () => {
     if (res.statusCode < 400) {
       const database = req.portalSession?.companyDatabase || 'master';
-      broadcastChange(database, req.path);
+      broadcastChange(database, req.path, res.locals?.broadcastDetails || {});
     }
   });
   next();
