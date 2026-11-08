@@ -78,7 +78,9 @@ export function issuePortalToken(user) {
 export function verifyPortalToken(value) {
   try {
     const sessionSecret = getSessionSecret();
-    const [payload, signature] = String(value || '').replace(/^Bearer\s+/i, '').split('.');
+    const parts = String(value || '').replace(/^Bearer\s+/i, '').split('.');
+    if (parts.length !== 2) return null;
+    const [payload, signature] = parts;
     const expected = crypto.createHmac('sha256', sessionSecret).update(payload).digest('base64url');
     if (!signature || signature.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
       return null;

@@ -1,0 +1,117 @@
+/* Desktop retains its existing layout. Tablet/phone rules apply only below 1100px. */
+.responsive-menu-toggle { display:none; }
+@media screen and (max-width:1099px) {
+  .shell,.master-shell { display:block; width:100%; min-width:0; }
+  .shell>aside,.master-shell>aside { position:relative; inset:auto; width:100%; max-height:none; padding:12px 20px; border-right:0; border-bottom:1px solid var(--color-border); }
+  .shell>main,.master-shell>main { width:100%; margin:0; min-width:0; }
+  .shell aside .brand,.master-shell aside .brand { display:flex; padding:0 0 12px; max-width:100%; }
+  .brand>div { min-width:0; overflow-wrap:anywhere; }
+  .responsive-menu-toggle { display:flex; align-items:center; gap:10px; min-height:44px; width:100%; border:1px solid var(--color-border); border-radius:10px; background:var(--color-surface); color:var(--color-text-primary); padding:10px 14px; }
+  .responsive-menu-toggle span { flex:1; text-align:left; }
+  .responsive-menu-items { display:none; }
+  .is-open>.responsive-menu-items { display:block; }
+  .shell aside nav,.master-shell aside nav { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; overflow:visible; padding:12px 0 0; }
+  .shell aside nav button,.master-shell aside nav button { display:flex; align-items:center; min-height:46px; width:100%; margin:0; white-space:normal; text-align:left; padding:10px; font-size:14px; }
+  .master-company-nav { grid-column:1/-1; max-height:220px; overflow:auto; }
+  .shell main>header,.master-shell main>header { position:relative; width:100%; padding:14px 20px; gap:12px; flex-wrap:wrap; }
+  .page { padding:24px 20px; min-width:0; }
+  .page>*,.page-head>*,.panel,.glass-card,.overview-workspace>* { min-width:0; }
+  .page-head { flex-wrap:wrap; gap:16px; }
+  .page-actions { flex-wrap:wrap; gap:8px; }
+  .stats,.overview-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .overview-workspace,.table-detail-grid,.table-bill-preview { grid-template-columns:minmax(0,1fr); }
+  .order-builder { grid-template-columns:minmax(0,1fr) minmax(260px,.8fr); gap:20px; }
+  .order-builder-menu,.order-cart { min-width:0; }
+  .modal-wrap { padding:20px; overflow:auto; overscroll-behavior:contain; }
+  .modal,.wide-modal { width:min(900px,100%); max-width:100%; max-height:calc(100dvh - 40px); overflow-y:auto; padding:28px; }
+  .drawer-head,.drawer-tabs,.panel-head,.calendar-header,.master-billing-head { flex-wrap:wrap; gap:12px; }
+  .drawer-tabs { max-width:100%; }
+  .drawer-tabs button { white-space:normal; min-height:44px; }
+  .page input:not([type=checkbox]):not([type=radio]),.page select,.modal input:not([type=checkbox]):not([type=radio]),.modal select { min-height:44px; font-size:16px; max-width:100%; }
+  .page button,.modal button { touch-action:manipulation; }
+  .page :is(.primary,.secondary),.modal :is(.primary,.secondary),.table-status-controls button,.category-row button { min-height:44px; }
+  .modal-close { min-width:44px; min-height:44px; z-index:5; }
+  .panel:has(>table),.master-revenue-scroll,.table-scroll { max-width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .company-detail-tabs,.order-round-tabs,.category-row { max-width:100%; overflow-x:auto; }
+  .toast { max-width:calc(100vw - 32px); white-space:normal; bottom:max(20px,env(safe-area-inset-bottom)); }
+}
+@media screen and (max-width:600px) {
+  .shell>aside,.master-shell>aside { padding:12px 16px; }
+  .shell aside nav,.master-shell aside nav { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .page { padding:20px 16px 32px; }
+  .shell main>header,.master-shell main>header { padding:12px 16px; }
+  .header-actions,.master-header-actions { width:100%; justify-content:space-between; min-width:0; }
+  .header-user { max-width:100%; min-width:0; }
+  .header-user-copy { min-width:0; overflow-wrap:anywhere; }
+  .global-search { display:none; }
+  .master-pending-counter small { display:none; }
+  .page-head h1 { font-size:26px; line-height:1.2; overflow-wrap:anywhere; }
+  .page-actions { width:100%; }
+  .page-actions>button { flex:1 1 auto; }
+  .stats,.overview-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+  .stat,.overview-metric { padding:14px; overflow-wrap:anywhere; }
+  .stat strong,.overview-metric strong { font-size:24px; }
+  .table-grid,.kitchen-grid,.food-grid,.company-grid,.form-grid,.settings-grid { grid-template-columns:minmax(0,1fr)!important; }
+  .order-builder,.table-detail-grid,.table-bill-preview { grid-template-columns:minmax(0,1fr); }
+  .order-cart { position:static; width:100%; border-left:0; border-top:1px solid var(--color-border); padding:18px 0 0; }
+  .order-builder-menu { max-height:none; }
+  .modal-wrap { padding:8px; align-items:flex-start; }
+  .modal,.wide-modal { margin:auto; width:100%; padding:56px 16px 24px; max-height:calc(100dvh - 16px); border-radius:16px; }
+  .drawer-head { display:block; }
+  .drawer-head .drawer-tabs { margin-top:16px; display:flex; }
+  .chef-detail-head { padding-top:0; grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .chef-order-summary { grid-template-columns:70px minmax(0,1fr) auto!important; gap:8px; padding:12px; }
+  .chef-order-summary>* { min-width:0; overflow-wrap:anywhere; }
+  .waiter-round-line { flex-wrap:wrap; gap:8px; }
+  .waiter-round-line-end { margin-left:auto; }
+  .waiter-item-remove-btn,.cart-lines button { min-width:36px; min-height:36px; }
+  .summary-strip { display:flex; flex-wrap:wrap; }
+  .summary-strip>span { flex:1 1 40%; }
+  .public-registration-card { width:100%; padding:24px 16px; }
+  .public-registration-form,.registration-packages { grid-template-columns:minmax(0,1fr); }
+  .web-auth { padding:24px 12px; }
+  .web-otp-card { width:100%; max-width:440px; padding:28px 16px; }
+  .web-otp-grid { gap:8px; max-width:100%; }
+  .web-otp-grid>span { min-width:0; width:auto; }
+  .receipt { max-width:100%; min-width:0; }
+}
+/* Quantity is editable directly beside each food product, also on desktop. */
+.food-quantity-card { display:flex; align-items:center; gap:8px; min-width:0; border:1px solid var(--color-border); border-radius:12px; padding:10px; background:var(--color-surface); }
+.food-quantity-card.selected-food { border-color:var(--color-primary); background:var(--color-primary-soft); }
+.food-product { display:flex; flex:1; min-width:0; gap:10px; align-items:center; border:0; background:none; color:var(--color-text-primary); text-align:left; padding:0; }
+.food-product>span:first-child { flex:0 0 32px; font-size:24px; }
+.food-product img { width:32px; height:40px; border-radius:6px; object-fit:cover; }
+.food-product-copy { display:grid; gap:4px; min-width:0; overflow-wrap:anywhere; }
+.food-product-copy small { color:var(--color-text-secondary); font-size:12px; }
+.food-product-copy strong { color:var(--color-primary-text); font-size:13px; }
+.food-quantity-stepper { display:flex; align-items:center; flex-shrink:0; gap:4px; }
+.food-quantity-stepper button { width:36px; height:40px; display:grid; place-items:center; border:1px solid var(--color-border); border-radius:8px; background:var(--color-surface-elevated); color:var(--color-text-primary); }
+.food-quantity-stepper button:disabled { opacity:.4; cursor:not-allowed; }
+.food-quantity-stepper output { min-width:22px; text-align:center; font-variant-numeric:tabular-nums; font-weight:700; }
+@media screen and (max-width:1099px) { .menu-list:has(.food-quantity-card) { grid-template-columns:minmax(0,1fr); } .food-quantity-stepper button { width:44px; height:44px; } }
+
+/* The visual viewport shrinks for mobile keyboards even when the layout viewport does not. */
+.web-auth.otp-entry { padding-bottom:calc(35px + var(--login-keyboard-inset, 0px)); }
+.otp-entry .web-otp-grid { position:relative; }
+.otp-entry .web-otp-grid .web-otp-input {
+  inset:0; width:100%!important; height:100%!important; font-size:16px;
+  pointer-events:auto; cursor:text;
+}
+
+.restaurant-sidebar-logo,.restaurant-logo-preview { overflow:hidden; border-radius:50%; }
+.restaurant-sidebar-logo img,.restaurant-logo-preview img { display:block; width:100%; height:100%; object-fit:contain; }
+.restaurant-logo-settings { grid-column:1/-1; min-width:0; border:1px solid var(--color-border); border-radius:16px; padding:20px; }
+.restaurant-logo-settings legend { padding:0 8px; color:var(--color-primary); }
+.restaurant-logo-controls { display:flex; align-items:center; flex-wrap:wrap; gap:16px; margin-bottom:18px; }
+.restaurant-logo-preview { display:grid; place-items:center; width:80px; height:80px; flex:none; }
+.restaurant-logo-controls button { margin:4px 8px 4px 0; }
+.restaurant-logo-settings label { display:flex; align-items:center; gap:10px; margin:14px 0; }
+.restaurant-logo-settings input[type=checkbox] { width:20px; height:20px; min-height:0; accent-color:var(--color-primary); }
+.restaurant-logo-settings p,.restaurant-logo-settings small { color:var(--color-text-secondary); }
+.tenant-receipt-logo { display:block; width:auto; max-width:100%; height:72px; object-fit:contain; margin:0 auto 10px; }
+.receipt .tenant-receipt-watermark { border-radius:0; object-fit:contain; opacity:.07; }
+@media print {
+ body.printing-receipt .tenant-receipt-logo { width:auto!important; max-width:100%!important; height:18mm!important; object-fit:contain!important; margin:0 auto 2mm!important; }
+ body.printing-receipt .tenant-receipt-watermark { max-width:80%!important; height:auto!important; opacity:.07!important; }
+}
+.restaurant-sidebar-logo:has(img),.restaurant-logo-preview:has(img) { background:var(--color-surface)!important; text-indent:0; }

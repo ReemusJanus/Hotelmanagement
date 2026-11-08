@@ -1,3 +1,5 @@
+import { imageExtension } from '../security.js';
+import { assignDailyBillNumber } from '../billing-number.js';
 import crypto from 'node:crypto';
 import { pool, getState } from '../database.js';
 import {
@@ -265,8 +267,13 @@ export async function addOrderItems(req, res) {
     if (['billing_requested', 'completed'].includes(order.status)) throw Object.assign(new Error('This order is already in billing'), { status: 409 });
     const [[latest]] = await conn.query('SELECT COALESCE(MAX(batch_no),0) "batchNo" FROM order_items WHERE order_id=?', [order.id]);
     const maxBatch = Number(latest.batchNo) || 1;
-    // If client specifies batchNo, use it; otherwise default to existing round instead of forcing next round
-    const batchNo = req.body.batchNo ? Number(req.body.batchNo) : maxBatch;
+    // Explicit rounds can be edited only before preparation; otherwise create a fresh round.
+    const batchNo = req.body.batchNo ? Number(req.body.batchNo) : maxBatch + 1;
+    if (!Number.isSafeInteger(batchNo) || batchNo < 1 || batchNo > maxBatch + 1) throw Object.assign(new Error('Invalid kitchen round'), { status: 400 });
+    const [roundLines] = await conn.query('SELECT production_status, handoff_status FROM order_items WHERE order_id=? AND batch_no=? FOR UPDATE', [order.id, batchNo]);
+    if (roundLines.some(line => (line.production_status || 'new') !== 'new' || (line.handoff_status || 'pending') !== 'pending')) {
+      throw Object.assign(new Error('Preparation has started. This round cannot be changed; add a new round instead.'), { status: 409 });
+    }
     for (const item of req.body.items) {
       const qty = Math.max(1, Number(item.qty) || 1), note = item.note || '';
       const [[menu]] = await conn.query('SELECT price FROM menu_items WHERE id=? AND available=TRUE', [item.menuId]);
@@ -321,7 +328,9 @@ export async function updateOrderItemStatus(req, res) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [lines] = await conn.query('SELECT oi.id,m.category FROM order_items oi JOIN menu_items m ON m.id=oi.menu_id WHERE oi.order_id=? AND oi.batch_no=? FOR UPDATE', [req.params.id, batchNo]);
+    await conn.query('SELECT id FROM orders WHERE id=? FOR UPDATE', [req.params.id]);
+    const [lines] = await conn.query('SELECT oi.id,oi.production_status,m.category FROM order_items oi JOIN menu_items m ON m.id=oi.menu_id WHERE oi.order_id=? AND oi.batch_no=? FOR UPDATE', [req.params.id, batchNo]);
+    if (status === 'new' && lines.some(line => (line.production_status || 'new') !== 'new')) throw Object.assign(new Error('Started preparation cannot be reset to New'), { status: 409 });
     const ids = lines.filter(line => role === 'juicer' ? isJuiceCategory(line.category) : !isJuiceCategory(line.category)).map(line => line.id);
     if (!ids.length) throw Object.assign(new Error(`This kitchen batch has no ${role === 'juicer' ? 'juice' : 'food'} items`), { status: 404 });
     await conn.query(`UPDATE order_items SET production_status=? WHERE id IN (${ids.map(() => '?').join(',')})`, [status, ...ids]);
@@ -409,6 +418,11 @@ export async function deleteOrderItem(req, res) {
       throw Object.assign(new Error('Cannot remove items from an order in billing or completed'), { status: 409 });
     }
 
+    const [allLines] = await conn.query('SELECT menu_id, batch_no, production_status, handoff_status FROM order_items WHERE order_id=? FOR UPDATE', [orderId]);
+    const affectedRounds = new Set(allLines.filter(line => Number(line.menu_id) === menuId && (!batchNo || Number(line.batch_no) === batchNo)).map(line => Number(line.batch_no)));
+    if (allLines.some(line => affectedRounds.has(Number(line.batch_no)) && ((line.production_status || 'new') !== 'new' || (line.handoff_status || 'pending') !== 'pending'))) {
+      throw Object.assign(new Error('Preparation has started. Items in this round cannot be removed.'), { status: 409 });
+    }
     let deleteQuery = 'DELETE FROM order_items WHERE order_id=? AND menu_id=?';
     const deleteParams = [orderId, menuId];
     if (batchNo) {
@@ -506,13 +520,18 @@ export async function finalizeOrder(req, res) {
   try {
     await conn.beginTransaction();
     const [[order]] = await conn.query('SELECT * FROM orders WHERE id=? FOR UPDATE', [req.params.id]);
-    if (!order) return res.status(404).json({ message: 'Order not found' });
+    if (!order) throw Object.assign(new Error('Order not found'), {status:404});
+    if (order.status === 'completed') {
+      await conn.commit();
+      return res.json({id:order.id, paymentStatus:order.payment_status, paymentMethod:order.payment_method, billNumber:order.bill_number, billDate:order.bill_date, bill});
+    }
     const alreadyPaid = order.payment_status === 'paid', paymentMethod = alreadyPaid ? order.payment_method : (req.body.paymentMethod || null);
-    if (!paymentMethod) return res.status(400).json({ message: 'Record Cash or Card / UPI payment before completing this order' });
+    if (!paymentMethod) throw Object.assign(new Error('Record Cash or Card / UPI payment before completing this order'), {status:400});
+    const numbering = await assignDailyBillNumber(conn, order.id);
     await conn.query("UPDATE orders SET status='completed',payment_status='paid',payment_method=?,subtotal=?,tax=?,service_charge=?,total=?,completed_at=NOW() WHERE id=?", [paymentMethod, bill.subtotal, bill.tax, bill.service, bill.total, order.id]);
     if (order.table_id) await conn.query("UPDATE restaurant_tables SET status='cleaning',guest_name='',booking_time='',order_id=NULL WHERE id=?", [order.table_id]);
     await conn.commit();
-    res.json({ id: order.id, paymentStatus: 'paid', paymentMethod, bill });
+    res.json({ id: order.id, paymentStatus: 'paid', paymentMethod, ...numbering, bill });
   } catch (e) {
     await conn.rollback();
     throw e;
@@ -768,8 +787,45 @@ export async function deleteSupplierPurchase(req, res) {
 
 // Settings
 export async function updateSettings(req, res) {
-  await pool.query('UPDATE settings SET hotel_name=?,tax_rate=?,cgst_rate=?,service_charge=?,currency=? WHERE id=1', [req.body.hotelName, req.body.taxRate, req.body.cgstRate, req.body.serviceCharge, req.body.currency]);
-  res.json({ ok: true });
+  if (req.portalSession?.role !== 'admin') return res.status(403).json({message:'Admin access required'});
+  const body = req.body || {};
+  const boolean = (key) => {
+    if (body[key] === undefined) return null; // Older clients preserve branding preferences.
+    if ([true,'true'].includes(body[key])) return true;
+    if ([false,'false'].includes(body[key])) return false;
+    throw Object.assign(new Error(`Invalid ${key}`), {status:400});
+  };
+  const showLogo = boolean('showLogoOnBill'), watermark = boolean('showLogoWatermark'), remove = boolean('removeLogo');
+  if (!String(body.hotelName || '').trim() || String(body.hotelName).length > 120) throw Object.assign(new Error('Business name is required (maximum 120 characters)'), {status:400});
+  if (req.file && remove) throw Object.assign(new Error('Choose either upload or remove logo'), {status:400});
+  let uploaded;
+  if (req.file) {
+    if (req.file.size > 2*1024*1024) throw Object.assign(new Error('Logo must be 2 MB or smaller'), {status:413});
+    const ext = imageExtension(req.file);
+    if (!['png','jpg','webp'].includes(ext)) throw Object.assign(new Error('Use a PNG, JPEG or WebP logo'), {status:400});
+    uploaded = await putImage(req.portalSession.companyDatabase, `restaurant-logo-${crypto.randomUUID()}.${ext}`, req.file.buffer, req.file.size, req.file.mimetype);
+  }
+  let connection, previous, saved;
+  try {
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const [[settings]] = await connection.query('SELECT logo_url,logo_storage_key FROM settings WHERE id=1 FOR UPDATE');
+    if (!settings) throw new Error('Restaurant settings not found');
+    previous = settings.logo_storage_key;
+    await connection.query('UPDATE settings SET hotel_name=?,tax_rate=?,cgst_rate=?,service_charge=?,currency=?,logo_url=?,logo_storage_key=?,show_logo_on_bill=COALESCE(?,show_logo_on_bill),show_logo_watermark=COALESCE(?,show_logo_watermark) WHERE id=1',
+      [body.hotelName,body.taxRate,body.cgstRate,body.serviceCharge,body.currency,remove?null:uploaded?.url||settings.logo_url,remove?null:uploaded?.objectName||settings.logo_storage_key,showLogo,watermark]);
+    [[saved]] = await connection.query('SELECT hotel_name "hotelName",tax_rate "taxRate",cgst_rate "cgstRate",service_charge "serviceCharge",currency,logo_url "logoUrl",show_logo_on_bill "showLogoOnBill",show_logo_watermark "showLogoWatermark" FROM settings WHERE id=1');
+    await connection.commit();
+  } catch(error) {
+    await connection?.rollback();
+    if (uploaded) await minio.removeObject(bucket,uploaded.objectName).catch(()=>{});
+    throw error;
+  } finally { connection?.release(); }
+  // Delete only this tenant's previous logo, after the new settings commit succeeds.
+  if ((uploaded || remove) && previous?.startsWith(`${req.portalSession.companyDatabase}/images/restaurant-logo-`)) {
+    await minio.removeObject(bucket,previous).catch(()=>console.warn('Previous restaurant logo cleanup deferred'));
+  }
+  res.json({ok:true,settings:saved});
 }
 
 // Attendance

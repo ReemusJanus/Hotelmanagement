@@ -1,5 +1,5 @@
 import express from 'express';
-import { uploadSingleImage } from '../uploads/multer.js';
+import { uploadSingleImage, uploadRestaurantLogo } from '../uploads/multer.js';
 import { asyncRoute, tenantContextMiddleware } from '../middleware/tenant.js';
 import * as tenantController from '../controllers/tenant.controller.js';
 
@@ -76,10 +76,10 @@ export function createRoleRouter(portalRole, { onMutation = async () => {} } = {
   router.delete('/api/finance/:id', asyncRoute(tenantController.deleteFinanceEntry));
   router.post('/api/supplier-purchases', asyncRoute(tenantController.createSupplierPurchase));
   router.post('/api/supplier-purchases/:id/payments', asyncRoute(tenantController.createSupplierPayment));
-  router.delete('/api/supplier-purchases/:id', asyncRoute(tenantController.deleteSupplierPayment));
+  router.delete('/api/supplier-purchases/:id', asyncRoute(tenantController.deleteSupplierPurchase));
 
   // Settings
-  router.put('/api/settings', asyncRoute(tenantController.updateSettings));
+  router.put('/api/settings', (req,res,next) => req.portalSession.role === 'admin' ? next() : res.status(403).json({message:'Admin access required'}), (req,res,next) => uploadRestaurantLogo(req,res,error => error ? res.status(error.code === 'LIMIT_FILE_SIZE' ? 413 : 400).json({message:error.code === 'LIMIT_FILE_SIZE' ? 'Logo must be 2 MB or smaller' : error.message}) : next()), asyncRoute(tenantController.updateSettings));
 
   // Attendance
   router.get('/api/attendance/:id', asyncRoute(tenantController.getAttendance));

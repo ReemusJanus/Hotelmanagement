@@ -224,9 +224,46 @@ function Login({ onLogin }) {
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [verified, setVerified] = useState(false),
-    input = useRef(null);
+    input = useRef(null), loginPage = useRef(null), pinRow = useRef(null);
   useEffect(() => {
-    if(mode==="login")input.current?.focus();
+    if (mode !== "login") return;
+    const viewport = window.visualViewport;
+    let frame, originalScroll = null;
+    const update = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const page = loginPage.current;
+        if (!page) return;
+        const inset = viewport ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop) : 0;
+        page.style.setProperty('--login-keyboard-inset', `${inset}px`);
+        if (inset > 100 && originalScroll === null) originalScroll = window.scrollY;
+        if (inset < 50 && originalScroll !== null) {
+          window.scrollTo({top:originalScroll, behavior:'instant'});
+          originalScroll = null;
+        }
+        const active = document.activeElement;
+        if (!page.contains(active) || active.tagName !== 'INPUT') return;
+        const target = active === input.current ? pinRow.current : active;
+        const rect = target?.getBoundingClientRect();
+        if (!rect) return;
+        const top = (viewport?.offsetTop || 0) + 16;
+        const bottom = (viewport ? viewport.offsetTop + viewport.height : window.innerHeight) - 24;
+        const delta = rect.bottom > bottom ? rect.bottom - bottom : rect.top < top ? rect.top - top : 0;
+        if (delta) window.scrollBy({top:delta, behavior:'instant'});
+      });
+    };
+    viewport?.addEventListener('resize', update);
+    viewport?.addEventListener('scroll', update);
+    window.addEventListener('resize', update);
+    document.addEventListener('focusin', update);
+    update();
+    return () => {
+      cancelAnimationFrame(frame);
+      viewport?.removeEventListener('resize', update);
+      viewport?.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+      document.removeEventListener('focusin', update);
+    };
   }, [mode]);
   useEffect(() => {
     const update = () => setMode(routeFromPath());
@@ -234,7 +271,7 @@ function Login({ onLogin }) {
     return () => removeEventListener("popstate", update);
   }, []);
   useEffect(() => {
-    if (hotelId.length === 4 && pin.length >= 4 && !busy) { const timer = setTimeout(() => submit(), 550); return () => clearTimeout(timer); }
+    if (hotelId.length === 4 && (hotelId === "0000" ? pin.length >= 4 : pin.length === 6) && !busy) { const timer = setTimeout(() => submit(), 550); return () => clearTimeout(timer); }
     if (!hotelId && pin.length >= 4 && pin.length <= 6 && !busy) {
       const timer = setTimeout(() => submit(), 550);
       return () => clearTimeout(timer);
@@ -242,8 +279,8 @@ function Login({ onLogin }) {
   }, [hotelId, pin]);
   async function submit(e) {
     e?.preventDefault();
-    const masterAttempt = !hotelId && pin.length >= 4 && pin.length <= 6;
-    if ((!masterAttempt && (hotelId.length !== 4 || pin.length < 4 || pin.length > 6)) || busy) return;
+    const masterAttempt = (!hotelId || hotelId === "0000") && pin.length >= 4 && pin.length <= 6;
+    if ((!masterAttempt && (hotelId.length !== 4 || pin.length !== 6)) || busy) return;
     setBusy(true);
     setError("");
     try {
@@ -267,7 +304,7 @@ function Login({ onLogin }) {
   if(mode==="landing")return <PublicLanding login={()=>navigate("login")} register={()=>navigate("register")}/>;
   if(mode==="register")return <PublicCompanyRegistration back={()=>navigate("landing")}/>;
   return (
-    <main className="web-auth otp-entry">
+    <main ref={loginPage} className="web-auth otp-entry">
       <header className="otp-web-brand">
         <span className="logo">B</span>
         <b>Byteberrytech</b>
@@ -285,6 +322,7 @@ function Login({ onLogin }) {
         </p>
         <label className="hotel-id-field"><span>4-DIGIT HOTEL ID <em>NOT REQUIRED FOR SUPER ADMIN</em></span><input value={hotelId} onChange={(e)=>setHotelId(e.target.value.replace(/\D/g,"").slice(0,4))} inputMode="numeric" maxLength="4" placeholder="Hotel staff: 1234" autoFocus/></label>
         <div
+          ref={pinRow}
           className="web-otp-grid six-digit"
           onClick={() => input.current?.focus()}
         >
@@ -297,7 +335,6 @@ function Login({ onLogin }) {
               {pin.length === index && !verified ? <u /> : null}
             </span>
           ))}
-        </div>
         <input
           ref={input}
           className="web-otp-input"
@@ -310,6 +347,7 @@ function Login({ onLogin }) {
           autoComplete="one-time-code"
           maxLength="6"
         />
+        </div>
         {busy ? <div className="otp-spinner" /> : null}
         {error ? <div className="web-otp-error">{error}</div> : null}
         <small className="otp-demo">
@@ -473,7 +511,7 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
             <small>MASTER CONTROL</small>
           </div>
         </div>
-        <nav>
+        <ResponsiveNavigation><nav>
           <button className={!selectedCompany&&!selectedRegistration&&masterPage==="companies" ? "active" : ""} onClick={() => { setMasterPage("companies");setSelectedCompanyId(null);setSelectedRegistrationId(null); setCompanySection("overview"); }}>
             <LayoutDashboard size={18} />
             Companies
@@ -484,7 +522,7 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
             <small>COMPANY USERS</small>
             {companies.map((company) => <button key={company.id} className={selectedCompany?.id === company.id ? "active" : ""} onClick={() => { setSelectedRegistrationId(null);setSelectedCompanyId(company.id); setCompanySection("overview"); }}><Building2 size={17}/><span>{company.companyName}<small>{company.staffCount} users</small></span></button>)}
           </div>
-        </nav>
+        </nav></ResponsiveNavigation>
       </aside>
       <main>
         <header>
@@ -1013,7 +1051,15 @@ const portalNav = {
     ["ready", "Ready Juices", CheckCircle2],
   ],
 };
-function Shell({ role, user, page, setPage, logout, children, navBadges = {} }) {
+function ResponsiveNavigation({children}) {
+  const [open,setOpen]=useState(false);
+  return <div className={`responsive-navigation ${open ? "is-open" : ""}`}>
+    <button type="button" className="responsive-menu-toggle" aria-expanded={open} onClick={()=>setOpen(!open)}><LayoutDashboard size={18}/><span>{open ? "Close navigation" : "Menu"}</span>{open ? <X size={18}/> : <ChevronRight size={18}/>}</button>
+    <div className="responsive-menu-items" onKeyDown={event=>{if(event.key==="Escape"){setOpen(false);event.currentTarget.previousElementSibling?.focus()}}} onClick={event=>{if(event.target.closest('button')){setOpen(false);const toggle=event.currentTarget.previousElementSibling;if(toggle && getComputedStyle(toggle).display!=="none")toggle.focus()}}}>{children}</div>
+  </div>;
+}
+
+function Shell({ role, user, page, setPage, logout, children, settings, navBadges = {} }) {
   const [profileOpen,setProfileOpen]=useState(false),[profile,setProfile]=useState(user);
   const navModule={tables:"tables",floor:"tables",bookings:"bookings",orders:"billing",parcels:"parcels",menu:"menu",stock:"stock",finance:"finance",staff:"staff",team:"staff","stock-booking":"stock",dishes:"menu",kitchen:"kitchen",ready:"kitchen",juices:"juicer",queue:"juicer","parcel-queue":"juicer"};
   const visibleNav=portalNav[role].filter(([id])=>!navModule[id]||user.modules?.[navModule[id]]!==false);
@@ -1025,13 +1071,13 @@ function Shell({ role, user, page, setPage, logout, children, navBadges = {} }) 
     <div className="shell">
       <aside>
         <div className="brand">
-          <span className="logo">B</span>
+          <span className="logo restaurant-sidebar-logo"><RestaurantLogo url={settings?.logoUrl} fallback="B"/></span>
           <div>
             <b>{user.companyName || "Your hotel"}</b>
             <small>{role} portal</small>
           </div>
         </div>
-        <nav aria-label={`${role} navigation`}>
+        <ResponsiveNavigation><nav aria-label={`${role} navigation`}>
           {visibleNav.map(([id, label, Icon]) => (
             <button
               key={id}
@@ -1046,7 +1092,7 @@ function Shell({ role, user, page, setPage, logout, children, navBadges = {} }) 
               ) : null}
             </button>
           ))}
-        </nav>
+        </nav></ResponsiveNavigation>
       </aside>
       <main>
         <header>
@@ -1137,6 +1183,7 @@ function Admin({ data, refresh, user, logout, toast }) {
     <>
       <Shell
         role="admin"
+        settings={data.settings}
         user={user}
         page={page}
         setPage={setPage}
@@ -2390,7 +2437,9 @@ function ParcelPanel({ data, refresh, user, toast }) {
     </>
   );
 }
-function ParcelHandoffModal({ order, data, complete, close }) {
+function ParcelHandoffModal({ order: initialOrder, data, complete, close }) {
+  const [finalNumbering, setFinalNumbering] = useState(null);
+  const order = finalNumbering ? {...initialOrder, ...finalNumbering} : initialOrder;
   const alreadyComplete = order.status === "completed";
   const alreadyPaid = order.paymentStatus === "paid";
   const [step, setStep] = useState(alreadyComplete ? "complete" : "bill"),
@@ -2402,7 +2451,8 @@ function ParcelHandoffModal({ order, data, complete, close }) {
     if (!alreadyPaid && !paymentMethod) return;
     setFinishing(true);
     try {
-      await complete(order, alreadyPaid ? order.paymentMethod : paymentMethod);
+      const result = await complete(order, alreadyPaid ? order.paymentMethod : paymentMethod);
+      setFinalNumbering({billNumber: result.billNumber, billDate: result.billDate});
       setStep("complete");
     } catch {
       // The parent displays the API error as an application toast.
@@ -4886,12 +4936,31 @@ function StaffEditor({ staff, users, close, refresh, toast }) {
     </Modal>
   );
 }
+function RestaurantLogo({url, className, fallback=null}) {
+  const [failed,setFailed]=useState(null);
+  return url && failed !== url ? <img src={url} alt="Restaurant logo" className={className} onError={()=>setFailed(url)}/> : fallback;
+}
+
 function SettingsPanel({ data, refresh, toast }) {
-  const [s, setS] = useState(data.settings);
+  const [s, setS] = useState(data.settings), [file,setFile]=useState(null), [removeLogo,setRemoveLogo]=useState(false), [preview,setPreview]=useState(''), [saving,setSaving]=useState(false), [saveError,setSaveError]=useState('');
+  const fileInput=useRef(null), savingRef=useRef(false);
+  useEffect(()=>{if(!file){setPreview('');return}const url=URL.createObjectURL(file);setPreview(url);return()=>URL.revokeObjectURL(url)},[file]);
+  function selectLogo(event){
+    const selected=event.target.files?.[0];event.target.value='';if(!selected)return;
+    if(!['image/png','image/jpeg','image/webp'].includes(selected.type)){setSaveError('Use a PNG, JPEG or WebP logo.');return}
+    if(selected.size>2*1024*1024){setSaveError('Logo must be 2 MB or smaller.');return}
+    setSaveError('');setFile(selected);setRemoveLogo(false);
+  }
   async function save() {
-    await api("/settings", { method: "PUT", body: JSON.stringify(s) });
-    refresh();
-    toast("Business settings saved");
+    if(savingRef.current)return;savingRef.current=true;setSaving(true);setSaveError('');
+    try {
+      const form=new FormData();
+      for(const key of ['hotelName','currency','taxRate','cgstRate','serviceCharge'])form.set(key,String(s[key]));
+      form.set('showLogoOnBill',String(s.showLogoOnBill!==false));form.set('showLogoWatermark',String(!!s.showLogoWatermark));form.set('removeLogo',String(removeLogo));
+      if(file)form.set('logo',file);
+      const result=await apiForm('/settings',form,{method:'PUT'});
+      setS(result.settings);await refresh();setFile(null);setRemoveLogo(false);toast('Business settings saved');
+    } catch(error){setSaveError(error.message)} finally {savingRef.current=false;setSaving(false)}
   }
   return (
     <>
@@ -4900,8 +4969,8 @@ function SettingsPanel({ data, refresh, toast }) {
         title="Business & Billing"
         sub="Configuration shared by every portal."
         action={
-          <button className="primary" onClick={save}>
-            Save changes
+          <button className="primary" onClick={save} disabled={saving}>
+            {saving ? "Saving…" : "Save changes"}
           </button>
         }
       />
@@ -4919,6 +4988,21 @@ function SettingsPanel({ data, refresh, toast }) {
             Currency
             <input value={s.currency} disabled />
           </label>
+          <fieldset className="restaurant-logo-settings" disabled={saving}>
+            <legend>Restaurant Logo</legend>
+            <div className="restaurant-logo-controls">
+              <span className="logo restaurant-logo-preview"><RestaurantLogo url={removeLogo?'':preview||s.logoUrl} fallback="B"/></span>
+              <div><input ref={fileInput} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={selectLogo}/>
+                <button type="button" className="secondary" onClick={()=>fileInput.current?.click()}>{!removeLogo&&(file||s.logoUrl)?'Change Logo':'Upload Logo'}</button>
+                {!removeLogo&&(file||s.logoUrl)?<button type="button" className="secondary" onClick={()=>{setFile(null);setRemoveLogo(true)}}>Remove Logo</button>:null}
+                <p>PNG, JPG/JPEG or WebP · Maximum 2 MB</p>
+              </div>
+            </div>
+            <label><input type="checkbox" checked={s.showLogoOnBill!==false} onChange={e=>setS({...s,showLogoOnBill:e.target.checked})}/>Show Logo on Bill</label>
+            <label><input type="checkbox" checked={!!s.showLogoWatermark} onChange={e=>setS({...s,showLogoWatermark:e.target.checked})}/>Show Logo Watermark</label>
+            <small>Watermarks are for browser/PDF printing. Disable them for thermal printers if readability is reduced.</small>
+          </fieldset>
+          {saveError?<div role="alert" className="form-error">{saveError}</div>:null}
           {/* GST settings are temporarily disabled; retain for later use.
           <label>
             GST rate (%)
@@ -5247,7 +5331,7 @@ function Modal({ close, children, wide = false, hideClose = false, closeLeft = f
     >
       <div className={`modal ${wide ? "wide-modal" : ""} ${className}`.trim()}>
         {!hideClose ? (
-          <button className={`modal-close ${closeLeft ? "left" : ""}`} onClick={close}>
+          <button className={`modal-close ${closeLeft ? "left" : ""}`} aria-label="Close dialog" onClick={close}>
             <X size={18} />
           </button>
         ) : null}
@@ -5513,7 +5597,7 @@ function WaiterOrderRounds({ order, data, table, busy, confirmRoundReceived, add
               const isNewOrder = (order.status || "new") === "new";
               const isNewItem = (item.itemStatus || "new") === "new";
               const isUnavail = isNewRound && isNewOrder && isNewItem && (!menu?.available || item.note?.includes("[NOT AVAILABLE]"));
-              const canRemove = (isNewRound || isNewOrder) && isNewItem;
+              const canRemove = isNewRound && isNewItem && batch.handoffStatus === "pending";
               const isRemoving = removeBusy === `${item.menuId}-${batch.batchNo}`;
               return <div className={`waiter-round-line ${isUnavail ? "item-out-of-stock" : ""}`} key={`${item.menuId}-${itemIndex}`}>
                 <span>
@@ -5574,7 +5658,7 @@ function TableStatusControls({ table, refresh, toast }) {
   }
   return (
     <div className="table-status-controls">
-      <span>Update table status</span>
+
       {["available", "cleaning", "reserved"].map((status) => (
         <button
           key={status}
@@ -5608,6 +5692,7 @@ function OrderBuilder({ table, data, user, existing, targetBatchNo = null, refre
   const latestBatchIsNew = latestBatchItems.length > 0 && latestBatchItems.every((i) => (i.itemStatus || "new") === "new");
   const defaultBatch = targetBatchNo || (latestBatchIsNew ? latestBatch : nextNewBatch);
   const [chosenBatch, setChosenBatch] = useState(defaultBatch);
+  const roundLocked = !!existing?.items?.some(item => (Number(item.batchNo) || 1) === chosenBatch && ((item.itemStatus || "new") !== "new" || (item.handoffStatus || "pending") !== "pending"));
   const [cart, setCart] = useState([]),
     [cat, setCat] = useState("All"),
     [query, setQuery] = useState(""),
@@ -5638,7 +5723,7 @@ function OrderBuilder({ table, data, user, existing, targetBatchNo = null, refre
     );
   }
   async function send() {
-    if (!cart.length) return;
+    if (!cart.length || roundLocked) return;
     setSending(true);
     try {
       await api(existing ? `/orders/${existing.id}/items` : "/orders", {
@@ -5700,23 +5785,20 @@ function OrderBuilder({ table, data, user, existing, targetBatchNo = null, refre
         </div>
         <div className="menu-list">
           {visibleMenu.length ? (
-            visibleMenu.map((m) => (
-              <button
-                key={m.id}
-                disabled={!m.available}
-                className={`${cart.some((item) => item.menuId === m.id) ? "selected-food" : ""} ${!m.available ? "dish-disabled" : ""}`}
-                onClick={() => add(m.id)}
-              >
-                <span>
-                  {m.imageUrl ? <img src={m.imageUrl} alt="" /> : m.icon}
-                </span>
-                <div>
-                  <b>{m.name}</b>
-                  <small>{m.available ? m.category : `${m.category} · Not available`}</small>
+            visibleMenu.map((m) => {
+              const quantity = cart.find(item => item.menuId === m.id)?.qty || 0;
+              return <div key={m.id} className={`food-quantity-card ${quantity ? "selected-food" : ""} ${!m.available ? "dish-disabled" : ""}`}>
+                <button type="button" className="food-product" disabled={!m.available || roundLocked} onClick={()=>quantity ? qty(m.id,1) : add(m.id)} aria-label={`Add ${m.name}`}>
+                  <span>{m.imageUrl ? <img src={m.imageUrl} alt=""/> : m.icon}</span>
+                  <span className="food-product-copy"><b>{m.name}</b><small>{m.available ? m.category : "Not available"}</small><strong>{money(m.price)}</strong></span>
+                </button>
+                <div className="food-quantity-stepper" role="group" aria-label={`${m.name} quantity`}>
+                  <button type="button" aria-label={`Decrease ${m.name}`} disabled={!quantity || roundLocked} onClick={()=>qty(m.id,-1)}><Minus size={16}/></button>
+                  <output aria-live="polite" aria-label={`${m.name} selected quantity`}>{quantity}</output>
+                  <button type="button" aria-label={`Increase ${m.name}`} disabled={!m.available || roundLocked || quantity>=1000} onClick={()=>quantity ? qty(m.id,1) : add(m.id)}><Plus size={16}/></button>
                 </div>
-                <strong>{!m.available ? "Not available" : cart.some((item) => item.menuId === m.id) ? <><CheckCircle2 size={14}/> Selected</> : money(m.price)}</strong>
-              </button>
-            ))
+              </div>;
+            })
           ) : (
             <div className="menu-empty-search">
               <UtensilsCrossed size={24} />
@@ -5737,6 +5819,7 @@ function OrderBuilder({ table, data, user, existing, targetBatchNo = null, refre
       </div>
       <aside className="order-cart">
         <h3>{existing ? `Add items to Round ${chosenBatch}` : "New order"}</h3>
+        {roundLocked ? <p role="status">Preparation has started. Select a new round to add items.</p> : null}
         <p>
           {existing
             ? `Table ${table.number} · Adding items to Round ${chosenBatch}`
@@ -5834,7 +5917,7 @@ function OrderBuilder({ table, data, user, existing, targetBatchNo = null, refre
         </div>
         <button
           className="primary wide"
-          disabled={!cart.length || sending}
+          disabled={!cart.length || sending || roundLocked}
           onClick={send}
         >
           {sending
@@ -5865,7 +5948,7 @@ function calculateBill(order, data) {
   return { items, subtotal, tax, cgst, service, total: subtotal };
 }
 function billNumber(order) {
-  return order?.dailyNumber ?? order?.id;
+  return order?.billNumber ?? order?.dailyNumber ?? order?.id;
 }
 function playReceiptPrintAnimation(receipt, copies) {
   const overlay = document.createElement("div");
@@ -5922,7 +6005,7 @@ async function openPrinter(event) {
   }, 0);
   // Allow room for the larger luxury layout, totals, and closing footer.
   // A little trailing allowance is intentional so the cutter never clips the total.
-  const pageHeight = Math.min(500, Math.max(145, 116 + itemHeight));
+  const pageHeight = Math.min(500, Math.max(145, 116 + itemHeight + (receipt.querySelector(".tenant-receipt-logo") ? 20 : 0)));
   const pageStyle = document.createElement("style");
   pageStyle.dataset.receiptPageStyle = "true";
   pageStyle.textContent = `@media print { @page { size: 72mm ${pageHeight}mm; margin: 0; } }`;
@@ -5933,10 +6016,12 @@ async function openPrinter(event) {
   document.body.classList.add("printing-receipt");
   const images = [...printRoot.querySelectorAll("img")];
   await Promise.all(images.map((image) => image.complete
-    ? Promise.resolve()
+    ? Promise.resolve(image.naturalWidth || (image.style.display="none"))
     : new Promise((resolve) => {
-        image.addEventListener("load", resolve, { once: true });
-        image.addEventListener("error", resolve, { once: true });
+        const finish = () => { clearTimeout(timer); if (!image.naturalWidth) image.style.display="none"; resolve(); };
+        const timer = setTimeout(finish, 5000);
+        image.addEventListener("load", finish, { once: true });
+        image.addEventListener("error", finish, { once: true });
       })));
   await playReceiptPrintAnimation(receipt, copies);
   let cleaned = false;
@@ -5955,11 +6040,12 @@ async function openPrinter(event) {
 function BillReceipt({ table, order, data, bill }) {
   return (
     <div className="receipt parcel-print-receipt">
-
+      {data.settings.showLogoWatermark && <RestaurantLogo url={data.settings.logoUrl} className="receipt-watermark tenant-receipt-watermark"/>}
       <div className="receipt-brand">
+        {data.settings.showLogoOnBill !== false && <RestaurantLogo url={data.settings.logoUrl} className="tenant-receipt-logo"/>}
 
         <h2>{data.settings.hotelName}</h2>
-        <p>Tax Invoice · Bill #{billNumber(order)}</p>
+        <p>Tax Invoice · Bill #{billNumber(order)}{order.billDate ? ` · ${order.billDate}` : ""}</p>
       </div>
       <div className="receipt-meta">
         <span>{table ? `Table ${table.number}` : "Parcel order"}</span>

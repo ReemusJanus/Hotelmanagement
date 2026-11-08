@@ -20,6 +20,7 @@ export default {
     },
     android: {
       package: 'com.knockout.hospitality',
+      softwareKeyboardLayoutMode: 'resize',
       adaptiveIcon: {
         foregroundImage: './assets/byteberrytech-logo.png',
         backgroundColor: '#090a08'

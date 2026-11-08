@@ -42,6 +42,12 @@ export async function ensureSchema(connection, schema, statements) {
       await connection.query(`CREATE TRIGGER touch_updated_at BEFORE UPDATE ON ${id}.${quoteIdentifier(table)} FOR EACH ROW EXECUTE FUNCTION ${id}.touch_updated_at()`);
     }
   }
+  if (statements === tenantDDL) {
+    await connection.query('ALTER TABLE settings ADD COLUMN IF NOT EXISTS logo_url TEXT, ADD COLUMN IF NOT EXISTS logo_storage_key TEXT, ADD COLUMN IF NOT EXISTS show_logo_on_bill BOOLEAN NOT NULL DEFAULT TRUE, ADD COLUMN IF NOT EXISTS show_logo_watermark BOOLEAN NOT NULL DEFAULT FALSE');
+    await connection.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS bill_number INTEGER, ADD COLUMN IF NOT EXISTS bill_date DATE');
+    await connection.query("UPDATE orders o SET bill_date=o.created_at::date, bill_number=(SELECT COUNT(*) FROM orders daily WHERE daily.created_at>=DATE(o.created_at) AND daily.created_at<DATE(o.created_at)+INTERVAL '1 day' AND daily.id<=o.id) WHERE o.status='completed' AND o.payment_status='paid' AND o.bill_number IS NULL");
+    await connection.query('CREATE UNIQUE INDEX IF NOT EXISTS orders_daily_bill_unique ON orders (bill_date, bill_number) WHERE bill_number IS NOT NULL');
+  }
   const indexes = statements === tenantDDL ? [
     ['bookings','booking_slot','table_id,booking_date,status'],
     ['orders','order_live_history','completed_at,status,id'],

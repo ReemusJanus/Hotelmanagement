@@ -13,3 +13,10 @@ export const memoryUpload = multer({
 export const uploadSingleImage = memoryUpload.single('image');
 
 export default memoryUpload;
+
+// Logo uploads deliberately use a smaller limit and a narrow format allowlist.
+export const uploadRestaurantLogo = multer({
+  storage: multer.memoryStorage(), limits: {fileSize: 2 * 1024 * 1024, files: 1},
+  fileFilter: (_req, file, cb) => ['image/png','image/jpeg','image/webp'].includes(file.mimetype)
+    ? cb(null, true) : cb(Object.assign(new Error('Use a PNG, JPEG or WebP logo'), {status:400}))
+}).single('logo');
