@@ -1,0 +1,12 @@
+{
+  "commit": "c5090c1b9e4e708df5ba562d65ed536a5a858536",
+  "environment": "staging",
+  "verifiedAt": "2026-11-14T18:37:39.800483+00:00",
+  "frontend": {
+    "index.html": "e1bfd33e95bb010663654c060e97683aad51c449bb6d0d092e6f65033d986b3c",
+    "assets/index-6qALhEII.js": "500c812f12a6e01ad5f989cde177393c3330cc82f4e7209f8a70da0d7283173b",
+    "assets/index-CBac-qgg.css": "04e45570c6d973341ef554775555fa781dc530889f06f2916f9459d81848c23f",
+    "assets/restaurant-engine-D37jMjVN.js": "e81454a9b7ef27fbfd3135924f1f650dab190e75d50e397fc801b48f27ba344e"
+  },
+  "backendSha256": "431f2de1013cd64daf3a35015efe30b3a301088cfdf5f297045da4225bcb0966"
+}

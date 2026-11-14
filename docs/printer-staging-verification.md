@@ -32,9 +32,9 @@ Existing npm audit findings remain: nine root dependencies flagged (six high), a
 
 ## Error B — not identified
 
-No verified manufacturer manual or error-code table was found for the exact **SRS39C-U** name. Other Shreyans models have different drivers; do not install another model's driver just because its name looks similar. Confirm the model label, installed driver/version and where Error B appears. Manufacturer support must confirm the exact code. No hardware repair is claimed.
+The user corrected the model to **SHREYANS SRS89C-U**. The manufacturer website lists 89C-U, but no verified model-specific Error B definition or matching public manual was found. The location of the error and Windows test-page result are still unknown. Other Shreyans models have different drivers; do not install another model's driver just because its name looks similar. Confirm the installed driver/version and where Error B appears. Manufacturer support must confirm the exact code. No hardware repair is claimed.
 
-Official support/driver entry point: https://www.shreyanspos.com/ . This is a vendor entry point, not a verified SRS39C-U driver download.
+Official support/driver entry point: https://www.shreyanspos.com/ . This is a vendor entry point, not a verified SRS89C-U driver download.
 
 ## Windows 11 operator checks
 
@@ -49,4 +49,8 @@ Sources: https://support.microsoft.com/en-us/windows/hardware/printer/fix-printe
 
 ## Deployment
 
-Release verification and artifact hashes are recorded separately after staging upload. Production is excluded.
+Staging frontend deployed successfully using the established deployment script. Application source commit: `c5090c1b9e4e708df5ba562d65ed536a5a858536`. The script rebuilt byte-identical tested artifacts. Every deployed frontend asset and unchanged backend main.js hash was verified against the local manifest, published at https://stg.hms.byteberrytech.com/release.json . Backend replacement was unnecessary because its fresh build exactly matched staging.
+
+Frontend backup: `/var/backups/hotel-management/20261114-183709` (server UTC timestamp; deployment was 15 November in India). Nginx configuration test passed. Live landing/login pages returned 200 with no browser page exceptions. API health confirmed PostgreSQL and Redis ready; PM2 remained online. Post-deployment receipt browser fixtures passed against staging assets without live bill writes. Staging Nginx error log is empty; backend error log predates deployment; latest staging responses were 200/304/101, with no 5xx in that sample.
+
+Production was not modified. Existing mobile edits and unrelated documentation/artifacts remain outside this release. Physical SRS89C-U/Windows/Edge verification and exact Error B diagnosis remain pending. Fixed paper forms can still waste trailing paper; use measured mode when supported.

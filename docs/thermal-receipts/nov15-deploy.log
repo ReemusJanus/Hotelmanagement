@@ -1,0 +1,67 @@
+Now using node v26.0.0 (npm v11.12.1)
+Installing locked dependencies in isolated build directory...
+
+> knockout-hotel-management@2.0.0 preinstall
+> node scripts/check-runtime-versions.mjs
+
+Runtime verified: Node.js v26.0.0, npm 11.12.1
+
+added 224 packages, and audited 227 packages in 3s
+
+54 packages are looking for funding
+  run `npm fund` for details
+
+9 vulnerabilities (1 low, 2 moderate, 6 high)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+Building frontend locally...
+
+> hotel-frontend@1.0.0 build
+> vite build
+
+vite v7.3.6 building client environment for production...
+transforming...
+✓ 1685 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                              0.52 kB │ gzip:   0.32 kB
+dist/assets/index-CBac-qgg.css             304.20 kB │ gzip:  51.96 kB
+dist/assets/index-6qALhEII.js              479.43 kB │ gzip: 136.83 kB
+dist/assets/restaurant-engine-D37jMjVN.js  548.38 kB │ gzip: 138.80 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.39s
+Local frontend build ready: /Users/reemusjanus/Library/Mobile Documents/com~apple~CloudDocs/project/deployment/build/frontend
+Connecting to root@139.59.42.193 (authenticate once)...
+Checking frontend server prerequisites...
+Transfer starting: 14 files
+./
+byteberrytech-logo.png
+byteberrytech-logo.svg
+hospitality-platform-hero-v1.png
+index.html
+knockout-bill-watermark.png
+knockout-gold.svg
+knockout-logo.png
+knockout-mark.svg
+knockout-signature-chicken-v1.png
+assets/
+assets/index-6qALhEII.js
+assets/index-CBac-qgg.css
+assets/restaurant-engine-D37jMjVN.js
+
+sent 5772523 bytes  received 296 bytes  3237518 bytes/sec
+total size is 6955472  speedup is 1.20
+Frontend backup: /var/backups/hotel-management/20261114-183709
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+Deployed: https://stg.hms.byteberrytech.com
