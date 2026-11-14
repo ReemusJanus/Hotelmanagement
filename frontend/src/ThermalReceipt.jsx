@@ -1,12 +1,13 @@
 import {useState} from 'react';
 import {receiptModel,receiptAmount,printPreferences} from './receipt-model.mjs';
 import {openPrinter} from './thermal-print.mjs';
-const storedPreferences=()=>{try{return printPreferences(JSON.parse(localStorage.getItem('hms-thermal-printer')||'{}'))}catch{return printPreferences()}};
+// Preserve existing width/driver settings, but migrate the old 0–5mm feed default once.
+const storedPreferences=()=>{try{const saved=localStorage.getItem('hms-thermal-printer-v2');return printPreferences(saved?JSON.parse(saved):{...JSON.parse(localStorage.getItem('hms-thermal-printer')||'{}'),feed:15})}catch{return printPreferences()}};
 export default function ThermalReceipt({table,order,data,bill}) {
  const model=receiptModel(order,data,bill),[prefs,setPrefs]=useState(storedPreferences),[draft,setDraft]=useState(storedPreferences);
  const date=new Date(order.createdAt),dateOptions={timeZone:data.settings.timezone||'Asia/Kolkata'};
  const billDate=order.billDate?String(order.billDate).slice(0,10).split('-').reverse().join('/'):date.toLocaleDateString('en-GB',dateOptions);
- const save=(key,value)=>{const next=printPreferences({...prefs,[key]:value});setPrefs(next);setDraft(next);try{localStorage.setItem('hms-thermal-printer',JSON.stringify(next))}catch{}};
+ const save=(key,value)=>{const next=printPreferences({...prefs,[key]:value});setPrefs(next);setDraft(next);try{localStorage.setItem('hms-thermal-printer-v2',JSON.stringify(next))}catch{}};
  return <section className="receipt thermal-receipt" data-print-width={prefs.width} data-print-feed={prefs.feed} data-driver-paper={prefs.driverPaper} data-print-error={model.error||undefined}>
  {data.settings.showLogoOnBill!==false&&data.settings.logoUrl?<img className="thermal-logo" src={data.settings.logoUrl} alt=""/>:null}
  <h2>{data.settings.hotelName}</h2><p className="thermal-title">RESTAURANT BILL</p>
@@ -16,6 +17,6 @@ export default function ThermalReceipt({table,order,data,bill}) {
  <footer className="thermal-footer"><p>THANK YOU!</p><p>VISIT AGAIN</p></footer>
  {model.error&&<p className="no-print form-error" role="alert">{model.error}</p>}
  <button className="print no-print" disabled={!!model.error} onClick={openPrinter}>Print bill</button>
- <details className="no-print thermal-settings"><summary>80 mm printer settings</summary><label>Printable width (mm)<input type="number" min="60" max="76" value={draft.width} onChange={e=>setDraft({...draft,width:e.target.value})} onBlur={()=>save('width',draft.width)}/></label><label>Trailing space (mm)<input type="number" min="0" max="5" value={draft.feed} onChange={e=>setDraft({...draft,feed:e.target.value})} onBlur={()=>save('feed',draft.feed)}/></label><label><input type="checkbox" checked={prefs.driverPaper} onChange={e=>save("driverPaper",e.target.checked)}/>Use printer paper size (fixed-form driver)</label><p>Default: compact measured 80 mm receipt. For a driver that rejects custom lengths, enable printer paper size and choose its supported 80 mm receipt form. Set Portrait, 100% scale, no margins, one copy, and disable headers/footers in Chrome/Edge. Fixed forms can feed unused paper; cutter/feed settings belong to the driver.</p></details>
+ <details className="no-print thermal-settings"><summary>80 mm printer settings</summary><label>Printable width (mm)<input type="number" min="60" max="76" value={draft.width} onChange={e=>setDraft({...draft,width:e.target.value})} onBlur={()=>save('width',draft.width)}/></label><label>Tear-off space (mm)<input type="number" min="0" max="30" value={draft.feed} onChange={e=>setDraft({...draft,feed:e.target.value})} onBlur={()=>save('feed',draft.feed)}/></label><label><input type="checkbox" checked={prefs.driverPaper} onChange={e=>save("driverPaper",e.target.checked)}/>Use printer paper size (fixed-form driver)</label><p>Default: compact measured 80 mm receipt with 15 mm tear-off space (adjustable 0–30 mm). For a driver that rejects custom lengths, enable printer paper size and choose its supported 80 mm receipt form. Set Portrait, 100% scale, no margins, one copy, and disable headers/footers in Chrome/Edge. Fixed forms can feed unused paper; cutter/feed settings belong to the driver.</p></details>
  </section>;
 }

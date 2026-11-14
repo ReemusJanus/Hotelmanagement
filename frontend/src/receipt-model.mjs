@@ -14,7 +14,7 @@ export function receiptModel(order,data,bill={}) {
 }
 export function printPreferences(value={}) {
  const width=Number(value.width),feed=Number(value.feed);
- return {driverPaper:value.driverPaper===true,width:Number.isFinite(width)&&width>=60&&width<=76?width:72,feed:Number.isFinite(feed)&&feed>=0&&feed<=5?feed:1};
+ return {driverPaper:value.driverPaper===true,width:Number.isFinite(width)&&width>=60&&width<=76?width:72,feed:Number.isFinite(feed)&&feed>=0&&feed<=30?feed:15};
 }
 
 // Width must never exceed height: short custom forms can be treated as landscape.

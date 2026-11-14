@@ -1,7 +1,7 @@
 
 :host{display:block;color:#000;background:#fff;font:12px/1.25 Arial,Helvetica,sans-serif;width:80mm;margin:0;padding:0;writing-mode:horizontal-tb;direction:ltr;transform:none}
 .thermal-receipt *{box-sizing:border-box}
-.thermal-receipt{width:var(--printable-width,72mm);max-width:100%;margin:0 auto;padding:1mm 0 var(--trailing-feed,1mm);font:12px/1.25 Arial,Helvetica,sans-serif;color:#000;background:#fff;overflow-wrap:anywhere}
+.thermal-receipt{width:var(--printable-width,72mm);max-width:100%;margin:0 auto;padding:1mm 0 0;font:12px/1.25 Arial,Helvetica,sans-serif;color:#000;background:#fff;overflow-wrap:anywhere}
 .thermal-receipt h2{font:700 16px/1.2 Arial,Helvetica,sans-serif;margin:0 0 1mm;text-align:center}
 .thermal-title{margin:0 0 1mm;text-align:center;font-size:11px;font-weight:700}
 .thermal-logo{display:block;max-width:28mm;max-height:12mm;object-fit:contain;margin:0 auto 1mm;filter:grayscale(1)}
@@ -17,7 +17,7 @@
 .thermal-totals p{display:flex;justify-content:space-between;gap:2mm;margin:0 0 1mm;font:inherit}
 .thermal-totals b{white-space:nowrap;font-variant-numeric:tabular-nums}
 .thermal-totals .thermal-total{border-top:1px dashed #000;padding-top:1mm;font-size:15px;font-weight:700}
-.thermal-footer{text-align:center;border-top:1px dashed #000;margin-top:1mm;padding-top:1mm;font-size:11px}
+.thermal-footer{text-align:center;border-top:1px dashed #000;margin-top:1mm;padding-top:1mm;padding-bottom:var(--trailing-feed,15mm);font-size:11px}
 .thermal-footer p{margin:0}.thermal-items tr,.thermal-meta,.thermal-totals,.thermal-footer{break-inside:avoid}
 .thermal-items thead{display:table-row-group}
 @media print{.thermal-receipt{break-inside:auto}}
