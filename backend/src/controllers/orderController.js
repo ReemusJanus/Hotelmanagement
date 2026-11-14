@@ -1,3 +1,4 @@
+import {isJuiceItem, stationSQL} from '../production-routing.js';
 import { pool } from '../database.js';
 
 async function billFor(orderId, conn = pool) {
@@ -33,7 +34,6 @@ async function refreshOrderProductionStatus(orderId, conn = pool) {
   return next;
 }
 
-const isJuiceCategory = category => String(category || '').trim().toLowerCase() === 'juices';
 
 export const createOrder = async (req, res) => {
   const { portalRole } = req;
@@ -134,11 +134,11 @@ export const updateItemsStatus = async (req, res) => {
   try {
     await conn.beginTransaction();
     const [lines] = await conn.query(
-      'SELECT oi.id,m.category FROM order_items oi JOIN menu_items m ON m.id=oi.menu_id WHERE oi.order_id=? AND oi.batch_no=? FOR UPDATE',
+      `SELECT oi.id,m.category,${stationSQL('m')} FROM order_items oi JOIN menu_items m ON m.id=oi.menu_id WHERE oi.order_id=? AND oi.batch_no=? FOR UPDATE OF oi,m`,
       [req.params.id, batchNo]
     );
     const ids = lines
-      .filter(line => portalRole === 'juicer' ? isJuiceCategory(line.category) : !isJuiceCategory(line.category))
+      .filter(line => portalRole === 'juicer' ? isJuiceItem(line) : !isJuiceItem(line))
       .map(line => line.id);
     if (!ids.length)
       throw Object.assign(new Error(`This kitchen batch has no ${portalRole === 'juicer' ? 'juice' : 'food'} items`), { status: 404 });

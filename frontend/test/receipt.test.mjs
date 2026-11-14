@@ -1,0 +1,12 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {receiptModel,receiptAmount,printPreferences,receiptPageHeight} from '../src/receipt-model.mjs';
+const data={menu:[{id:1,name:'Food',price:999}]};
+test('saved paid prices and totals survive menu price changes',()=>{const order={status:'completed',items:[{menuId:1,qty:2,price:'90.00'}],subtotal:'180.00',tax:'9.00',serviceCharge:'5.00',total:'194.00'};const before=JSON.stringify(order);const m=receiptModel(order,data,{total:1998});assert.equal(m.items[0].amount,180);assert.equal(m.total,194);assert.equal(m.subtotal,180);assert.equal(JSON.stringify(order),before);assert.equal(m.error,'')});
+test('missing saved item prices blocks an inaccurate paid reprint',()=>assert.match(receiptModel({status:'completed',items:[{menuId:1,qty:1}],total:90},data,{items:[{price:999}]}).error,/Stored item prices/));
+test('configured charges and discounts display separately, once',()=>{const m=receiptModel({items:[{menuId:1,qty:1,price:100}],subtotal:100,tax:5,parcelCharges:10,packagingCharges:4,discount:9,total:110},data);assert.deepEqual(m.adjustments.map(x=>x.value),[5,10,4,-9]);assert.equal(m.total,110);assert.equal(m.adjustments.filter(x=>x.label==='Parcel charges').length,1)});
+test('zero stored values are not replaced by current menu prices',()=>{const m=receiptModel({status:'completed',items:[{menuId:1,qty:1,price:0}],subtotal:0,total:0},data);assert.equal(m.total,0);assert.equal(m.items[0].amount,0)});
+test('currency precision and printer preference bounds',()=>{assert.equal(receiptAmount(1250.5),'1,250.50');assert.deepEqual(printPreferences(),{driverPaper:false,width:72,feed:1});assert.deepEqual(printPreferences({width:400,feed:99}),{driverPaper:false,width:72,feed:1});assert.deepEqual(printPreferences({driverPaper:false,width:68,feed:0}),{driverPaper:false,width:68,feed:0})});
+
+test('cancelled orders cannot print as payable bills',()=>assert.match(receiptModel({status:'cancelled',items:[{menuId:1,qty:1,price:90}]},data).error,/Cancelled/));
+
+test('short receipts remain portrait; long receipts use measured height',()=>{assert.equal(receiptPageHeight(180),81);assert.equal(receiptPageHeight(1500),398);assert.throws(()=>receiptPageHeight(NaN));assert.throws(()=>receiptPageHeight(0));assert.equal(printPreferences({driverPaper:true}).driverPaper,true);assert.equal(printPreferences({driverPaper:'true'}).driverPaper,false)});

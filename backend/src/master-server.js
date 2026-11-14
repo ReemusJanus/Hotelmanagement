@@ -116,7 +116,7 @@ app.use((req, res, next) => {
     return next();
   }
   res.on('finish', () => {
-    if (res.statusCode < 400) {
+    if (res.statusCode < 400 && !res.locals?.skipMutation) {
       const database = req.portalSession?.companyDatabase || 'master';
       broadcastChange(database, req.path, res.locals?.broadcastDetails || {});
     }
@@ -130,7 +130,7 @@ const roleRouters = Object.fromEntries(
     role,
     createRoleRouter(role, {
       onMutation: async req => {
-        if (/^\/api\/staff(?:\/|$)/.test(req.originalUrl) || ['/api/juicer-login', '/api/profile'].includes(req.path)) {
+        if (/^\/api\/(?:staff|kitchen-staff)(?:\/|$)/.test(req.originalUrl) || ['/api/juicer-login', '/api/profile'].includes(req.path)) {
           await syncCompanyUsers(req.portalSession.companyDatabase);
         }
       }

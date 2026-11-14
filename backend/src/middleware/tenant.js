@@ -83,11 +83,11 @@ export function createPortalAuthMiddleware({ masterPool, onMutation = async () =
 /**
  * Tenant scoping middleware that attaches the PostgreSQL search_path context
  */
-export function tenantContextMiddleware(req, _res, next) {
-  const requested = req.portalSession?.companyDatabase || req.headers['x-company-database'];
-  const database = /^(?:knockout(?:_[0-9]+)?|tenant_[a-z][a-z0-9_]{1,54})$/.test(requested)
-    ? requested
-    : (process.env.DB_NAME || 'knockout');
+export function tenantContextMiddleware(req, res, next) {
+  const database = req.portalSession?.companyDatabase;
+  if (!/^(?:knockout(?:_[0-9]+)?|tenant_[a-z][a-z0-9_]{1,54})$/.test(database || '')) {
+    return res.status(401).json({message:'A verified tenant session is required'});
+  }
   runWithTenant(database, next);
 }
 

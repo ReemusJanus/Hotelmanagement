@@ -1,3 +1,13 @@
+import {syncTableSessions} from '../table-sessions.js';
+export {cancelOrder,deleteOrderItem} from '../order-cancellation.js';
+import {actor,staffRequests} from '../staff-approval.js';
+export {reviewStaff} from '../staff-approval.js';
+export {updateOrderItemStatus,updateBatchHandoff,updateOrderStatus} from '../production-workflow.js';
+import {currentReservation} from '../reservations.js';
+export {checkInBooking, cancelBooking as deleteBooking} from '../reservations.js';
+import {isJuiceItem, stationSQL} from '../production-routing.js';
+import {getDashboard} from '../dashboard.js';
+import {validTenant} from '../middleware/auth.js';
 import { imageExtension } from '../security.js';
 import { assignDailyBillNumber } from '../billing-number.js';
 import crypto from 'node:crypto';
@@ -52,7 +62,6 @@ export async function billFor(orderId, conn = pool) {
   return { items: items.map(i => ({ ...i, price: Number(i.price) })), subtotal, tax, cgst, service, total: subtotal };
 }
 
-export const isJuiceCategory = category => String(category || '').trim().toLowerCase() === 'juices';
 
 export async function refreshOrderProductionStatus(orderId, conn = pool) {
   const [lines] = await conn.query('SELECT production_status "itemStatus" FROM order_items WHERE order_id=?', [orderId]);
@@ -92,12 +101,13 @@ export async function getHealth(req, res) {
 }
 
 export async function getStateController(req, res) {
-  const role = req.portalSession?.role || req.headers['x-portal-role'] || 'admin';
-  const database = String(req.headers['x-company-database'] || process.env.DB_NAME || 'knockout');
+  const role = req.portalSession?.role;
+  const database = req.portalSession?.companyDatabase;
+  if (!validTenant(database) || !['admin','waiter','chef','juicer'].includes(role)) return res.status(401).json({message:'A verified tenant session is required'});
   const now = Date.now();
   let cached = stateCache.get(database);
   if (!cached || cached.expiresAt <= now) {
-    const promise = getState().catch(error => {
+    const promise = Promise.all([getState(),getDashboard(pool)]).then(([state,dashboard])=>({...state,dashboard})).catch(error => {
       stateCache.delete(database);
       throw error;
     });
@@ -106,7 +116,12 @@ export async function getStateController(req, res) {
   }
   const state = structuredClone(await cached.promise);
   state.companyDatabase = database;
+  state.staffRequests = await staffRequests(role,req.portalSession.id);
+  state.users=state.users.map(u=>u.approvalStatus && u.approvalStatus!=='approved'?{...u,pin:undefined}:u);
+  if(role==='chef')state.kitchenStaff=state.kitchenStaff.filter(x=>x.approvalStatus==='approved'||Number(x.requestedBy)===Number(req.portalSession.id));
+  else if(role!=='admin')delete state.kitchenStaff;
   if (role !== 'admin') {
+    delete state.dashboard;
     if (role !== 'chef') {
       delete state.inventory;
       delete state.stockRequests;
@@ -176,6 +191,8 @@ export async function createBooking(req, res) {
   const bookingTime = String(req.body.bookingTime || '');
   const durationMinutes = Number(req.body.durationMinutes || 90);
   const customerPhone = String(req.body.customerPhone || '').replace(/[\s()-]/g, '');
+  const guestName=String(req.body.guestName||'Customer').trim(), notes=String(req.body.notes||'').trim(), guestCount=req.body.guestCount ? Number(req.body.guestCount) : null;
+  if(!guestName||guestName.length>120||notes.length>1000||(guestCount!==null&&(!Number.isInteger(guestCount)||guestCount<1)))return res.status(400).json({message:'Provide a valid guest name, guest count and notes (up to 1000 characters)'});
 
   if (!tableId || !/^\d{4}-\d{2}-\d{2}$/.test(bookingDate) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(bookingTime) || !Number.isInteger(durationMinutes) || durationMinutes < 30 || durationMinutes > 240 || !/^\+?\d{8,15}$/.test(customerPhone)) {
     return res.status(400).json({ message: 'Table, future date, time, 30–240 minute duration, and a valid customer phone are required' });
@@ -185,14 +202,15 @@ export async function createBooking(req, res) {
   let bookingId, message;
   try {
     await conn.beginTransaction();
-    const [[table]] = await conn.query('SELECT id,table_number number,active FROM restaurant_tables WHERE id=? FOR UPDATE', [tableId]);
+    const [[table]] = await conn.query('SELECT id,table_number number,active,seats FROM restaurant_tables WHERE id=? FOR UPDATE', [tableId]);
     if (!table || !table.active) throw Object.assign(new Error('Table is not available'), { status: 404 });
+    if(guestCount>table.seats)throw Object.assign(new Error('Guest count exceeds table capacity'),{status:400});
     const [[timeCheck]] = await conn.query('SELECT (?::date + ?::time) <= NOW() "inPast"', [bookingDate, bookingTime]);
     if (timeCheck.inPast) throw Object.assign(new Error('Choose a future booking date and time'), { status: 400 });
-    const [[conflict]] = await conn.query("SELECT id,booking_time \"bookingTime\",duration_minutes \"durationMinutes\" FROM bookings WHERE table_id=? AND booking_date=? AND status='confirmed' AND (booking_date::date + booking_time::time) < ((?::date + ?::time) + (?)::double precision * INTERVAL '1 minute') AND ((booking_date::date + booking_time::time) + (duration_minutes)::double precision * INTERVAL '1 minute') > (?::date + ?::time) LIMIT 1 FOR UPDATE", [tableId, bookingDate, bookingDate, bookingTime, durationMinutes, bookingDate, bookingTime]);
+    const [[conflict]] = await conn.query("SELECT id,booking_time \"bookingTime\",duration_minutes \"durationMinutes\" FROM bookings WHERE table_id=? AND (status='confirmed' OR (status='seated' AND EXISTS(SELECT 1 FROM restaurant_tables rt WHERE rt.active_booking_id=bookings.id))) AND (booking_date::date + booking_time::time) < ((?::date + ?::time) + (?)::double precision * INTERVAL '1 minute') AND ((booking_date::date + booking_time::time) + (duration_minutes)::double precision * INTERVAL '1 minute') > (?::date + ?::time) LIMIT 1 FOR UPDATE", [tableId, bookingDate, bookingTime, durationMinutes, bookingDate, bookingTime]);
     if (conflict) throw Object.assign(new Error(`Table ${table.number} is already locked at that time`), { status: 409 });
     message = `KnockOUT booking confirmed: Table ${table.number} on ${bookingDate.split('-').reverse().join('-')} at ${bookingTime}, reserved for ${durationMinutes} minutes.`;
-    const [result] = await conn.query("INSERT INTO bookings (table_id,guest_name,customer_phone,booking_date,booking_time,duration_minutes,status,notification_status,notification_message) VALUES (?,'Customer',?,?,?,?,'confirmed','queued',?)", [tableId, customerPhone, bookingDate, bookingTime, durationMinutes, message]);
+    const [result] = await conn.query("INSERT INTO bookings (table_id,guest_name,customer_phone,booking_date,booking_time,duration_minutes,status,notification_status,notification_message,guest_count,notes) VALUES (?,?,?,?,?,?,'confirmed','queued',?,?,?)", [tableId, guestName, customerPhone, bookingDate, bookingTime, durationMinutes, message,guestCount,notes]);
     bookingId = result.insertId;
     await conn.commit();
   } catch (e) {
@@ -208,13 +226,6 @@ export async function createBooking(req, res) {
   res.status(201).json({ ok: true, id: bookingId, notificationStatus: notification.status, notificationDetail: notification.detail || '' });
 }
 
-export async function deleteBooking(req, res) {
-  if (req.portalSession.role !== 'admin') return res.status(403).json({ message: 'Only Admin can cancel table bookings' });
-  const [result] = await pool.query("UPDATE bookings SET status='cancelled' WHERE id=? AND status='confirmed'", [req.params.id]);
-  if (!result.affectedRows) return res.status(404).json({ message: 'Active booking not found' });
-  res.json({ ok: true });
-}
-
 // Orders
 export async function createOrder(req, res) {
   if (req.portalSession.role !== 'waiter') return res.status(403).json({ message: 'Table orders must be created from the Waiter portal' });
@@ -226,9 +237,19 @@ export async function createOrder(req, res) {
     if (!table) throw Object.assign(new Error('Table not found'), { status: 404 });
     if (table.status === 'cleaning') throw Object.assign(new Error('This table is under cleaning. Mark it Available or Reserved before ordering.'), { status: 409 });
     if (table.order_id) throw Object.assign(new Error('This table already has an active order'), { status: 400 });
-    const [[activeBooking]] = await conn.query("SELECT id FROM bookings WHERE table_id=? AND status='confirmed' AND NOW() >= (booking_date::date + booking_time::time) AND NOW() < ((booking_date::date + booking_time::time) + (duration_minutes)::double precision * INTERVAL '1 minute') LIMIT 1 FOR UPDATE", [table.id]);
-    if (activeBooking) throw Object.assign(new Error('This table is locked for a confirmed reservation at the current time'), { status: 409 });
-    const [result] = await conn.query("INSERT INTO orders (table_id,guest_name,waiter,status,payment_status,created_at) VALUES (?,?,?,'new','unpaid',NOW())", [table.id, req.body.guestName || table.guest_name || 'Walk-in Guest', req.body.waiter || 'Waiter']);
+    if(!table.active)throw Object.assign(new Error('Table is inactive'),{status:409});
+    const activeBooking=await currentReservation(conn,table.id);
+    if(activeBooking)throw Object.assign(new Error('Seat the reserved guest before ordering'),{status:409});
+    let bookingId=null,guestName=req.body.guestName || table.guest_name || 'Walk-in Guest';
+    if(table.active_booking_id){
+      if(Number(req.body.bookingId)!==Number(table.active_booking_id))throw Object.assign(new Error('This table belongs to the seated reservation'),{status:409});
+      const [[seated]]=await conn.query("SELECT id,guest_name FROM bookings WHERE id=? AND table_id=? AND status='seated' FOR UPDATE",[table.active_booking_id,table.id]);
+      if(!seated)throw Object.assign(new Error('Seated reservation is no longer valid'),{status:409});
+      bookingId=seated.id;guestName=seated.guest_name;
+    }else if(req.body.bookingId)throw Object.assign(new Error('Check in the reservation first'),{status:409});
+    const [[waiter]]=await conn.query("SELECT id,name FROM users WHERE id=? AND role='waiter' AND active=TRUE AND deleted_at IS NULL",[req.portalSession.id]);
+    if(!waiter)throw Object.assign(new Error('Active waiter account required'),{status:403});
+    const [result] = await conn.query("INSERT INTO orders (table_id,booking_id,guest_name,waiter,status,payment_status,created_at) VALUES (?,?,?,?,'new','unpaid',NOW())", [table.id,bookingId,guestName,waiter.name]);
     for (const item of req.body.items) {
       const qty = Math.max(1, Number(item.qty) || 1), note = item.note || '';
       const [[menu]] = await conn.query('SELECT price FROM menu_items WHERE id=? AND available=TRUE', [item.menuId]);
@@ -245,7 +266,7 @@ export async function createOrder(req, res) {
         await conn.query('INSERT INTO order_items (order_id,menu_id,quantity,note,price,batch_no) VALUES (?,?,?,?,?,1)', [result.insertId, item.menuId, qty, note, menu.price]);
       }
     }
-    await conn.query("UPDATE restaurant_tables SET status='occupied',guest_name=?,booking_time='',order_id=? WHERE id=?", [req.body.guestName || table.guest_name || 'Walk-in Guest', result.insertId, table.id]);
+    await conn.query("UPDATE restaurant_tables SET status='occupied',guest_name=?,booking_time='',order_id=? WHERE id=?", [guestName, result.insertId, table.id]);
     await conn.commit();
     res.status(201).json({ id: result.insertId, bill: await billFor(result.insertId) });
   } catch (e) {
@@ -262,9 +283,11 @@ export async function addOrderItems(req, res) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [[order]] = await conn.query('SELECT id,status FROM orders WHERE id=? FOR UPDATE', [req.params.id]);
+    const [[order]] = await conn.query('SELECT id,status,table_id,payment_status FROM orders WHERE id=? FOR UPDATE', [req.params.id]);
     if (!order) throw Object.assign(new Error('Order not found'), { status: 404 });
-    if (['billing_requested', 'completed'].includes(order.status)) throw Object.assign(new Error('This order is already in billing'), { status: 409 });
+    if(req.body.sessionId!==undefined&&Number(req.body.sessionId)!==order.id||req.body.tableId!==undefined&&Number(req.body.tableId)!==Number(order.table_id))throw Object.assign(new Error('Selected group does not belong to this order/table'),{status:409});
+    if(order.payment_status==='paid')throw Object.assign(new Error('Paid groups cannot be changed'),{status:409});
+    if (['billing_requested', 'completed', 'cancelled'].includes(order.status)) throw Object.assign(new Error('This order is already in billing'), { status: 409 });
     const [[latest]] = await conn.query('SELECT COALESCE(MAX(batch_no),0) "batchNo" FROM order_items WHERE order_id=?', [order.id]);
     const maxBatch = Number(latest.batchNo) || 1;
     // Explicit rounds can be edited only before preparation; otherwise create a fresh round.
@@ -309,34 +332,9 @@ export async function addOrderItems(req, res) {
         );
       }
     }
-    await conn.query("UPDATE orders SET status='new' WHERE id=? AND status IN ('new','preparing','ready')", [order.id]);
+    await conn.query("UPDATE orders SET status='new' WHERE id=? AND status IN ('new','preparing','ready','collected','received','served')", [order.id]);
     await conn.commit();
     res.status(201).json({ id: order.id, batchNo, bill: await billFor(order.id) });
-  } catch (e) {
-    await conn.rollback();
-    throw e;
-  } finally {
-    conn.release();
-  }
-}
-
-export async function updateOrderItemStatus(req, res) {
-  const role = req.portalSession.role;
-  if (!['chef', 'juicer'].includes(role)) return res.status(403).json({ message: 'Chef or Juicer access required' });
-  const status = req.body.status, batchNo = Math.max(1, Number(req.body.batchNo) || 1);
-  if (!['new', 'preparing', 'ready'].includes(status)) return res.status(400).json({ message: 'Invalid preparation status' });
-  const conn = await pool.getConnection();
-  try {
-    await conn.beginTransaction();
-    await conn.query('SELECT id FROM orders WHERE id=? FOR UPDATE', [req.params.id]);
-    const [lines] = await conn.query('SELECT oi.id,oi.production_status,m.category FROM order_items oi JOIN menu_items m ON m.id=oi.menu_id WHERE oi.order_id=? AND oi.batch_no=? FOR UPDATE', [req.params.id, batchNo]);
-    if (status === 'new' && lines.some(line => (line.production_status || 'new') !== 'new')) throw Object.assign(new Error('Started preparation cannot be reset to New'), { status: 409 });
-    const ids = lines.filter(line => role === 'juicer' ? isJuiceCategory(line.category) : !isJuiceCategory(line.category)).map(line => line.id);
-    if (!ids.length) throw Object.assign(new Error(`This kitchen batch has no ${role === 'juicer' ? 'juice' : 'food'} items`), { status: 404 });
-    await conn.query(`UPDATE order_items SET production_status=? WHERE id IN (${ids.map(() => '?').join(',')})`, [status, ...ids]);
-    const orderStatus = await refreshOrderProductionStatus(req.params.id, conn);
-    await conn.commit();
-    res.json({ ok: true, status, orderStatus, batchNo, updatedItems: ids.length });
   } catch (e) {
     await conn.rollback();
     throw e;
@@ -353,9 +351,9 @@ export async function markOrderItemUnavailable(req, res) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [[item]] = await conn.query('SELECT id,name,category FROM menu_items WHERE id=?', [menuId]);
+    const [[item]] = await conn.query(`SELECT id,name,category,${stationSQL()} FROM menu_items WHERE id=?`, [menuId]);
     if (!item) throw Object.assign(new Error('Menu item not found'), { status: 404 });
-    if (role === 'juicer' && !isJuiceCategory(item.category)) {
+    if (role === 'chef' && isJuiceItem(item) || role === 'juicer' && !isJuiceItem(item)) {
       throw Object.assign(new Error('Juicers can only update juice availability'), { status: 403 });
     }
 
@@ -403,108 +401,14 @@ export async function markOrderItemUnavailable(req, res) {
   }
 }
 
-export async function deleteOrderItem(req, res) {
-  const role = req.portalSession.role;
-  if (!['waiter', 'admin'].includes(role)) return res.status(403).json({ message: 'Waiter or Admin access required' });
-  const orderId = Number(req.params.id);
-  const menuId = Number(req.params.menuId);
-  const batchNo = req.query.batchNo ? Number(req.query.batchNo) : null;
-  const conn = await pool.getConnection();
-  try {
-    await conn.beginTransaction();
-    const [[order]] = await conn.query('SELECT id,status,table_id "tableId" FROM orders WHERE id=? FOR UPDATE', [orderId]);
-    if (!order) throw Object.assign(new Error('Order not found'), { status: 404 });
-    if (['billing_requested', 'completed'].includes(order.status)) {
-      throw Object.assign(new Error('Cannot remove items from an order in billing or completed'), { status: 409 });
-    }
-
-    const [allLines] = await conn.query('SELECT menu_id, batch_no, production_status, handoff_status FROM order_items WHERE order_id=? FOR UPDATE', [orderId]);
-    const affectedRounds = new Set(allLines.filter(line => Number(line.menu_id) === menuId && (!batchNo || Number(line.batch_no) === batchNo)).map(line => Number(line.batch_no)));
-    if (allLines.some(line => affectedRounds.has(Number(line.batch_no)) && ((line.production_status || 'new') !== 'new' || (line.handoff_status || 'pending') !== 'pending'))) {
-      throw Object.assign(new Error('Preparation has started. Items in this round cannot be removed.'), { status: 409 });
-    }
-    let deleteQuery = 'DELETE FROM order_items WHERE order_id=? AND menu_id=?';
-    const deleteParams = [orderId, menuId];
-    if (batchNo) {
-      deleteQuery += ' AND batch_no=?';
-      deleteParams.push(batchNo);
-    }
-    const [result] = await conn.query(deleteQuery, deleteParams);
-    if (!result.affectedRows) throw Object.assign(new Error('Item not found in order'), { status: 404 });
-
-    const [remaining] = await conn.query('SELECT id FROM order_items WHERE order_id=?', [orderId]);
-    if (remaining.length > 0) {
-      await refreshOrderProductionStatus(orderId, conn);
-    } else {
-      if (order.tableId) {
-        await conn.query("UPDATE restaurant_tables SET status='available', guest_name='', order_id=NULL WHERE id=? AND order_id=?", [order.tableId, orderId]);
-      }
-      await conn.query("UPDATE orders SET status='completed' WHERE id=?", [orderId]);
-    }
-
-    await conn.commit();
-    res.json({ ok: true, orderId, menuId, remainingCount: remaining.length });
-  } catch (e) {
-    await conn.rollback();
-    throw e;
-  } finally {
-    conn.release();
-  }
-}
-
-export async function updateBatchHandoff(req, res) {
-  const role = req.portalSession.role;
-  const status = req.body.status, batchNo = Math.max(1, Number(req.params.batchNo) || 1);
-  const requiredRole = status === 'collected' ? 'chef' : status === 'received' ? 'waiter' : '';
-  if (!requiredRole) return res.status(400).json({ message: 'Invalid round handoff status' });
-  if (role !== requiredRole) return res.status(403).json({ message: status === 'collected' ? 'Only the Chef can confirm collection' : 'Only the Waiter can confirm receipt at the table' });
-  const conn = await pool.getConnection();
-  try {
-    await conn.beginTransaction();
-    const [[order]] = await conn.query('SELECT id,order_type "orderType" FROM orders WHERE id=? FOR UPDATE', [req.params.id]);
-    if (!order) throw Object.assign(new Error('Order not found'), { status: 404 });
-    if (order.orderType === 'parcel') throw Object.assign(new Error('Parcel orders use the Admin handoff flow'), { status: 409 });
-    const [lines] = await conn.query('SELECT id,production_status "itemStatus",handoff_status "handoffStatus" FROM order_items WHERE order_id=? AND batch_no=? FOR UPDATE', [order.id, batchNo]);
-    if (!lines.length) throw Object.assign(new Error('Kitchen round not found'), { status: 404 });
-    if (status === 'collected' && !lines.every(line => line.itemStatus === 'ready')) throw Object.assign(new Error('Wait until every item in this round is ready'), { status: 409 });
-    if (status === 'received' && !lines.every(line => ['collected', 'received'].includes(line.handoffStatus))) throw Object.assign(new Error('The Chef must confirm this round was collected first'), { status: 409 });
-    await conn.query('UPDATE order_items SET handoff_status=? WHERE order_id=? AND batch_no=?', [status, order.id, batchNo]);
-    const [allLines] = await conn.query('SELECT production_status "itemStatus",handoff_status "handoffStatus" FROM order_items WHERE order_id=?', [order.id]);
-    const orderStatus = allLines.every(line => line.handoffStatus === 'received') ? 'received' : allLines.every(line => line.itemStatus === 'ready') ? 'ready' : allLines.every(line => line.itemStatus === 'new') ? 'new' : 'preparing';
-    await conn.query("UPDATE orders SET status=? WHERE id=? AND status NOT IN ('billing_requested','completed')", [orderStatus, order.id]);
-    await conn.commit();
-    res.json({ ok: true, status, batchNo, orderStatus });
-  } catch (e) {
-    await conn.rollback();
-    throw e;
-  } finally {
-    conn.release();
-  }
-}
-
-export async function updateOrderStatus(req, res) {
-  const role = req.portalSession.role;
-  const next = req.body.status;
-  if (!['collected', 'received'].includes(next)) return res.status(400).json({ message: 'Invalid service handoff status' });
-  const requiredRole = next === 'collected' ? 'chef' : 'waiter';
-  if (role !== requiredRole) return res.status(403).json({ message: next === 'collected' ? 'Only the Chef can confirm collection from the kitchen' : 'Only the Waiter can confirm receipt at the table' });
-  const [[order]] = await pool.query('SELECT id,order_type "orderType",status FROM orders WHERE id=?', [req.params.id]);
-  if (!order) return res.status(404).json({ message: 'Order not found' });
-  if (order.orderType === 'parcel') return res.status(409).json({ message: 'Parcel orders use the Admin handoff flow' });
-  const expected = next === 'collected' ? 'ready' : 'collected';
-  if (order.status !== expected) return res.status(409).json({ message: next === 'collected' ? 'Wait until all food and juice items are ready' : 'The Chef must confirm collection from the kitchen first' });
-  await pool.query('UPDATE orders SET status=? WHERE id=?', [next, order.id]);
-  res.json({ ok: true, status: next });
-}
-
-export async function requestBill(req, res) {
-  if (req.portalSession.role !== 'waiter') return res.status(403).json({ message: 'Billing requests must come from the Waiter portal' });
-  const [[order]] = await pool.query('SELECT id,table_id "tableId",status,payment_status "paymentStatus" FROM orders WHERE id=?', [req.params.id]);
-  if (!order) return res.status(404).json({ message: 'Order not found' });
-  if (order.paymentStatus === 'paid' || order.status === 'completed') return res.status(409).json({ message: 'This order is already completed' });
-  if (!['received', 'served', 'billing_requested'].includes(order.status)) return res.status(409).json({ message: 'Confirm that the order was received at the table first' });
-  await pool.query("UPDATE orders SET status='billing_requested' WHERE id=?", [order.id]);
-  res.json({ ok: true, orderId: order.id, tableId: order.tableId, bill: await billFor(order.id) });
+export async function requestBill(req,res){
+ if(req.portalSession.role!=='waiter')return res.status(403).json({message:'Billing requests must come from the Waiter portal'});
+ const conn=await pool.getConnection();try{await conn.beginTransaction();
+ const [[order]]=await conn.query('SELECT id,table_id "tableId",status,payment_status "paymentStatus" FROM orders WHERE id=? FOR UPDATE',[req.params.id]);
+ if(!order)throw Object.assign(new Error('Order not found'),{status:404});
+ if(order.paymentStatus==='paid'||!['received','served','billing_requested'].includes(order.status))throw Object.assign(new Error('Confirm this group received its order before requesting the bill'),{status:409});
+ await conn.query("UPDATE orders SET status='billing_requested' WHERE id=?",[order.id]);const bill=await billFor(order.id,conn);await conn.commit();res.json({ok:true,orderId:order.id,tableId:order.tableId,bill});
+ }catch(e){await conn.rollback();throw e}finally{conn.release()}
 }
 
 export async function getOrderBill(req, res) {
@@ -515,12 +419,16 @@ export async function getOrderBill(req, res) {
 
 export async function finalizeOrder(req, res) {
   if (req.portalSession.role !== 'admin') return res.status(403).json({ message: 'Only Admin can finalize payments' });
-  const bill = await billFor(req.params.id);
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    const [[target]]=await conn.query('SELECT table_id FROM orders WHERE id=?',[req.params.id]);
+    if(target?.table_id)await conn.query('SELECT id FROM restaurant_tables WHERE id=? FOR UPDATE',[target.table_id]);
     const [[order]] = await conn.query('SELECT * FROM orders WHERE id=? FOR UPDATE', [req.params.id]);
     if (!order) throw Object.assign(new Error('Order not found'), {status:404});
+    const bill=await billFor(req.params.id,conn);
+    if(!bill.items.length)throw Object.assign(new Error('An empty group cannot be billed. Cancel the session instead.'),{status:409});
+    if (order.status === 'cancelled') throw Object.assign(new Error('Cancelled orders cannot be billed'), {status:409});
     if (order.status === 'completed') {
       await conn.commit();
       return res.json({id:order.id, paymentStatus:order.payment_status, paymentMethod:order.payment_method, billNumber:order.bill_number, billDate:order.bill_date, bill});
@@ -529,7 +437,7 @@ export async function finalizeOrder(req, res) {
     if (!paymentMethod) throw Object.assign(new Error('Record Cash or Card / UPI payment before completing this order'), {status:400});
     const numbering = await assignDailyBillNumber(conn, order.id);
     await conn.query("UPDATE orders SET status='completed',payment_status='paid',payment_method=?,subtotal=?,tax=?,service_charge=?,total=?,completed_at=NOW() WHERE id=?", [paymentMethod, bill.subtotal, bill.tax, bill.service, bill.total, order.id]);
-    if (order.table_id) await conn.query("UPDATE restaurant_tables SET status='cleaning',guest_name='',booking_time='',order_id=NULL WHERE id=?", [order.table_id]);
+    if (order.table_id) await syncTableSessions(conn,order.table_id,{releaseReservation:true,emptyStatus:order.session_key?'available':'cleaning'});
     await conn.commit();
     res.json({ id: order.id, paymentStatus: 'paid', paymentMethod, ...numbering, bill });
   } catch (e) {
@@ -576,7 +484,7 @@ export async function markOrderPaid(req, res) {
     const [[order]] = await conn.query('SELECT id,order_type,status,payment_status FROM orders WHERE id=? FOR UPDATE', [req.params.id]);
     if (!order) return res.status(404).json({ message: 'Order not found' });
     if (order.order_type !== 'parcel') return res.status(400).json({ message: 'Advance payment is only available for parcel orders' });
-    if (order.status === 'completed') return res.status(409).json({ message: 'Parcel is already completed' });
+    if (['completed','cancelled'].includes(order.status)) return res.status(409).json({ message: 'Parcel is already completed' });
     const bill = await billFor(order.id, conn);
     await conn.query("UPDATE orders SET payment_status='paid',payment_method=?,subtotal=?,tax=?,service_charge=?,total=? WHERE id=?", [req.body.paymentMethod, bill.subtotal, bill.tax, bill.service, bill.total, order.id]);
     await conn.commit();
@@ -600,8 +508,11 @@ export async function updateTableStatus(req, res) {
     await conn.beginTransaction();
     const [[table]] = await conn.query('SELECT * FROM restaurant_tables WHERE id=? FOR UPDATE', [req.params.id]);
     if (!table) throw Object.assign(new Error('Table not found'), { status: 404 });
+    if(table.active_booking_id)throw Object.assign(new Error('Finish the seated reservation before changing table status'),{status:409});
+    const reservation=await currentReservation(conn,table.id);
     if (table.order_id && status !== 'occupied') throw Object.assign(new Error('Finalize the active bill before changing this table'), { status: 409 });
     if (status === 'occupied' && !table.order_id) throw Object.assign(new Error('Create an order to mark this table occupied'), { status: 409 });
+    if(reservation&&status==='available'){await conn.query("UPDATE restaurant_tables SET status='reserved',booking_time=? WHERE id=?",[reservation.booking_time,table.id]);await conn.commit();return res.json({ok:true,status:'reserved'});}
     if (status === 'reserved') await conn.query("UPDATE restaurant_tables SET status='reserved',guest_name='',booking_time=? WHERE id=?", [req.body.bookingTime || table.booking_time || '', table.id]);
     else if (status === 'occupied') await conn.query("UPDATE restaurant_tables SET status='occupied' WHERE id=?", [table.id]);
     else await conn.query("UPDATE restaurant_tables SET status=?,guest_name=?,booking_time=? WHERE id=?", [status, '', '', table.id]);
@@ -631,12 +542,16 @@ export async function createTable(req, res) {
 
 export async function deleteTable(req, res) {
   if (req.portalSession.role !== 'admin') return res.status(403).json({ message: 'Admin access required' });
-  const [[table]] = await pool.query('SELECT id,table_number number,order_id "orderId" FROM restaurant_tables WHERE id=? AND active=TRUE', [req.params.id]);
-  if (!table) return res.status(404).json({ message: 'Table not found' });
-  if (table.orderId) return res.status(409).json({ message: 'Finalize the active bill before deleting this table' });
-  await pool.query("UPDATE bookings SET status='cancelled' WHERE table_id=? AND status='confirmed'", [table.id]);
-  await pool.query("UPDATE restaurant_tables SET active=FALSE,status='available',guest_name='',booking_time='',order_id=NULL WHERE id=?", [table.id]);
-  res.json({ ok: true, number: table.number });
+  const conn=await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[table]]=await conn.query('SELECT id,table_number number,order_id,active_booking_id FROM restaurant_tables WHERE id=? AND active=TRUE FOR UPDATE',[req.params.id]);
+    if(!table)throw Object.assign(new Error('Table not found'),{status:404});
+    if(table.order_id||table.active_booking_id)throw Object.assign(new Error('Finish the active order or seated reservation before deleting this table'),{status:409});
+    await conn.query("UPDATE bookings SET status='cancelled' WHERE table_id=? AND status='confirmed'",[table.id]);
+    await conn.query("UPDATE restaurant_tables SET active=FALSE,status='available',guest_name='',booking_time='',order_id=NULL WHERE id=?",[table.id]);
+    await conn.commit();res.json({ok:true,number:table.number});
+  }catch(e){await conn.rollback();throw e}finally{conn.release()}
 }
 
 // Inventory
@@ -798,6 +713,9 @@ export async function updateSettings(req, res) {
   const showLogo = boolean('showLogoOnBill'), watermark = boolean('showLogoWatermark'), remove = boolean('removeLogo');
   if (!String(body.hotelName || '').trim() || String(body.hotelName).length > 120) throw Object.assign(new Error('Business name is required (maximum 120 characters)'), {status:400});
   if (req.file && remove) throw Object.assign(new Error('Choose either upload or remove logo'), {status:400});
+  if (body.timezone !== undefined && body.timezone !== '') {
+    try { new Intl.DateTimeFormat('en',{timeZone:body.timezone}).format(); } catch { throw Object.assign(new Error('Use a valid IANA time zone, such as Asia/Kolkata'),{status:400}); }
+  }
   let uploaded;
   if (req.file) {
     if (req.file.size > 2*1024*1024) throw Object.assign(new Error('Logo must be 2 MB or smaller'), {status:413});
@@ -812,9 +730,9 @@ export async function updateSettings(req, res) {
     const [[settings]] = await connection.query('SELECT logo_url,logo_storage_key FROM settings WHERE id=1 FOR UPDATE');
     if (!settings) throw new Error('Restaurant settings not found');
     previous = settings.logo_storage_key;
-    await connection.query('UPDATE settings SET hotel_name=?,tax_rate=?,cgst_rate=?,service_charge=?,currency=?,logo_url=?,logo_storage_key=?,show_logo_on_bill=COALESCE(?,show_logo_on_bill),show_logo_watermark=COALESCE(?,show_logo_watermark) WHERE id=1',
-      [body.hotelName,body.taxRate,body.cgstRate,body.serviceCharge,body.currency,remove?null:uploaded?.url||settings.logo_url,remove?null:uploaded?.objectName||settings.logo_storage_key,showLogo,watermark]);
-    [[saved]] = await connection.query('SELECT hotel_name "hotelName",tax_rate "taxRate",cgst_rate "cgstRate",service_charge "serviceCharge",currency,logo_url "logoUrl",show_logo_on_bill "showLogoOnBill",show_logo_watermark "showLogoWatermark" FROM settings WHERE id=1');
+    await connection.query('UPDATE settings SET hotel_name=?,tax_rate=?,cgst_rate=?,service_charge=?,currency=?,timezone=COALESCE(?,timezone),logo_url=?,logo_storage_key=?,show_logo_on_bill=COALESCE(?,show_logo_on_bill),show_logo_watermark=COALESCE(?,show_logo_watermark) WHERE id=1',
+      [body.hotelName,body.taxRate,body.cgstRate,body.serviceCharge,body.currency,body.timezone===undefined?null:body.timezone,remove?null:uploaded?.url||settings.logo_url,remove?null:uploaded?.objectName||settings.logo_storage_key,showLogo,watermark]);
+    [[saved]] = await connection.query('SELECT hotel_name "hotelName",tax_rate "taxRate",cgst_rate "cgstRate",service_charge "serviceCharge",currency,timezone,logo_url "logoUrl",show_logo_on_bill "showLogoOnBill",show_logo_watermark "showLogoWatermark" FROM settings WHERE id=1');
     await connection.commit();
   } catch(error) {
     await connection?.rollback();
@@ -879,7 +797,7 @@ export async function createStaff(req, res) {
   if (req.portalSession.role !== 'admin') return res.status(403).json({ message: 'Admin access required' });
   const { name, role, phone = '', payType = 'monthly', payRate = 0 } = req.body;
   if (!name || !['admin', 'waiter', 'chef'].includes(role) || !['daily', 'monthly'].includes(payType)) return res.status(400).json({ message: 'Name, role, and Daily/Monthly salary basis are required' });
-  if (['admin', 'chef'].includes(role)) {
+  if (role === 'admin') {
     const [[existing]] = await pool.query('SELECT id FROM users WHERE role=? AND deleted_at IS NULL LIMIT 1', [role]);
     if (existing) return res.status(409).json({ message: role === 'admin' ? 'This company already has its single Admin login.' : 'This company already has its single Head Chef login. Add other chefs from Chef Management without PINs.' });
   }
@@ -890,72 +808,89 @@ export async function createStaff(req, res) {
 
 export async function updateStaff(req, res) {
   if (req.portalSession.role !== 'admin') return res.status(403).json({ message: 'Admin access required' });
+  const [[approval]]=await pool.query('SELECT approval_status FROM users WHERE id=? AND deleted_at IS NULL',[req.params.id]);
+  if(approval && approval.approval_status!=='approved')return res.status(409).json({message:'Review this staff request through Pending Approvals first'});
   const { name, role, pin, phone = '', payType = 'monthly', payRate = 0, active = true } = req.body;
   if (!['admin', 'waiter', 'chef', 'juicer'].includes(role) || !/^[0-9]{6}$/.test(String(pin || '')) || !['daily', 'monthly'].includes(payType)) return res.status(400).json({ message: 'Valid role, unique 6-digit PIN, and Daily/Monthly salary basis are required' });
-  if (['admin', 'chef', 'juicer'].includes(role)) {
+  if (['admin', 'juicer'].includes(role)) {
     const [[existing]] = await pool.query('SELECT id FROM users WHERE role=? AND id<>? AND deleted_at IS NULL LIMIT 1', [role, req.params.id]);
     if (existing) return res.status(409).json({ message: `This company already has its single ${role === 'admin' ? 'Admin' : role === 'chef' ? 'Head Chef' : 'Juicer'} login.` });
   }
+  const [[linkedEmployee]]=await pool.query('SELECT id FROM kitchen_staff WHERE user_id=? AND deleted_at IS NULL',[req.params.id]);
+  if(linkedEmployee && role!=='chef')return res.status(409).json({message:'A linked kitchen employee must retain the Chef role'});
   const currentDatabase = String(req.headers['x-company-database'] || process.env.DB_NAME || 'knockout');
   if (active) await ensureUniquePortalPin({ pin, currentDatabase, excludeId: req.params.id });
-  const [result] = await pool.query('UPDATE users SET name=?,role=?,pin=?,phone=?,pay_type=?,pay_rate=?,active=? WHERE id=? AND deleted_at IS NULL', [name, role, pin, phone, payType, Number(payRate), !!active, req.params.id]);
-  if (!result.affectedRows) return res.status(404).json({ message: 'Staff member not found' });
-  res.json({ ok: true });
+  const conn=await pool.getConnection();try{await conn.beginTransaction();
+  const [result]=await conn.query('UPDATE users SET name=?,role=?,pin=?,phone=?,pay_type=?,pay_rate=?,active=? WHERE id=? AND deleted_at IS NULL',[name,role,pin,phone,payType,Number(payRate),!!active,req.params.id]);
+  if(!result.affectedRows){await conn.rollback();return res.status(404).json({message:'Staff member not found'})}
+  await conn.query('UPDATE kitchen_staff SET name=?,phone=?,pay_type=?,pay_rate=?,active=?,updated_at=NOW() WHERE user_id=? AND deleted_at IS NULL',[name,phone,payType,Number(payRate),!!active,req.params.id]);
+  await conn.commit();res.json({ok:true});
+  }catch(e){await conn.rollback();throw e}finally{conn.release()}
 }
 
 export async function deleteStaff(req, res) {
   if (req.portalSession.role !== 'admin') return res.status(403).json({ message: 'Admin access required' });
-  const [[staff]] = await pool.query('SELECT id,name,role FROM users WHERE id=? AND deleted_at IS NULL', [req.params.id]);
+  const [[staff]] = await pool.query('SELECT id,name,role,approval_status FROM users WHERE id=? AND deleted_at IS NULL', [req.params.id]);
+  if(staff && staff.approval_status!=='approved')return res.status(409).json({message:'Pending and rejected requests are retained for audit'});
   if (!staff) return res.status(404).json({ message: 'Staff member not found' });
   if (staff.role === 'admin') return res.status(409).json({ message: 'The company Admin login is protected and cannot be deleted here' });
-  await pool.query("UPDATE users SET active=FALSE,deleted_at=NOW(),pin=CONCAT('deleted-',id,'-',floor(extract(epoch FROM NOW()))) WHERE id=?", [staff.id]);
+  await pool.query("WITH disabled AS (UPDATE users SET active=FALSE,deleted_at=NOW(),pin=CONCAT('deleted-',id,'-',floor(extract(epoch FROM NOW()))) WHERE id=? RETURNING id) UPDATE kitchen_staff SET active=FALSE,deleted_at=NOW() WHERE user_id IN (SELECT id FROM disabled)",[staff.id]);
   res.json({ ok: true, id: staff.id, name: staff.name, attendancePreserved: true });
 }
 
 // Juicer
-export async function getJuicerLogin(req, res) {
-  if (req.portalSession.role !== 'chef') return res.status(403).json({ message: 'Head Chef access required' });
-  const [[juicer]] = await pool.query("SELECT id,name,role,pin,phone,pay_type \"payType\",pay_rate \"payRate\",active FROM users WHERE role='juicer' AND deleted_at IS NULL LIMIT 1");
-  res.json(juicer || null);
+export async function getJuicerLogin(req,res){
+ if(req.portalSession.role!=='chef')return res.status(403).json({message:'Head Chef access required'});
+ const [[juicer]]=await pool.query("SELECT id,name,role,phone,active,approval_status \"approvalStatus\" FROM users WHERE role='juicer' AND deleted_at IS NULL AND (approval_status='approved' OR requested_by=?) LIMIT 1",[req.portalSession.id]);res.json(juicer||null);
 }
-
-export async function createJuicerLogin(req, res) {
-  if (req.portalSession.role !== 'chef') return res.status(403).json({ message: 'Only the Head Chef can create the Juicer login' });
-  const { name, phone = '', payType = 'monthly', payRate = 0 } = req.body;
-  if (!String(name || '').trim() || !['daily', 'monthly'].includes(payType)) return res.status(400).json({ message: 'Name and salary basis are required' });
-  const [[existing]] = await pool.query("SELECT id FROM users WHERE role='juicer' AND deleted_at IS NULL LIMIT 1");
-  if (existing) return res.status(409).json({ message: 'This company already has its single Juicer login. Admin can edit it from Staff Management.' });
-  const pin = await generatePortalPin();
-  const [result] = await pool.query("INSERT INTO users (name,role,pin,phone,pay_type,pay_rate,active) VALUES (?,'juicer',?,?,?,?,TRUE)", [name.trim(), pin, phone.trim(), payType, Number(payRate)]);
-  res.status(201).json({ id: result.insertId, role: 'juicer', pin });
+export async function createJuicerLogin(req,res){
+ if(req.portalSession.role!=='chef')return res.status(403).json({message:'Head Chef access required'});
+ const {name,phone='',payType='monthly',payRate=0}=req.body;
+ if(!String(name||'').trim()||!['daily','monthly'].includes(payType)||!Number.isFinite(Number(payRate))||Number(payRate)<0)return res.status(400).json({message:'Valid name and salary required'});
+ const conn=await pool.getConnection();try{await conn.beginTransaction();const chef=await actor(conn,req.portalSession);await conn.query("SELECT pg_advisory_xact_lock(821773)");
+ const [[existing]]=await conn.query("SELECT id FROM users WHERE role='juicer' AND deleted_at IS NULL LIMIT 1");if(existing){await conn.rollback();return res.status(409).json({message:'This hotel already has a Juicer account or request. Contact the Admin.'})}
+ const pin=await generatePortalPin();
+ const [result]=await conn.query("INSERT INTO users(name,role,pin,phone,pay_type,pay_rate,active,approval_status,requested_by) VALUES(?,'juicer',?,?,?,?,FALSE,'pending',?)",[name.trim(),pin,phone.trim(),payType,Number(payRate),chef.id]);
+ await conn.commit();if(res.locals)res.locals.broadcastDetails={action:'staff_requested'};res.status(201).json({id:result.insertId,approvalStatus:'pending',message:'Staff request submitted successfully. Waiting for admin approval.'});
+ }catch(e){await conn.rollback();throw e}finally{conn.release()}
 }
 
 // Kitchen Staff
-export async function createKitchenStaff(req, res) {
-  const role = req.portalSession.role;
-  if (!['admin', 'chef'].includes(role)) return res.status(403).json({ message: 'Admin or Head Chef access required' });
-  const { name, designation = 'Chef', phone = '', specialization = '', payType = 'monthly', payRate = 0, joinedOn = null, notes = '', createdBy = role === 'admin' ? 'Admin' : 'Head Chef' } = req.body;
-  if (!String(name || '').trim() || !String(designation || '').trim() || !['daily', 'monthly'].includes(payType)) return res.status(400).json({ message: 'Chef name, designation, and Daily/Monthly salary basis are required' });
-  const [result] = await pool.query('INSERT INTO kitchen_staff (name,designation,phone,specialization,pay_type,pay_rate,joined_on,notes,active,created_by) VALUES (?,?,?,?,?,?,?,?,TRUE,?)', [name.trim(), designation.trim(), phone.trim(), specialization.trim(), payType, Number(payRate), joinedOn || null, notes.trim(), createdBy]);
-  res.status(201).json({ id: result.insertId });
+export async function createKitchenStaff(req,res){
+ const role=req.portalSession.role;
+ if(!['admin','chef'].includes(role))return res.status(403).json({message:'Admin or Head Chef access required'});
+ const {name,designation='Chef',phone='',specialization='',payType='monthly',payRate=0,joinedOn=null,notes=''}=req.body;
+ if(!String(name||'').trim()||!String(designation||'').trim()||!['daily','monthly'].includes(payType)||!Number.isFinite(Number(payRate))||Number(payRate)<0)return res.status(400).json({message:'Valid staff name, designation and salary required'});
+ const conn=await pool.getConnection();try{await conn.beginTransaction();const creator=await actor(conn,req.portalSession);
+ await conn.query('SELECT pg_advisory_xact_lock(?)',[creator.id]);
+ const [[duplicate]]=await conn.query("SELECT id FROM kitchen_staff WHERE requested_by=? AND lower(btrim(name))=lower(btrim(?)) AND phone=? AND approval_status='pending' AND deleted_at IS NULL",[creator.id,name,phone]);
+ if(duplicate){await conn.commit();return res.json({id:duplicate.id,approvalStatus:'pending',message:'Staff request submitted successfully. Waiting for admin approval.'})}
+ const pending=role==='chef';
+ const [result]=await conn.query('INSERT INTO kitchen_staff(name,designation,phone,specialization,pay_type,pay_rate,joined_on,notes,active,created_by,approval_status,requested_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',[name.trim(),designation.trim(),phone.trim(),specialization.trim(),payType,Number(payRate),joinedOn||null,notes.trim(),!pending,creator.name,pending?'pending':'approved',pending?creator.id:null]);
+ await conn.commit();if(pending&&res.locals)res.locals.broadcastDetails={action:'staff_requested'};res.status(201).json({id:result.insertId,approvalStatus:pending?'pending':'approved',message:pending?'Staff request submitted successfully. Waiting for admin approval.':'Staff added'});
+ }catch(e){await conn.rollback();throw e}finally{conn.release()}
 }
-
-export async function updateKitchenStaff(req, res) {
-  const role = req.portalSession.role;
-  if (!['admin', 'chef'].includes(role)) return res.status(403).json({ message: 'Admin or Head Chef access required' });
-  const { name, designation = 'Chef', phone = '', specialization = '', payType = 'monthly', payRate = 0, joinedOn = null, notes = '', active = true } = req.body;
-  if (!String(name || '').trim() || !String(designation || '').trim() || !['daily', 'monthly'].includes(payType)) return res.status(400).json({ message: 'Chef name, designation, and Daily/Monthly salary basis are required' });
-  const [result] = await pool.query('UPDATE kitchen_staff SET name=?,designation=?,phone=?,specialization=?,pay_type=?,pay_rate=?,joined_on=?,notes=?,active=? WHERE id=?', [name.trim(), designation.trim(), phone.trim(), specialization.trim(), payType, Number(payRate), joinedOn || null, notes.trim(), !!active, req.params.id]);
-  if (!result.affectedRows) return res.status(404).json({ message: 'Kitchen staff member not found' });
-  res.json({ ok: true });
+export async function updateKitchenStaff(req,res){
+ if(req.portalSession.role!=='admin')return res.status(403).json({message:'Only the hotel Admin can edit or activate staff'});
+ const {name,designation='Chef',phone='',specialization='',payType='monthly',payRate=0,joinedOn=null,notes='',active=true}=req.body;
+ if(!String(name||'').trim()||!String(designation||'').trim()||!['daily','monthly'].includes(payType)||!Number.isFinite(Number(payRate))||Number(payRate)<0)return res.status(400).json({message:'Valid staff details required'});
+ const conn=await pool.getConnection();try{await conn.beginTransaction();
+ const [[member]]=await conn.query("SELECT id,user_id FROM kitchen_staff WHERE id=? AND approval_status='approved' AND deleted_at IS NULL FOR UPDATE",[req.params.id]);
+ if(!member){await conn.rollback();return res.status(409).json({message:'Staff not found or requires approval'})}
+ await conn.query('UPDATE kitchen_staff SET name=?,designation=?,phone=?,specialization=?,pay_type=?,pay_rate=?,joined_on=?,notes=?,active=?,updated_at=NOW() WHERE id=?',[name.trim(),designation.trim(),phone.trim(),specialization.trim(),payType,Number(payRate),joinedOn||null,notes.trim(),!!active,member.id]);
+ if(member.user_id)await conn.query('UPDATE users SET name=?,phone=?,pay_type=?,pay_rate=?,active=? WHERE id=? AND deleted_at IS NULL',[name.trim(),phone.trim(),payType,Number(payRate),!!active,member.user_id]);
+ await conn.commit();res.json({ok:true});
+ }catch(e){await conn.rollback();throw e}finally{conn.release()}
 }
-
-export async function deleteKitchenStaff(req, res) {
-  const role = req.portalSession.role;
-  if (!['admin', 'chef'].includes(role)) return res.status(403).json({ message: 'Admin or Head Chef access required' });
-  const [result] = await pool.query('DELETE FROM kitchen_staff WHERE id=?', [req.params.id]);
-  if (!result.affectedRows) return res.status(404).json({ message: 'Kitchen staff member not found' });
-  res.json({ ok: true });
+export async function deleteKitchenStaff(req,res){
+ if(req.portalSession.role!=='admin')return res.status(403).json({message:'Only the hotel Admin can remove staff'});
+ const conn=await pool.getConnection();try{await conn.beginTransaction();
+ const [[member]]=await conn.query("SELECT id,user_id FROM kitchen_staff WHERE id=? AND approval_status='approved' AND deleted_at IS NULL FOR UPDATE",[req.params.id]);
+ if(!member){await conn.rollback();return res.status(409).json({message:'Staff not found or request must be reviewed first'})}
+ await conn.query('UPDATE kitchen_staff SET active=FALSE,deleted_at=NOW() WHERE id=?',[member.id]);
+ if(member.user_id)await conn.query("UPDATE users SET active=FALSE,deleted_at=NOW(),pin=CONCAT('deleted-',id,'-',floor(extract(epoch FROM NOW()))) WHERE id=?",[member.user_id]);
+ await conn.commit();res.json({ok:true});
+ }catch(e){await conn.rollback();throw e}finally{conn.release()}
 }
 
 // Menu & Combos
@@ -985,8 +920,8 @@ export async function updateMenuItemAvailability(req, res) {
   if (!['admin', 'chef', 'juicer'].includes(role)) return res.status(403).json({ message: 'Admin, Head Chef, or Juicer access required' });
   if (typeof req.body.available !== 'boolean') return res.status(400).json({ message: 'Availability must be true or false' });
   if (role === 'juicer') {
-    const [[item]] = await pool.query('SELECT category FROM menu_items WHERE id=?', [req.params.id]);
-    if (!item || !isJuiceCategory(item.category)) return res.status(403).json({ message: 'Juicer can only update juice availability' });
+    const [[item]] = await pool.query(`SELECT category,${stationSQL()} FROM menu_items WHERE id=?`, [req.params.id]);
+    if (!item || !isJuiceItem(item)) return res.status(403).json({ message: 'Juicer can only update juice availability' });
   }
   const [result] = await pool.query('UPDATE menu_items SET available=? WHERE id=?', [req.body.available, req.params.id]);
   if (!result.affectedRows) return res.status(404).json({ message: 'Dish not found' });

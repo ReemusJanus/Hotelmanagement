@@ -164,7 +164,7 @@ export async function companySummary(company) {
     const db = `"${company.databaseName}"`;
     const [[users], [orders], [revenue], [stock], [daily]] = await Promise.all([
       masterPool.query('SELECT tenant_user_id id,name,role,pin,phone,active FROM company_users WHERE company_id=? ORDER BY role,name', [company.id]),
-      adminPool.query(`SELECT COUNT(*) count FROM ${db}.orders WHERE status<>'completed'`),
+      adminPool.query(`SELECT COUNT(*) count FROM ${db}.orders WHERE status NOT IN ('completed','cancelled')`),
       adminPool.query(`SELECT COALESCE(SUM(total),0) total FROM ${db}.orders WHERE payment_status='paid'`),
       adminPool.query(`SELECT COUNT(*) count FROM ${db}.inventory WHERE quantity<=min_quantity`),
       adminPool.query(`SELECT to_char(completed_at, 'YYYY-MM-DD') AS day,COUNT(*) bills,COALESCE(SUM(total),0) total FROM ${db}.orders WHERE payment_status='paid' AND completed_at IS NOT NULL GROUP BY to_char(completed_at,'YYYY-MM-DD') ORDER BY day DESC LIMIT 31`)
@@ -220,7 +220,7 @@ export async function provisionCompany({ companyName, adminName, email = '', pho
     await conn.query(`INSERT INTO ${tenant}.users (name,role,pin,phone,email,active) VALUES (?,'admin',?,?,?,TRUE)`, [adminName, adminPin, phone, email]);
     await conn.query(`INSERT INTO ${tenant}.menu_items (id,name,category,description,price,icon,image_url,image_object,is_combo,available) SELECT id,name,category,description,price,icon,image_url,image_object,is_combo,available FROM knockout.menu_items`);
     await conn.query(`INSERT INTO ${tenant}.combo_components (combo_id,menu_id,quantity) SELECT combo_id,menu_id,quantity FROM knockout.combo_components`);
-    await conn.query(`INSERT INTO ${tenant}.inventory (name,category,quantity,unit,min_quantity,cost) SELECT name,category,0,unit,min_quantity,cost FROM knockout.inventory`);
+    // New companies start with no stock records; admins add their own inventory.
     await syncSequences(conn, databaseName);
 
     const enabledModules = selectedModules

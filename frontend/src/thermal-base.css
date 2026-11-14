@@ -1,0 +1,23 @@
+
+:host{display:block;color:#000;background:#fff;font:12px/1.25 Arial,Helvetica,sans-serif;width:80mm;margin:0;padding:0;writing-mode:horizontal-tb;direction:ltr;transform:none}
+.thermal-receipt *{box-sizing:border-box}
+.thermal-receipt{width:var(--printable-width,72mm);max-width:100%;margin:0 auto;padding:1mm 0 var(--trailing-feed,1mm);font:12px/1.25 Arial,Helvetica,sans-serif;color:#000;background:#fff;overflow-wrap:anywhere}
+.thermal-receipt h2{font:700 16px/1.2 Arial,Helvetica,sans-serif;margin:0 0 1mm;text-align:center}
+.thermal-title{margin:0 0 1mm;text-align:center;font-size:11px;font-weight:700}
+.thermal-logo{display:block;max-width:28mm;max-height:12mm;object-fit:contain;margin:0 auto 1mm;filter:grayscale(1)}
+.thermal-meta{border-top:1px dashed #000;border-bottom:1px dashed #000;padding:1mm 0;margin:0 0 1mm}
+.thermal-meta p{margin:0 0 .4mm;line-height:1.25}
+.thermal-items{width:100%;border-collapse:collapse;table-layout:fixed;font:inherit;color:#000}
+.thermal-items th{padding:1mm 0;font-size:11px;border-bottom:1px dashed #000;text-align:left}
+.thermal-items td{padding:1mm 0;vertical-align:top;border:0;overflow-wrap:anywhere}
+.thermal-items .quantity{width:10mm;text-align:center;white-space:nowrap}
+.thermal-items .amount{width:23mm;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.thermal-items td:first-child{padding-right:1mm}.thermal-unit{display:block;font-size:10px}
+.thermal-totals{border-top:1px dashed #000;padding-top:1mm;margin-top:1mm}
+.thermal-totals p{display:flex;justify-content:space-between;gap:2mm;margin:0 0 1mm;font:inherit}
+.thermal-totals b{white-space:nowrap;font-variant-numeric:tabular-nums}
+.thermal-totals .thermal-total{border-top:1px dashed #000;padding-top:1mm;font-size:15px;font-weight:700}
+.thermal-footer{text-align:center;border-top:1px dashed #000;margin-top:1mm;padding-top:1mm;font-size:11px}
+.thermal-footer p{margin:0}.thermal-items tr,.thermal-meta,.thermal-totals,.thermal-footer{break-inside:avoid}
+.thermal-items thead{display:table-row-group}
+@media print{.thermal-receipt{break-inside:auto}}

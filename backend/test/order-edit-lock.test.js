@@ -6,8 +6,9 @@ registerHooks({load(url,context,next){
  if(url.endsWith('/src/uploads/storage-handler.js'))return {format:'module',shortCircuit:true,source:'export const putImage=()=>{},putReport=()=>{},storageProvider="test",minio={},bucket="test";'};
  return next(url,context);
 }});
-const {addOrderItems,deleteOrderItem}=await import('../src/controllers/tenant.controller.js');
-for(const status of ['preparing','ready'])test(`reject additions and removal when another item in the round is ${status}`,async()=>{
+const {addOrderItems}=await import('../src/controllers/tenant.controller.js');
+const {assertCancellable}=await import('../src/order-cancellation.js');
+for(const status of ['preparing','ready'])test(`reject additions and cancellations when another item in the round is ${status}`,async()=>{
  let writes=0,rollbacks=0;
  globalThis.orderEditConnection={beginTransaction:async()=>{},rollback:async()=>{rollbacks++},release(){},query:async sql=>{
   if(sql.startsWith('SELECT id,status'))return [[{id:1,status:'preparing'}]];
@@ -18,8 +19,8 @@ for(const status of ['preparing','ready'])test(`reject additions and removal whe
  }};
  const req={portalSession:{role:'waiter'},params:{id:1,menuId:2},query:{batchNo:1},body:{batchNo:1,items:[{menuId:2,qty:1}]}};
  await assert.rejects(addOrderItems(req,{}),e=>e.status===409);
- await assert.rejects(deleteOrderItem(req,{}),e=>e.status===409);
- assert.equal(writes,0);assert.equal(rollbacks,2);
+ assert.throws(()=>assertCancellable({status:'preparing',payment_status:'unpaid'},[{menu_id:2,batch_no:1,production_status:'new'},{menu_id:3,batch_no:1,production_status:status}],[{menu_id:2,batch_no:1}],false),e=>e.status===409);
+ assert.equal(writes,0);assert.equal(rollbacks,1);
 });
 for(const newRound of [false,true])test(newRound?'new rounds remain editable':'unstarted rounds remain editable',async()=>{
  const reachedMenu=new Error('passed preparation guard');

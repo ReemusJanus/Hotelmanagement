@@ -1,3 +1,4 @@
+import {isJuiceItem, stationSQL} from '../production-routing.js';
 import crypto from 'node:crypto';
 import multer from 'multer';
 import { pool } from '../database.js';
@@ -14,7 +15,6 @@ async function storageOwner() {
   return settings?.hotelName || 'knockout';
 }
 
-const isJuiceCategory = category => String(category || '').trim().toLowerCase() === 'juices';
 
 export const createMenuItem = async (req, res) => {
   const { portalRole } = req;
@@ -53,8 +53,8 @@ export const updateAvailability = async (req, res) => {
   if (typeof req.body.available !== 'boolean')
     return res.status(400).json({ message: 'Availability must be true or false' });
   if (portalRole === 'juicer') {
-    const [[item]] = await pool.query('SELECT category FROM menu_items WHERE id=?', [req.params.id]);
-    if (!item || !isJuiceCategory(item.category))
+    const [[item]] = await pool.query(`SELECT category,${stationSQL()} FROM menu_items WHERE id=?`, [req.params.id]);
+    if (!item || !isJuiceItem(item))
       return res.status(403).json({ message: 'Juicer can only update juice availability' });
   }
   const [result] = await pool.query('UPDATE menu_items SET available=? WHERE id=?', [req.body.available, req.params.id]);

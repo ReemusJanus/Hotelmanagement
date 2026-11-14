@@ -110,8 +110,57 @@
 .restaurant-logo-settings p,.restaurant-logo-settings small { color:var(--color-text-secondary); }
 .tenant-receipt-logo { display:block; width:auto; max-width:100%; height:72px; object-fit:contain; margin:0 auto 10px; }
 .receipt .tenant-receipt-watermark { border-radius:0; object-fit:contain; opacity:.07; }
-@media print {
- body.printing-receipt .tenant-receipt-logo { width:auto!important; max-width:100%!important; height:18mm!important; object-fit:contain!important; margin:0 auto 2mm!important; }
- body.printing-receipt .tenant-receipt-watermark { max-width:80%!important; height:auto!important; opacity:.07!important; }
-}
+
 .restaurant-sidebar-logo:has(img),.restaurant-logo-preview:has(img) { background:var(--color-surface)!important; text-indent:0; }
+
+.dashboard-data-error { padding:12px 20px; background:var(--color-surface); color:var(--color-error-text); border:1px solid var(--color-border); }
+
+@media screen and (max-width:600px) {
+ .kitchen-summary { display:flex; flex-wrap:wrap; max-width:100%; }
+ .kitchen-summary>span { flex:1 1 90px; min-width:0; justify-content:center; }
+ .theme-select-menu { min-width:0; max-width:100%; overflow-y:auto; overscroll-behavior:contain; }
+ .theme-select-menu button { white-space:normal; overflow-wrap:anywhere; min-height:44px; }
+}
+.modal-wrap { box-sizing:border-box; }
+
+/* Shared waiter layout: short pages fill the viewport, long pages grow naturally. */
+.shell.waiter-layout { min-height:100vh; min-height:100dvh; }
+.shell.waiter-layout>main { display:flex; flex-direction:column; min-height:100vh; min-height:100dvh; }
+.waiter-layout>main>.page { flex:1 0 auto; width:100%; min-width:0; box-sizing:border-box; }
+.waiter-layout>main>.powered-by-knockout { margin-top:auto; flex-shrink:0; padding:16px 24px 20px; }
+@media(max-width:1100px){
+  .shell.waiter-layout { display:flex; flex-direction:column; }
+  .shell.waiter-layout>main { flex:1; min-height:0; }
+}
+.bill-amount,.order-history-card>footer strong,.payment-panel>h2,.receipt-totals b,.receipt td:not(:first-child) {
+  font-family:var(--font-sans),system-ui,sans-serif!important;
+  font-variant-numeric:tabular-nums; letter-spacing:normal!important;
+}
+.reservation-arrival { margin:16px 0; padding:18px; border:1px solid var(--color-primary-border); border-radius:12px; background:var(--color-primary-soft); }
+.reservation-arrival h3 { margin:8px 0; }
+.reservation-arrival p { overflow-wrap:anywhere; }
+.reservation-arrival dl { display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 16px; }
+.reservation-arrival dd { margin:0; overflow-wrap:anywhere; }
+.reservation-actions { display:flex;flex-wrap:wrap;gap:10px; }
+.reservation-actions button { min-height:44px; }
+@media print { .receipt .bill-amount,.receipt-totals b,.receipt td:not(:first-child) {font-family:Arial,Helvetica,sans-serif!important;font-variant-numeric:tabular-nums;} }
+
+.staff-approval-panel { margin-bottom:24px; min-width:0; }
+.staff-request-list { display:grid;gap:12px; }
+.staff-request { display:flex;justify-content:space-between;gap:16px;padding:16px;border:1px solid var(--border);border-radius:12px;min-width:0;overflow-wrap:anywhere; }
+.staff-request .page-actions { margin-top:12px;flex-wrap:wrap; }
+.staff-request p { margin:6px 0; }
+@media(max-width:600px){.staff-request{flex-direction:column}.staff-request .page-actions button{flex:1}.chef-food-line{flex-wrap:wrap}}
+/* Keep per-item preparation controls visible on narrow station tickets. */
+.chef-detail-items > .chef-food-line > .secondary { grid-column:1 / -1; justify-self:start; }
+@media(max-width:600px){
+ .chef-detail-items > .chef-food-columns { display:none; }
+ .chef-detail-items > .chef-food-line { grid-template-columns:minmax(0,1fr) 76px;gap:10px;padding:12px 0;min-width:0; }
+ .chef-detail-items > .chef-food-line > .chef-item-status-badge,
+ .chef-detail-items > .chef-food-line > .chef-item-unavailable-btn,
+ .chef-detail-items > .chef-food-line > .chef-item-unavailable-badge { grid-column:1 / -1;justify-self:start;max-width:100%; }
+ .chef-detail-items > .chef-food-line > .secondary { width:100%;justify-self:stretch; }
+ .chef-food-name { min-width:0;overflow-wrap:anywhere; }
+}
+
+.session-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px;margin:16px 0}.session-card{display:flex;flex-direction:column;align-items:flex-start;gap:8px;text-align:left;overflow-wrap:anywhere}.session-card strong{font-size:16px}

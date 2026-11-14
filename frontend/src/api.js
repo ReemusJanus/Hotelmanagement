@@ -13,18 +13,18 @@ export async function api(path, options={}) {
   const base=API_BASE;
   const accessToken=sessionStorage.getItem('knockout-access-token');
   const response = await fetch(base + path, {...options,headers: {'Content-Type':'application/json','Authorization':accessToken?`Bearer ${accessToken}`:'','X-Company-Database':companyDatabase,'X-Portal-Role':activeRole,...options.headers}});
-  const data = await response.json();
-  if(response.status===401&&sessionStorage.getItem('knockout-portal-user')){
+  const data = await response.json().catch(() => { throw new Error(`Server returned an invalid response (${response.status}). Please try again.`); });
+  if(response.status===401&&sessionStorage.getItem('knockout-access-token')===accessToken&&sessionStorage.getItem('knockout-portal-user')){
     sessionStorage.removeItem('knockout-portal-user');
     sessionStorage.removeItem('knockout-access-token');
     window.dispatchEvent(new CustomEvent('knockout:session-revoked',{detail:{message:data.message||'Your secure session has expired. Sign in again.'}}));
   }
-  if(response.status===403&&data.code==='COMPANY_SUSPENDED'){
+  if(response.status===403&&data.code==='COMPANY_SUSPENDED'&&sessionStorage.getItem('knockout-access-token')===accessToken){
     sessionStorage.removeItem('knockout-portal-user');
     sessionStorage.removeItem('knockout-access-token');
     window.dispatchEvent(new CustomEvent('knockout:session-revoked',{detail:{message:data.message}}));
   }
-  if (!response.ok) throw new Error(data.message || 'Something went wrong');
+  if (!response.ok) throw new Error(data?.message || 'Something went wrong');
   return data;
 }
 
@@ -32,13 +32,13 @@ export async function apiForm(path, form, options={}) {
   const identity=portalIdentity(),base=API_BASE;
   const accessToken=sessionStorage.getItem('knockout-access-token');
   const response=await fetch(base+path,{...options,method:options.method||'POST',headers:{'Authorization':accessToken?`Bearer ${accessToken}`:'','X-Company-Database':identity.companyDatabase,'X-Portal-Role':identity.role,...options.headers},body:form});
-  const data=await response.json().catch(()=>({message:'Upload service returned an invalid response'}));
-  if(response.status===401&&sessionStorage.getItem('knockout-portal-user')){
+  const data=await response.json().catch(()=>{throw new Error(`Upload service returned an invalid response (${response.status})`)});
+  if(response.status===401&&sessionStorage.getItem('knockout-access-token')===accessToken&&sessionStorage.getItem('knockout-portal-user')){
     sessionStorage.removeItem('knockout-portal-user');
     sessionStorage.removeItem('knockout-access-token');
     window.dispatchEvent(new CustomEvent('knockout:session-revoked',{detail:{message:data.message||'Your secure session has expired. Sign in again.'}}));
   }
-  if(response.status===403&&data.code==='COMPANY_SUSPENDED'){
+  if(response.status===403&&data.code==='COMPANY_SUSPENDED'&&sessionStorage.getItem('knockout-access-token')===accessToken){
     sessionStorage.removeItem('knockout-portal-user');
     sessionStorage.removeItem('knockout-access-token');
     window.dispatchEvent(new CustomEvent('knockout:session-revoked',{detail:{message:data.message}}));

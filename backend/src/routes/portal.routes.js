@@ -1,3 +1,6 @@
+import {createTableSession} from '../table-sessions.js';
+import {actor} from '../staff-approval.js';
+import {pool} from '../database.js';
 import express from 'express';
 import { uploadSingleImage, uploadRestaurantLogo } from '../uploads/multer.js';
 import { asyncRoute, tenantContextMiddleware } from '../middleware/tenant.js';
@@ -17,7 +20,7 @@ export function createRoleRouter(portalRole, { onMutation = async () => {} } = {
     }
     const originalJson = res.json.bind(res);
     res.json = body => {
-      if (['GET', 'HEAD', 'OPTIONS'].includes(req.method) || res.statusCode >= 400) {
+      if (['GET', 'HEAD', 'OPTIONS'].includes(req.method) || res.statusCode >= 400 || res.locals?.skipMutation) {
         return originalJson(body);
       }
       tenantController.clearStateCache(req.portalSession.companyDatabase);
@@ -29,6 +32,7 @@ export function createRoleRouter(portalRole, { onMutation = async () => {} } = {
 
   // Apply tenant search_path context
   router.use(tenantContextMiddleware);
+  router.use(asyncRoute(async(req,res,next)=>{await actor(pool,req.portalSession);next()}));
 
   // Common role routes
   router.get('/api/live', tenantController.getLive);
@@ -39,11 +43,13 @@ export function createRoleRouter(portalRole, { onMutation = async () => {} } = {
   router.patch('/api/profile', uploadSingleImage, asyncRoute(tenantController.patchProfile));
 
   // Bookings
+  router.post('/api/bookings/:id/check-in', asyncRoute(tenantController.checkInBooking));
   router.post('/api/bookings', asyncRoute(tenantController.createBooking));
   router.delete('/api/bookings/:id', asyncRoute(tenantController.deleteBooking));
 
   // Orders
   router.post('/api/orders', asyncRoute(tenantController.createOrder));
+  router.post('/api/orders/:id/cancel', asyncRoute(tenantController.cancelOrder));
   router.post('/api/orders/:id/items', asyncRoute(tenantController.addOrderItems));
   router.delete('/api/orders/:id/items/:menuId', asyncRoute(tenantController.deleteOrderItem));
   router.patch('/api/orders/:id/items/status', asyncRoute(tenantController.updateOrderItemStatus));
@@ -59,6 +65,7 @@ export function createRoleRouter(portalRole, { onMutation = async () => {} } = {
   router.post('/api/orders/:id/mark-paid', asyncRoute(tenantController.markOrderPaid));
 
   // Tables
+  router.post('/api/tables/:id/sessions', asyncRoute(createTableSession));
   router.patch('/api/tables/:id/status', asyncRoute(tenantController.updateTableStatus));
   router.post('/api/tables', asyncRoute(tenantController.createTable));
   router.delete('/api/tables/:id', asyncRoute(tenantController.deleteTable));
@@ -89,6 +96,7 @@ export function createRoleRouter(portalRole, { onMutation = async () => {} } = {
   router.post('/api/staff/:id/check-out', asyncRoute(tenantController.adminCheckOutStaff));
 
   // Staff Management
+  router.post('/api/staff/requests/:kind/:id/review', asyncRoute(tenantController.reviewStaff));
   router.post('/api/staff', asyncRoute(tenantController.createStaff));
   router.put('/api/staff/:id', asyncRoute(tenantController.updateStaff));
   router.delete('/api/staff/:id', asyncRoute(tenantController.deleteStaff));
