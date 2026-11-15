@@ -17,7 +17,7 @@
 .thermal-totals p{display:flex;justify-content:space-between;gap:2mm;margin:0 0 1mm;font:inherit}
 .thermal-totals b{white-space:nowrap;font-variant-numeric:tabular-nums}
 .thermal-totals .thermal-total{border-top:1px dashed #000;padding-top:1mm;font-size:15px;font-weight:700}
-.thermal-footer{text-align:center;border-top:1px dashed #000;margin-top:1mm;padding-top:1mm;padding-bottom:var(--trailing-feed,15mm);font-size:11px}
+.thermal-footer{text-align:center;border-top:1px dashed #000;margin-top:1mm;padding-top:1mm;padding-bottom:var(--trailing-feed,20mm);font-size:11px}
 .thermal-footer p{margin:0}.thermal-items tr,.thermal-meta,.thermal-totals,.thermal-footer{break-inside:avoid}
 .thermal-items thead{display:table-row-group}
 @media print{.thermal-receipt{break-inside:auto}}
