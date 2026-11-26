@@ -8,7 +8,7 @@ export function receiptModel(order,data,bill={}) {
   return {name:line.name||source?.name||menu?.name||'Menu item',qty:Number(line.qty),price,amount:price===null?null:price*Number(line.qty)};
  });
  const subtotal=number(order.subtotal)??items.reduce((sum,line)=>sum+(line.amount||0),0);
- const adjustments=[['Tax',number(order.tax)??number(bill.tax)],['CGST',number(order.cgst)??number(bill.cgst)],['Service charge',number(order.serviceCharge)??number(bill.service)],['Parcel charges',number(order.parcelCharges)??number(bill.parcelCharges)],['Packaging charges',number(order.packagingCharges)??number(bill.packagingCharges)],['Discount',number(order.discount)??number(bill.discount)]].filter(([,value])=>value!==null&&value!==0).map(([label,value])=>({label,value:label==='Discount'?-Math.abs(value):value}));
+ const adjustments=[['Tax',number(order.tax)??number(bill.tax)],['CGST',number(order.cgst)??number(bill.cgst)],['Service charge',number(order.serviceCharge)??number(bill.service)],['Parcel charge',number(order.parcelCharges)??number(bill.parcelCharges)],['Packaging charges',number(order.packagingCharges)??number(bill.packagingCharges)],['Discount',number(order.discount)??number(bill.discount)]].filter(([,value])=>value!==null&&value!==0).map(([label,value])=>({label,value:label==='Discount'?-Math.abs(value):value}));
  const total=number(order.total)??subtotal+adjustments.reduce((sum,row)=>sum+row.value,0);
  return {items,subtotal,adjustments,total,error:order.status==='cancelled'?'Cancelled orders cannot be printed as bills.':items.some(i=>i.price===null)?'Stored item prices are unavailable. Refresh the bill before printing.':''};
 }

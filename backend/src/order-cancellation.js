@@ -29,6 +29,7 @@ async function cancel(req,res,wholeOrder){
    await conn.commit();res.locals.skipMutation=true;return res.json({ok:true,orderId:id,status:'cancelled',remainingCount:0,unchanged:true});
   }
   const [lines]=await conn.query('SELECT oi.*,m.name FROM order_items oi JOIN menu_items m ON m.id=oi.menu_id WHERE oi.order_id=? ORDER BY oi.id FOR UPDATE OF oi',[id]);
+  if(req.body?.emptyOnly===true&&lines.length)fail('This group now has food orders. Refresh and review the orders before cancelling.');
   const selected=wholeOrder?lines:lines.filter(x=>Number(x.menu_id)===menuId&&(batch===null||Number(x.batch_no)===batch));
   assertCancellable(order,lines,selected,wholeOrder);
   const fullyCancelled=selected.length===lines.length;

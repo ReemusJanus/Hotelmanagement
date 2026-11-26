@@ -1,0 +1,43 @@
+﹣ PostgreSQL service flows through actual APIs (2.201666ms) # SKIP
+﹣ daily bills: reset, tenant isolation, concurrency and reprints (0.686875ms) # SKIP
+﹣ dashboard: authoritative paid revenue, timezone boundaries, zero days and tenant/cache isolation (0.691416ms) # SKIP
+✔ reject additions and removal when another item in the round is preparing (2.103125ms)
+✔ reject additions and removal when another item in the round is ready (0.123208ms)
+✔ unstarted rounds remain editable (0.50625ms)
+✔ new rounds remain editable (0.234209ms)
+✔ bind markers never replace literals, identifiers, comments or function bodies (1.741958ms)
+﹣ real PostgreSQL schema, contracts, constraints, isolation, transactions and sequences (0.098459ms) # SKIP
+(node:20738) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/reemusjanus/Library/Mobile%20Documents/com%7Eapple%7ECloudDocs/project/Hotel%20Management/mobile/production-routing.js is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /Users/reemusjanus/Library/Mobile Documents/com~apple~CloudDocs/project/Hotel Management/mobile/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ all clients honour configured category station; legacy menus remain compatible (1.393042ms)
+✔ chef updates only its own lines in a mixed batch (1.464667ms)
+✔ juicer updates only its own lines in a mixed batch (0.244167ms)
+✔ juicer cannot change food availability but can change a mapped drink (0.247334ms)
+﹣ reservation lifecycle, concurrency, permissions and tenant isolation (0.746959ms) # SKIP
+﹣ restaurant logos: tenant isolation, validation, replace, remove and atomic failure (0.694417ms) # SKIP
+✔ logo multipart parser enforces type and 2 MB before controller execution (133.014791ms)
+{"event":"request_error","type":"Error"}
+✔ auth attempts are bounded, expire, and ignore spoofed forwarded headers (1.914917ms)
+✔ order quantities reject negative, fractional, nonfinite and oversized values (0.180458ms)
+✔ image MIME and signature must agree; SVG and forged extensions rejected (0.324417ms)
+✔ CORS permits exact configured origin, same origin and native clients only (2.515917ms)
+✔ production rejects missing or placeholder signing secrets (0.238209ms)
+✔ internal errors are redacted and client validation remains actionable (0.831916ms)
+✔ role guard rejects privilege escalation; security headers disable caching (0.105166ms)
+﹣ staging ALTER scripts preserve records, cover all tenants, rerun and roll back unsafe additions (0.874084ms) # SKIP
+﹣ station isolation and staff approvals (0.646416ms) # SKIP
+✔ saved paid prices and totals survive menu price changes (1.987ms)
+✔ missing saved item prices blocks an inaccurate paid reprint (0.32025ms)
+✔ configured charges and discounts display separately, once (0.9985ms)
+✔ zero stored values are not replaced by current menu prices (0.085375ms)
+✔ currency precision and printer preference bounds (28.125917ms)
+ℹ tests 30
+ℹ suites 0
+ℹ pass 22
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 8
+ℹ todo 0
+ℹ duration_ms 485.354541

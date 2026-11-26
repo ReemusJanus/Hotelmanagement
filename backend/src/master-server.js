@@ -17,6 +17,7 @@ import {
 } from './middleware/auth.js';
 import { errorHandler } from './middleware/tenant.js';
 
+import { tenantTemplate } from './ui-templates.js';
 import masterRoutes from './routes/master.routes.js';
 import { createRoleRouter } from './routes/portal.routes.js';
 
@@ -25,7 +26,8 @@ import {
   syncCompanyUsers,
   ensureDailyFinanceTables,
   migrateTenantImages,
-  generateMonthlySaasInvoices
+  generateMonthlySaasInvoices,
+  templates as masterTemplates
 } from './controllers/master.controller.js';
 
 const app = express();
@@ -174,12 +176,17 @@ app.use('/api', async (req, res, next) => {
     ? 'staff'
     : null;
 
-  if (path === '/session') return res.json({ modules, companyDatabase: session.companyDatabase, role });
+  if (path === '/session') return res.json({ modules, companyDatabase: session.companyDatabase, role, template: await tenantTemplate(masterPool, session.companyDatabase), templateNotice: await masterTemplates.notice(session).catch(() => null) });
+  if (/^\/(?:ui-templates|companies|template-requests)(?:\/|$)/.test(path)) return res.status(403).json({ message: 'Superadmin access required' });
   if ((role === 'chef' && !modules.kitchen) || (role === 'juicer' && !modules.juicer) || (moduleKey && !modules[moduleKey])) {
     return res.status(403).json({ code: 'MODULE_DISABLED', message: 'This module is disabled for your hotel by Byteberrytech Master.' });
   }
 
   req.portalSession = session;
+  const appearance = { 'GET /appearance': 'appearance', 'POST /appearance/template': 'change', 'POST /appearance/requests': 'request', 'POST /appearance/seen': 'seen' }[`${req.method} ${path}`];
+  if (appearance) {
+    try { return await masterTemplates[appearance](req, res); } catch (error) { return next(error); }
+  }
   req.headers['x-company-database'] = session.companyDatabase;
   req.headers['x-portal-role'] = role;
   req.headers['x-portal-user-id'] = String(session.id);
@@ -202,6 +209,7 @@ app.use('/api', (req, res, next) => {
   if (session?.role !== 'superadmin') {
     return res.status(401).json({ message: 'Byteberrytech Master approval is required' });
   }
+  req.masterSession = session;
   next();
 });
 

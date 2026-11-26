@@ -45,6 +45,28 @@ test('independent table groups through HTTP and PostgreSQL',{skip:!process.env.P
  const [old]=await db.query("INSERT INTO orders(table_id,waiter,status,payment_status,total,bill_number,bill_date,created_at) VALUES(2,'Waiter','completed','paid',123,99,CURRENT_DATE,NOW())");
  const before=await row(old.insertId);const conn=await db.getConnection();try{await conn.beginTransaction();await ensureSchema(conn,schema,tenantDDL);await conn.commit()}finally{conn.release()};assert.deepEqual(await row(old.insertId),before);assert.equal(before.guest_count,null);assert.equal(before.session_key,null);
  });
+ await t.test('admin table editing preserves sessions and rejects invalid, duplicate, stale and unauthorized changes',async()=>{
+ const group=await session('Editing occupied table',2);const before=await row(group.body.id);const [[table]]=await db.query('SELECT * FROM restaurant_tables WHERE id=1');
+ const body={number:11,seats:6,area:'Terrace',previous:{number:table.table_number,seats:table.seats,area:table.area}};
+ assert.equal((await call('/tables/1','PATCH','waiter',body)).code,403);
+ assert.equal((await call('/tables/1','PATCH','admin',body,other)).code,403);
+ const edited=await call('/tables/1','PATCH','admin',body);assert.equal(edited.code,200);assert.equal(edited.body.number,11);
+ const [[updated]]=await db.query('SELECT * FROM restaurant_tables WHERE id=1');assert.equal(updated.status,table.status);assert.equal(updated.order_id,table.order_id);assert.equal(updated.active_booking_id,table.active_booking_id);assert.deepEqual(await row(group.body.id),before);
+ assert.equal((await call('/tables/1','PATCH','admin',body)).code,409);
+ assert.equal((await call('/tables/1','PATCH','admin',{number:2,seats:6,area:'Hall'})).code,409);
+ for(const bad of [{number:0},{seats:1.5},{area:''},{area:'x'.repeat(81)}])assert.equal((await call('/tables/1','PATCH','admin',{number:11,seats:6,area:'Hall',...bad})).code,400);
+ assert.equal((await call('/tables/999999','PATCH','admin',{number:12,seats:4,area:'Hall'})).code,404);
+ await call(`/orders/${group.body.id}/cancel`);assert.equal((await call('/tables/1','PATCH','admin',{number:1,seats:4,area:'Test'})).code,200);
+ });
+ await t.test('empty-group cancellation cannot cancel food added by another waiter',async()=>{
+ const group=await session('Accidental group',1);await add(group.body.id,1);
+ assert.equal((await call(`/orders/${group.body.id}/cancel`,'POST','waiter',{emptyOnly:true})).code,409);
+ assert.equal((await row(group.body.id)).status,'new');assert.equal((await db.query('SELECT * FROM order_items WHERE order_id=?',[group.body.id]))[0].length,1);
+ await call(`/orders/${group.body.id}/cancel`);
+ const empty=await session('Empty',1);assert.equal((await call(`/orders/${empty.body.id}/cancel`,'POST','waiter',{emptyOnly:true})).code,200);
+ assert.equal((await db.query('SELECT status FROM restaurant_tables WHERE id=1'))[0][0].status,'available');
+ assert.equal((await db.query('SELECT * FROM order_cancellations WHERE order_id=?',[empty.body.id]))[0].length,1);
+ });
  await t.test('closing sessions concurrently does not strand or release a live table early',async()=>{const a=await session('One',1),b=await session('Two',1);await add(a.body.id,1);await add(b.body.id,2);const paid=await Promise.all([call(`/orders/${a.body.id}/finalize`,'POST','admin',{paymentMethod:'Cash'}),call(`/orders/${b.body.id}/finalize`,'POST','admin',{paymentMethod:'Cash'})]);assert(paid.every(x=>x.code===200));assert.notEqual(paid[0].body.billNumber,paid[1].body.billNumber);assert.equal((await db.query('SELECT status FROM restaurant_tables WHERE id=1'))[0][0].status,'available')});
  }finally{if(server)await new Promise(r=>server.close(r));await closePools();await db.end();for(const name of[schema,other])await control.query(`DROP SCHEMA IF EXISTS "${name}" CASCADE`);await control.end()}
 });

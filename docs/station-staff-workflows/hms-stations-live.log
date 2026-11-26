@@ -1,0 +1,2 @@
+PASS: live staging HTTP roles, station collection, refresh persistence, duplicate event suppression, tenant WebSocket isolation, approval/rejection, linked Chef account and central login-index sync.
+Temporary tenant, staff, orders and master index records removed.

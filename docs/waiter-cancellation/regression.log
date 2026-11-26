@@ -1,0 +1,67 @@
+﹣ PostgreSQL service flows through actual APIs (0.994667ms) # SKIP
+﹣ daily bills: reset, tenant isolation, concurrency and reprints (1.713833ms) # SKIP
+✔ real login, cancellation API and kitchen/juicer WebSocket delivery (720.643ms)
+﹣ dashboard: authoritative paid revenue, timezone boundaries, zero days and tenant/cache isolation (0.714ms) # SKIP
+▶ cancellation through authenticated role routers and PostgreSQL
+  ✔ create using waiter API then cancel without changing another table (35.918709ms)
+  ✔ failed audit insert rolls back without removing food or releasing table (9.789875ms)
+  ✔ whole order: retained lines, audit, table release, no duplicate event, unrelated order intact (37.0835ms)
+  ✔ partial removal preserves other round, prices, quantities; last removal cancels (8.083334ms)
+  ✔ preparing round cannot be edited, new separate round can; whole cancellation is blocked (6.738125ms)
+  ✔ a started food item also locks unstarted juice in the same round (2.973333ms)
+  ✔ blocks preparing whole orders (2.560542ms)
+  ✔ blocks ready whole orders (2.178333ms)
+  ✔ blocks collected whole orders (2.109292ms)
+  ✔ blocks received whole orders (2.204167ms)
+  ✔ blocks served whole orders (2.068084ms)
+  ✔ blocks billing_requested whole orders (2.1945ms)
+  ✔ blocks completed whole orders (2.097166ms)
+  ✔ blocks paid, unauthorized roles, invalid IDs, unavailable tenants, inactive staff (9.81375ms)
+  ✔ concurrent cancellation and start preparation serialize safely (3.644625ms)
+  ✔ seated reservation remains occupied and its guest is preserved (2.955792ms)
+✔ cancellation through authenticated role routers and PostgreSQL (346.433458ms)
+✔ reject additions and cancellations when another item in the round is preparing (2.107667ms)
+✔ reject additions and cancellations when another item in the round is ready (0.338625ms)
+✔ unstarted rounds remain editable (0.518625ms)
+✔ new rounds remain editable (0.288875ms)
+✔ bind markers never replace literals, identifiers, comments or function bodies (1.394833ms)
+﹣ real PostgreSQL schema, contracts, constraints, isolation, transactions and sequences (0.070541ms) # SKIP
+(node:32776) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/reemusjanus/Library/Mobile%20Documents/com%7Eapple%7ECloudDocs/project/Hotel%20Management/mobile/production-routing.js is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /Users/reemusjanus/Library/Mobile Documents/com~apple~CloudDocs/project/Hotel Management/mobile/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ all clients honour configured category station; legacy menus remain compatible (1.406667ms)
+✔ chef updates only its own lines in a mixed batch (1.927333ms)
+✔ juicer updates only its own lines in a mixed batch (0.294541ms)
+✔ juicer cannot change food availability but can change a mapped drink (0.414833ms)
+﹣ reservation lifecycle, concurrency, permissions and tenant isolation (0.730916ms) # SKIP
+﹣ restaurant logos: tenant isolation, validation, replace, remove and atomic failure (1.26325ms) # SKIP
+✔ logo multipart parser enforces type and 2 MB before controller execution (142.023792ms)
+{"event":"request_error","type":"Error"}
+✔ auth attempts are bounded, expire, and ignore spoofed forwarded headers (4.00575ms)
+✔ order quantities reject negative, fractional, nonfinite and oversized values (0.686209ms)
+✔ image MIME and signature must agree; SVG and forged extensions rejected (0.7765ms)
+✔ CORS permits exact configured origin, same origin and native clients only (0.404208ms)
+✔ production rejects missing or placeholder signing secrets (0.383125ms)
+✔ internal errors are redacted and client validation remains actionable (0.815042ms)
+✔ role guard rejects privilege escalation; security headers disable caching (0.186542ms)
+﹣ staging ALTER scripts preserve records, cover all tenants, rerun and roll back unsafe additions (0.916458ms) # SKIP
+﹣ station isolation and staff approvals (0.746708ms) # SKIP
+✔ JSON old unauthorized response must not revoke the new tenant session (43.348708ms)
+✔ multipart old unauthorized response must not revoke the new tenant session (0.296834ms)
+✔ current unauthorized session is still revoked (0.273542ms)
+✔ invalid successful JSON and upload responses are actionable errors, never false success (0.299375ms)
+✔ saved paid prices and totals survive menu price changes (1.029584ms)
+✔ missing saved item prices blocks an inaccurate paid reprint (0.147042ms)
+✔ configured charges and discounts display separately, once (0.813291ms)
+✔ zero stored values are not replaced by current menu prices (0.087792ms)
+✔ currency precision and printer preference bounds (30.560125ms)
+✔ cancelled orders cannot print as payable bills (0.10425ms)
+ℹ tests 53
+ℹ suites 0
+ℹ pass 45
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 8
+ℹ todo 0
+ℹ duration_ms 2860.310041

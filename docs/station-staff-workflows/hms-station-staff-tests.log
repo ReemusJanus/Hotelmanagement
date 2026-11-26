@@ -1,0 +1,36 @@
+▶ reservation lifecycle, concurrency, permissions and tenant isolation
+  ✔ create and preserve guest details; reject overlapping bookings (56.733933ms)
+  ✔ early, unauthorized and cross-tenant seating rejected (31.177506ms)
+  ✔ confirmed reservation blocks walk-ins and exposes check-in metadata (199.83099ms)
+  ✔ simultaneous waiters seat once; repeat is idempotent (24.652086ms)
+  ✔ seated reservation required; concurrent orders cannot double occupy (30.535454ms)
+  ✔ kitchen/juicer, handoff, billing and payment preserve reservation history (69.908505ms)
+  ✔ release restores a newly applicable reservation (17.785321ms)
+  ✔ cancelled and expired reservations cannot check in; no automatic no-show (34.853781ms)
+  ✔ occupied tables cannot be double-seated; upcoming booking remains intact (33.098398ms)
+  ✔ configured early window works without changing default (26.257061ms)
+  ✔ cancellation and check-in serialize; seated table cannot be deleted (25.366523ms)
+  ✔ bookings across midnight cannot overlap (17.141106ms)
+✔ reservation lifecycle, concurrency, permissions and tenant isolation (1049.490953ms)
+▶ station isolation and staff approvals
+  ✔ juicer-only progresses, persists and duplicate collection is harmless (245.391919ms)
+  ✔ mixed order item actions cannot cross stations; waiter waits for both (130.421669ms)
+  ✔ kitchen-only and legacy endpoint use item-level handoff (32.727312ms)
+  ✔ additional round after table receipt remains preparable without changing previous handoff (61.009474ms)
+  ✔ completed orders and other tenant data are immutable (34.094155ms)
+  ✔ parcel preparation collection does not complete payment or customer delivery (28.244807ms)
+  ✔ chef requests inactive staff with verified creator; no duplicates or activation bypass (17.241723ms)
+  ✔ only own requests exposed to chefs; tenant admin approval atomic and audited (16.652365ms)
+  ✔ rejected request retained and cannot be activated with generic edits (19.642191ms)
+  ✔ Juicer request cannot log in until approval; response never includes PIN (44.066825ms)
+  ✔ approved kitchen employee receives one Chef login; activation and deletion stay linked (51.442553ms)
+  ✔ legacy approved staff and admin-created records remain active (16.17363ms)
+✔ station isolation and staff approvals (1182.720884ms)
+ℹ tests 26
+ℹ suites 0
+ℹ pass 26
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3087.864366

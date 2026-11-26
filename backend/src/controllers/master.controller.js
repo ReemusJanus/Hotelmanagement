@@ -13,14 +13,19 @@ import {
 import { ensureSchema, tenantDDL, syncSequences } from '../schema.js';
 import { quoteIdentifier } from '../postgres.js';
 import { ensureStorageFolders } from '../storage.js';
+import { templateHandlers, tenantTemplate } from '../ui-templates.js';
+import { consoleHandlers } from '../master-console.js';
 
 let masterPool, adminPool, broadcastChangeFn, queueNoticeFn;
 
+export let templates, console_;
 export function initMasterController({ masterPool: mp, adminPool: ap, broadcastChange, queueNotice }) {
   masterPool = mp;
   adminPool = ap;
   broadcastChangeFn = broadcastChange;
   queueNoticeFn = queueNotice;
+  templates = templateHandlers({ pool: mp, broadcast: broadcastChange, notify: queueNotice });
+  console_ = consoleHandlers({ pool: mp });
 }
 
 export async function currentPricing() {
@@ -321,7 +326,7 @@ export async function resolveLogin(req, res) {
     const [[masterUser]] = await masterPool.query('SELECT id,name FROM master_users WHERE pin=? AND active=TRUE LIMIT 1', [pin]);
     if (masterUser) {
       const user = { ...masterUser, role: 'superadmin', companyDatabase: null, companyName: 'KnockOUT Master', hotelId: '0000' };
-      return res.json({ ...user, accessToken: issuePortalToken(user) });
+      return res.json({ ...user, appearance: await console_.preference(user.id), accessToken: issuePortalToken(user) });
     }
     if (!hotelId) {
       const [[application]] = await masterPool.query('SELECT id,company_name "companyName",admin_name name,status,completed_at "completedAt" FROM company_registration_requests WHERE temporary_pin=? AND completed_at IS NULL LIMIT 1', [pin]);
@@ -347,7 +352,7 @@ export async function resolveLogin(req, res) {
 
   const user = matches[0];
   await masterPool.query('INSERT INTO usage_logins (company_id,user_id,role) SELECT id,?,? FROM companies WHERE database_name=?', [user.id, user.role, user.companyDatabase]);
-  res.json({ ...user, accessToken: issuePortalToken(user) });
+  res.json({ ...user, template: await tenantTemplate(masterPool, user.companyDatabase), accessToken: issuePortalToken(user) });
 }
 
 export async function onboardingStatus(req, res) {
@@ -407,13 +412,13 @@ export async function postMasterLogin(req, res) {
   const [[user]] = await masterPool.query('SELECT id,name FROM master_users WHERE pin=? AND active=TRUE', [req.body.pin]);
   if (!user) return res.status(401).json({ message: 'Invalid KnockOUT Master PIN' });
   const result = { ...user, role: 'superadmin', companyDatabase: null };
-  res.json({ ...result, accessToken: issuePortalToken(result) });
+  res.json({ ...result, appearance: await console_.preference(user.id), accessToken: issuePortalToken(result) });
 }
 
-export async function getMasterState(_req, res) {
+export async function getMasterState(req, res) {
   await enforceSubscriptions();
   await generateMonthlySaasInvoices();
-  const [companies] = await masterPool.query('SELECT id,company_name "companyName",database_name "databaseName",hotel_id "hotelId",modules,admin_name "adminName",email,phone,status,created_at "createdAt" FROM companies ORDER BY id');
+  const [companies] = await masterPool.query('SELECT c.id,c.company_name "companyName",c.database_name "databaseName",c.hotel_id "hotelId",c.modules,c.admin_name "adminName",c.email,c.phone,c.status,c.created_at "createdAt",t.id "templateId",t.code "templateCode",t.name "templateName",c.template_change_count "templateChangesUsed" FROM companies c LEFT JOIN ui_templates t ON t.id=c.template_id ORDER BY c.id');
   const [masterUsers] = await masterPool.query("SELECT id,name,pin,active,'superadmin' role FROM master_users ORDER BY name");
   const [registrationRequests] = await masterPool.query("SELECT id,company_name \"companyName\",hotel_id \"hotelId\",admin_name \"adminName\",email,phone,status,package_code \"packageCode\",period_months \"periodMonths\",selected_modules \"selectedModules\",review_note \"reviewNote\",company_id \"companyId\",created_at \"createdAt\",reviewed_at \"reviewedAt\",completed_at \"completedAt\" FROM company_registration_requests ORDER BY (CASE status WHEN 'pending' THEN 1 WHEN 'approved' THEN 2 WHEN 'rejected' THEN 3 ELSE 0 END),id DESC");
   const [invoices] = await masterPool.query('SELECT i.id,i.company_id "companyId",c.company_name "companyName",c.hotel_id "hotelId",to_char(i.billing_month, \'YYYY-MM\') "billingMonth",i.line_items "lineItems",i.subtotal,i.tax_rate "taxRate",i.tax,i.total,i.status,i.paid_at "paidAt",i.generated_at "generatedAt" FROM saas_invoices i JOIN companies c ON c.id=i.company_id ORDER BY i.billing_month DESC,c.company_name');
@@ -436,13 +441,17 @@ export async function getMasterState(_req, res) {
     })),
     subscriptions,
     usage,
+    pendingTemplateRequests: await templates.pendingCount(),
+    appearance: await console_.preference(req.masterSession.id),
     moduleCatalog: Object.fromEntries(Object.entries(moduleCatalog).map(([key, [name, price]]) => [key, { name, price }])),
     masterName: 'KnockOUT Master'
   });
 }
 
 export async function createCompany(req, res) {
-  res.status(201).json(await provisionCompany(req.body));
+  const created = await provisionCompany(req.body);
+  await console_.audit(req, 'company.created', { id: created.companyId ?? created.id, companyName: created.companyName ?? req.body?.companyName }, 'Created by Superadmin');
+  res.status(201).json(created);
 }
 
 export async function approveRegistration(req, res) {
@@ -454,6 +463,7 @@ export async function approveRegistration(req, res) {
   await queueNoticeFn(request.email, 'email', 'KnockOUT application approved', `Your application for ${request.companyName} is approved. Sign in with your temporary PIN to complete setup and payment.`);
   if (request.phone) await queueNoticeFn(request.phone, 'sms', 'Application approved', `KnockOUT approved ${request.companyName}. Use your temporary PIN to finish registration.`);
   broadcastChangeFn('master', 'registration.approved');
+  await console_.audit(req, 'registration.approved', { companyName: request.companyName }, `Application #${request.id}`);
   res.json({ ok: true, status: 'approved', request });
 }
 
@@ -462,12 +472,13 @@ export async function updateCompanyModules(req, res) {
   const enabled = req.body.enabled;
   if (!(key in defaultModules) || typeof enabled !== 'boolean') return res.status(400).json({ message: 'Invalid module setting' });
 
-  const [[company]] = await masterPool.query('SELECT database_name "databaseName",modules FROM companies WHERE id=?', [req.params.id]);
+  const [[company]] = await masterPool.query('SELECT company_name "companyName",database_name "databaseName",modules FROM companies WHERE id=?', [req.params.id]);
   if (!company) return res.status(404).json({ message: 'Company not found' });
 
   const modules = { ...parseModules(company.modules), [key]: enabled };
   await masterPool.query('UPDATE companies SET modules=? WHERE id=?', [JSON.stringify(modules), req.params.id]);
   broadcastChangeFn(company.databaseName, 'company.modules', { modules, changedModule: key, enabled });
+  await console_.audit(req, enabled ? 'module.enabled' : 'module.disabled', { id: req.params.id, companyName: company.companyName }, key);
   res.json({ ok: true, modules });
 }
 
@@ -482,6 +493,8 @@ export async function updateInvoiceStatus(req, res) {
 export async function rejectRegistration(req, res) {
   const [result] = await masterPool.query("UPDATE company_registration_requests SET status='rejected',review_note=?,reviewed_at=NOW() WHERE id=? AND status='pending'", [String(req.body.reviewNote || 'Not approved by Master'), req.params.id]);
   if (!result.affectedRows) return res.status(409).json({ message: 'Registration request is missing or already reviewed' });
+  const [[request]] = await masterPool.query('SELECT company_name "companyName" FROM company_registration_requests WHERE id=?', [req.params.id]);
+  await console_.audit(req, 'registration.rejected', request, `Application #${req.params.id}`);
   res.json({ ok: true, status: 'rejected' });
 }
 
@@ -491,6 +504,7 @@ export async function updateCompanyStatus(req, res) {
   if (!company) return res.status(404).json({ message: 'Company not found' });
   await masterPool.query('UPDATE companies SET status=? WHERE id=?', [req.body.status, req.params.id]);
   broadcastChangeFn(company.databaseName, 'company.status');
+  await console_.audit(req, req.body.status === 'active' ? 'company.activated' : 'company.suspended', { id: req.params.id, companyName: company.companyName });
   res.json({ ok: true, status: req.body.status, companyName: company.companyName, loginsEnabled: req.body.status === 'active' });
 }
 
@@ -509,6 +523,7 @@ export async function updateCompanyUserPin(req, res) {
 
   await adminPool.query(`UPDATE "${company.databaseName}".users SET pin=? WHERE id=?`, [pin, user.id]);
   await syncCompanyUsers(company.databaseName);
+  await console_.audit(req, 'user.pin-reset', company, user.name);
   res.json({ ok: true, userId: user.id, name: user.name, pin });
 }
 
@@ -535,6 +550,7 @@ export async function deleteCompany(req, res) {
   if (req.body.companyName !== company.companyName) return res.status(400).json({ message: 'Type the exact hotel name to confirm deletion' });
 
   await adminPool.query(`DROP SCHEMA "${company.databaseName}" CASCADE`);
+  await console_.audit(req, 'company.deleted', { companyName: company.companyName }, company.databaseName);
   await masterPool.query('DELETE FROM companies WHERE id=?', [company.id]);
   res.json({ ok: true, deleted: company.companyName });
 }

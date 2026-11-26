@@ -1,0 +1,22 @@
+▶ reservation lifecycle, concurrency, permissions and tenant isolation
+  ✔ create and preserve guest details; reject overlapping bookings (75.628091ms)
+  ✔ early, unauthorized and cross-tenant seating rejected (28.513236ms)
+  ✔ confirmed reservation blocks walk-ins and exposes check-in metadata (160.287487ms)
+  ✔ simultaneous waiters seat once; repeat is idempotent (27.385465ms)
+  ✔ seated reservation required; concurrent orders cannot double occupy (25.506439ms)
+  ✔ kitchen/juicer, handoff, billing and payment preserve reservation history (68.116882ms)
+  ✔ release restores a newly applicable reservation (14.553358ms)
+  ✔ cancelled and expired reservations cannot check in; no automatic no-show (30.214044ms)
+  ✔ occupied tables cannot be double-seated; upcoming booking remains intact (22.499724ms)
+  ✔ configured early window works without changing default (24.926866ms)
+  ✔ cancellation and check-in serialize; seated table cannot be deleted (20.880342ms)
+  ✔ bookings across midnight cannot overlap (11.992308ms)
+✔ reservation lifecycle, concurrency, permissions and tenant isolation (927.199056ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1359.170463

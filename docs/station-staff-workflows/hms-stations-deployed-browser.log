@@ -1,0 +1,33 @@
+Open 320 juicer
+Navigate juicer Table Orders
+Navigate juicer Preparation History
+Navigate juicer Preparation History
+Open 320 waiter
+Navigate waiter Tables
+Open 320 chef
+Navigate chef Chef Management
+Open 320 admin
+Navigate admin Staff
+{"width":320,"juicerWorkflow":"passed","historyPersistence":"passed","waiterMixedStatuses":"passed","staffRequestReview":"passed","noHorizontalOverflow":"passed"}
+Open 768 juicer
+Navigate juicer Table Orders
+Navigate juicer Preparation History
+Navigate juicer Preparation History
+Open 768 waiter
+Navigate waiter Tables
+Open 768 chef
+Navigate chef Chef Management
+Open 768 admin
+Navigate admin Staff
+{"width":768,"juicerWorkflow":"passed","historyPersistence":"passed","waiterMixedStatuses":"passed","staffRequestReview":"passed","noHorizontalOverflow":"passed"}
+Open 1440 juicer
+Navigate juicer Table Orders
+Navigate juicer Preparation History
+Navigate juicer Preparation History
+Open 1440 waiter
+Navigate waiter Tables
+Open 1440 chef
+Navigate chef Chef Management
+Open 1440 admin
+Navigate admin Staff
+{"width":1440,"juicerWorkflow":"passed","historyPersistence":"passed","waiterMixedStatuses":"passed","staffRequestReview":"passed","noHorizontalOverflow":"passed"}

@@ -10,7 +10,7 @@ export default {
     splash: {
       image: './assets/byteberrytech-logo.png',
       resizeMode: 'contain',
-      backgroundColor: '#090a08'
+      backgroundColor: '#151719'
     },
     scheme: 'knockout',
     ios: {
@@ -23,7 +23,7 @@ export default {
       softwareKeyboardLayoutMode: 'resize',
       adaptiveIcon: {
         foregroundImage: './assets/byteberrytech-logo.png',
-        backgroundColor: '#090a08'
+        backgroundColor: '#151719'
       },
       edgeToEdgeEnabled: true
     },

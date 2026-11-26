@@ -1,0 +1,11 @@
+PASS whole: no render errors or blank screen
+PASS last-item: no render errors or blank screen
+PASS partial: no render errors or blank screen
+PASS failure: no render errors or blank screen
+PASS network: no render errors or blank screen
+PASS invalid: no render errors or blank screen
+PASS live-change: no render errors or blank screen
+PASS mobile: no render errors or blank screen
+PASS tablet: no render errors or blank screen
+PASS chef-live: cancelled ticket removed, other ticket retained
+PASS juicer-live: cancelled ticket removed, other ticket retained

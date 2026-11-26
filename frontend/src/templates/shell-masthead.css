@@ -1,0 +1,13 @@
+/* Shared desktop structure for the masthead shell; colours come from template tokens. */
+@media screen {
+@media (min-width:1100px) {
+  html[data-template] .shell.layout-masthead { display:block; } html[data-template] .shell.layout-masthead>aside { display:none!important; }
+  html[data-template] .shell.layout-masthead>main { margin:0!important; }
+  html[data-template] .shell.layout-masthead main>header.masthead { display:block; padding:0; background:var(--color-surface); border-bottom:1px solid var(--color-border); box-shadow:0 3px 0 -2px var(--color-primary); }
+  html[data-template] .shell.layout-masthead .masthead-row { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:24px; padding:16px 40px 10px; } html[data-template] .shell.layout-masthead .masthead-row .header-actions { justify-self:end; } html[data-template] .shell.layout-masthead .masthead-row .global-search { border-width:0 0 1px; background:none; width:210px; }
+  html[data-template] .shell.layout-masthead .masthead-brand { display:grid; justify-items:center; gap:4px; } html[data-template] .shell.layout-masthead .masthead-brand .logo { width:38px; height:38px; background-color:var(--color-ink)!important; border-radius:50%; } html[data-template] .shell.layout-masthead .masthead-brand b { font:600 27px/1.1 var(--font-display); letter-spacing:.01em; }
+  html[data-template] .shell.layout-masthead .masthead-nav nav { display:flex!important; justify-content:center; flex-wrap:wrap; gap:0 4px; padding:0 24px; }
+  html[data-template] .shell.layout-masthead .masthead-nav nav button { display:inline-flex; align-items:center; gap:8px; width:auto; min-height:46px; padding:10px 13px; border:0!important; border-radius:0; border-bottom:2px solid transparent!important; background:none!important; box-shadow:none!important; color:var(--color-text-secondary)!important; font:500 13.5px var(--font-sans); } html[data-template] .shell.layout-masthead .masthead-nav nav button:hover { color:var(--color-text-primary)!important; } html[data-template] .shell.layout-masthead .masthead-nav nav button.active { color:var(--color-text-primary)!important; border-bottom-color:var(--color-primary)!important; font-weight:600; } html[data-template] .shell.layout-masthead .masthead-nav nav button svg,html[data-template] .shell.layout-masthead .masthead-nav nav button::before { display:none!important; } html[data-template] .shell.layout-masthead .masthead-nav .nav-count-badge { margin:0; }
+  html[data-template] .shell.layout-masthead .page { max-width:1440px; padding:40px 48px 56px; }
+}
+}

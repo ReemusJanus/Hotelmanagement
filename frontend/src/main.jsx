@@ -6,6 +6,7 @@ import './styles.css';
 import './knockout.css';
 import './theme.css';
 import './responsive.css';
+import './design-system.css';
 import './thermal-receipt.css';
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>

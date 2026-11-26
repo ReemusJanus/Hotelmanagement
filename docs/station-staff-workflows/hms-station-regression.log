@@ -1,0 +1,32 @@
+✔ reject additions and removal when another item in the round is preparing (1.274084ms)
+✔ reject additions and removal when another item in the round is ready (0.140958ms)
+✔ unstarted rounds remain editable (0.151041ms)
+✔ new rounds remain editable (0.141792ms)
+(node:29942) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/reemusjanus/Library/Mobile%20Documents/com%7Eapple%7ECloudDocs/project/Hotel%20Management/mobile/production-routing.js is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /Users/reemusjanus/Library/Mobile Documents/com~apple~CloudDocs/project/Hotel Management/mobile/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ all clients honour configured category station; legacy menus remain compatible (0.6925ms)
+✔ chef updates only its own lines in a mixed batch (0.7615ms)
+✔ juicer updates only its own lines in a mixed batch (0.095708ms)
+✔ juicer cannot change food availability but can change a mapped drink (0.188666ms)
+{"event":"request_error","type":"Error"}
+✔ auth attempts are bounded, expire, and ignore spoofed forwarded headers (2.383167ms)
+✔ order quantities reject negative, fractional, nonfinite and oversized values (0.165292ms)
+✔ image MIME and signature must agree; SVG and forged extensions rejected (0.233583ms)
+✔ CORS permits exact configured origin, same origin and native clients only (0.4405ms)
+✔ production rejects missing or placeholder signing secrets (0.761583ms)
+✔ internal errors are redacted and client validation remains actionable (0.574208ms)
+✔ role guard rejects privilege escalation; security headers disable caching (0.124625ms)
+✔ JSON old unauthorized response must not revoke the new tenant session (25.179333ms)
+✔ multipart old unauthorized response must not revoke the new tenant session (0.276583ms)
+✔ current unauthorized session is still revoked (0.232583ms)
+✔ invalid successful JSON and upload responses are actionable errors, never false success (0.679459ms)
+ℹ tests 19
+ℹ suites 0
+ℹ pass 19
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 94.7285

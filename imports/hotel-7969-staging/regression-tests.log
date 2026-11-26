@@ -1,0 +1,34 @@
+✔ reject additions and removal when another item in the round is preparing (1.990958ms)
+✔ reject additions and removal when another item in the round is ready (0.340959ms)
+✔ unstarted rounds remain editable (0.298292ms)
+✔ new rounds remain editable (0.689875ms)
+(node:16141) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/reemusjanus/Library/Mobile%20Documents/com%7Eapple%7ECloudDocs/project/Hotel%20Management/mobile/production-routing.js is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /Users/reemusjanus/Library/Mobile Documents/com~apple~CloudDocs/project/Hotel Management/mobile/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ all clients honour configured category station; legacy menus remain compatible (1.0195ms)
+✔ chef updates only its own lines in a mixed batch (1.601542ms)
+✔ juicer updates only its own lines in a mixed batch (0.479666ms)
+✔ juicer cannot change food availability but can change a mapped drink (0.244375ms)
+﹣ restaurant logos: tenant isolation, validation, replace, remove and atomic failure (0.339542ms) # SKIP
+✔ logo multipart parser enforces type and 2 MB before controller execution (131.49975ms)
+{"event":"request_error","type":"Error"}
+✔ auth attempts are bounded, expire, and ignore spoofed forwarded headers (3.304833ms)
+✔ order quantities reject negative, fractional, nonfinite and oversized values (0.342166ms)
+✔ image MIME and signature must agree; SVG and forged extensions rejected (0.27425ms)
+✔ CORS permits exact configured origin, same origin and native clients only (0.149791ms)
+✔ production rejects missing or placeholder signing secrets (0.194292ms)
+✔ internal errors are redacted and client validation remains actionable (0.418792ms)
+✔ role guard rejects privilege escalation; security headers disable caching (0.225333ms)
+✔ JSON old unauthorized response must not revoke the new tenant session (34.612334ms)
+✔ multipart old unauthorized response must not revoke the new tenant session (0.298542ms)
+✔ current unauthorized session is still revoked (0.261917ms)
+✔ invalid successful JSON and upload responses are actionable errors, never false success (0.6545ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 20
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 321.544625

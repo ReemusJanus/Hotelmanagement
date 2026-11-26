@@ -1,0 +1,8 @@
+/* Shared desktop structure for the text shell; colours come from template tokens. */
+@media screen {
+@media (min-width:1100px) {
+  html[data-template] .shell.layout-text>aside { background:#fff!important; border-right:0; padding:36px 20px!important; } html[data-template] .shell.layout-text aside .brand { border:0; padding:0 12px 20px; } html[data-template] .shell.layout-text>aside .brand .logo { display:none; } html[data-template] .shell.layout-text>aside b { color:#111!important; font-size:18px!important; } html[data-template] .shell.layout-text>aside small { color:var(--color-text-secondary)!important; letter-spacing:0!important; }
+  html[data-template] .shell.layout-text>aside nav button { color:var(--color-text-secondary)!important; min-height:40px; padding:8px 12px; border-radius:0; background:none!important; font-weight:400; } html[data-template] .shell.layout-text>aside nav button svg,html[data-template] .shell.layout-text>aside nav button::before { display:none!important; } html[data-template] .shell.layout-text>aside nav button:hover { color:#111!important; } html[data-template] .shell.layout-text>aside nav button.active { color:#111!important; font-weight:700; } html[data-template] .shell.layout-text>aside .nav-count-badge { background:#111!important; color:#fff!important; }
+  html[data-template] .shell.layout-text main>header { background:var(--color-surface); border:0; padding:24px 48px 0; position:static; } html[data-template] .shell.layout-text .topbar-title { visibility:hidden; } html[data-template] .shell.layout-text main .global-search { border-width:0 0 1px; border-radius:0; background:none; } html[data-template] .shell.layout-text .page { padding:24px 48px 56px; max-width:1240px; margin-left:0; }
+}
+}

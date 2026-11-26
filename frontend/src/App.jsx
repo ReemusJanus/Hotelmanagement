@@ -3,9 +3,10 @@ import {openPrinter} from './thermal-print.mjs';
 import {isJuiceItem} from './production-routing.js';
 import { createPortal } from "react-dom";
 import LandingStory from "./LandingStory";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   LayoutDashboard,
+  Menu as MenuIcon,
   UtensilsCrossed,
   ChefHat,
   Armchair,
@@ -40,9 +41,21 @@ import {
   Gauge,
   PieChart,
   CupSoda,
+  CircleAlert,
+  Palette,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Sparkles,
+  Pencil,
 } from "lucide-react";
 import { api, apiForm, resolvePortalLogin, submitCompanyRegistration, getOnboardingStatus, completeCompanyRegistration, saveReport } from "./api";
 import AttendancePanel from "./AttendancePanel";
+import { AdminDashboard, StationDashboard } from "./Dashboard";
+import { TemplateProvider, useTemplate } from "./templates/TemplateProvider";
+import { shellLayouts } from "./templates/layouts";
+import { DataTable, SearchField, WorkspaceSkeleton, useNow, usePreference } from "./ui";
+import { ApprovalQueue, AssignTemplate, ConsoleSearch, MasterAppearance, MasterDashboard, TenantAudit, TenantDirectory, TenantTemplates } from "./master/Console";
+import { resolveTemplate } from "./templates/registry.js";
 
 const money = (n) =>
   new Intl.NumberFormat("en-IN", {
@@ -88,7 +101,11 @@ function useLiveUpdates(enabled, database, onChange) {
     return () => { stopped = true; clearTimeout(retryTimer); clearTimeout(refreshTimer); clearInterval(fallback); socket?.close(); };
   }, [enabled, database, onChange]);
 }
+const AppearancePanel = lazy(() => import("./templates/AppearancePanel"));
+const TemplateManager = lazy(() => import("./templates/TemplateManager"));
+const TemplatePreview = lazy(() => import("./templates/TemplatePreview"));
 export default function App() {
+  if (location.pathname === "/template-preview") return <Suspense fallback={null}><TemplatePreview Shell={Shell} Tables={TableCard} Ticket={KitchenTicket}/></Suspense>;
   const portalRole = import.meta.env.VITE_PORTAL_ROLE || "admin";
   return portalRole === "superadmin" ? (
     <SuperAdminApp />
@@ -118,7 +135,7 @@ function CompanyApp() {
       if(version!==requestVersion.current || account.current?.companyDatabase!==identity.companyDatabase)return;
       if(state.companyDatabase!==identity.companyDatabase)throw new Error('Tenant identity mismatch. Sign in again.');
       setData(state);setDataError('');
-      setUser(current=>{if(!current)return current;const updated={...current,modules:session.modules};sessionStorage.setItem('knockout-portal-user',JSON.stringify(updated));return updated});
+      setUser(current=>{if(!current)return current;const updated={...current,modules:session.modules,template:session.template??null,templateNotice:session.templateNotice??null};sessionStorage.setItem('knockout-portal-user',JSON.stringify(updated));return updated});
     } catch(error) {
       if(version===requestVersion.current && account.current?.companyDatabase===identity.companyDatabase)setDataError(error.message);
     }
@@ -135,6 +152,8 @@ function CompanyApp() {
       const loc = message.tableNumber ? `Table ${message.tableNumber}` : (message.orderType === "parcel" ? `Parcel #${message.orderId}` : `Order #${message.orderId}`);
       toast(`⚠️ Kitchen Alert · ${loc}: "${message.itemName}" is Out of Stock / Not Available!`);
     }
+    if (message?.resource === "company.template-request" && user?.role === "admin") toast(`Your template request was ${message.decision}`);
+    if (message?.resource === "company.template") toast("Your workspace design was updated");
     if (message?.resource === "company.modules" && message.modules) {
       setUser((current) => {
         if (!current) return current;
@@ -161,6 +180,7 @@ function CompanyApp() {
     requestVersion.current++;account.current=null;setDataError("");
     sessionStorage.removeItem("knockout-portal-user");
     sessionStorage.removeItem("knockout-access-token");
+    orderDrafts.clear();
     setUser(null);
     setData(null);
   };
@@ -177,14 +197,19 @@ function CompanyApp() {
     window.addEventListener("knockout:profile-updated", updateProfile);
     return () => window.removeEventListener("knockout:profile-updated", updateProfile);
   }, []);
-  const toast = (m) => {
+  const [noticeTone,setNoticeTone]=useState("success"),noticeTimer=useRef(null);
+  const toast = useCallback((m, tone = "success") => {
+    clearTimeout(noticeTimer.current);
+    setNoticeTone(tone);
     setNotice(m);
-    setTimeout(() => setNotice(""), 2800);
-  };
+    noticeTimer.current = setTimeout(() => setNotice(""), tone === "error" ? 6000 : 3200);
+  }, []);
   if (!user) return <Login onLogin={login} />;
   if (user.role === "applicant") return <ApplicantOnboarding user={user} logout={logout}/>;
   if (user.role === "superadmin")
     return <SuperAdminApp authenticatedUser={user} onLogout={logout} />;
+  const skeleton = <WorkspaceSkeleton label="Opening your portal…" neutral={user.template === undefined}/>;
+  if (!data && !dataError) return user.template === undefined ? skeleton : <TemplateProvider tenant={user.companyDatabase} config={user.template} pending={<WorkspaceSkeleton label="Opening your portal…" neutral/>}>{skeleton}</TemplateProvider>;
   if (!data)
     return (
       <div className="loading">
@@ -194,7 +219,7 @@ function CompanyApp() {
       </div>
     );
   return (
-    <>
+    <TemplateProvider tenant={user.companyDatabase} config={user.template ?? null} pending={<WorkspaceSkeleton label="Opening your portal…" neutral/>}>
       {dataError?<div role="alert" className="dashboard-data-error">Unable to refresh company data: {dataError}. Showing the last successful update. <button onClick={refresh}>Retry</button></div>:null}
       {user.role === "admin" ? (
         <Admin
@@ -223,8 +248,9 @@ function CompanyApp() {
       ) : (
         <Juicer data={data} refresh={refresh} user={user} logout={logout} toast={toast} />
       )}
-      <div role="status" aria-live="polite" className={`toast ${notice ? "show" : ""}`}>{notice}</div>
-    </>
+      <Toast notice={notice} tone={noticeTone}/>
+      <ConfirmHost/>
+    </TemplateProvider>
   );
 }
 
@@ -407,8 +433,7 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
     [selectedCompanyId, setSelectedCompanyId] = useState(null),
     [selectedRegistrationId,setSelectedRegistrationId]=useState(null),
     [companySection, setCompanySection] = useState("overview"),
-    [masterPage,setMasterPage]=useState("companies"),
-    [companySearch, setCompanySearch] = useState(""),
+    [masterPage,setMasterPage]=useState("dashboard"),[range,setRange]=usePreference("knockout-master-range","30d"),[templateFilter,setTemplateFilter]=useState(""),[assigning,setAssigning]=useState(null),[collapsed,setCollapsed]=usePreference("knockout-master-sidebar",false),[appearance,setAppearance]=useState(undefined),
     [companyFilter, setCompanyFilter] = useState("all"),
     [reviewBusy,setReviewBusy]=useState(null),
     [actionBusy, setActionBusy] = useState(false),
@@ -416,7 +441,7 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
   const refresh = useCallback(
     () =>
       api("/state")
-        .then(setData)
+        .then((next)=>{setData(next);setAppearance((current)=>current===undefined?next.appearance??null:current)})
         .catch((e) => setNotice(e.message)),
     [],
   );
@@ -426,11 +451,15 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
     }
   }, [user, refresh]);
   useLiveUpdates(Boolean(user), "master", refresh);
-  const toast = (message) => {
+  const [noticeTone,setNoticeTone]=useState("success"),noticeTimer=useRef(null);
+  const toast = (message, tone = "success") => {
+    clearTimeout(noticeTimer.current);
+    setNoticeTone(tone);
     setNotice(message);
-    setTimeout(() => setNotice(""), 3500);
+    noticeTimer.current = setTimeout(() => setNotice(""), tone === "error" ? 6000 : 3500);
   };
   async function status(company) {
+    if (company.status === "active" && !(await confirmAction({title:`Suspend ${company.companyName}?`,message:"Everyone at this company loses access until it is activated again.",confirmLabel:"Suspend company",cancelLabel:"Cancel"}))) return;
     try {
       await api(`/companies/${company.id}/status`, {
         method: "PATCH",
@@ -443,7 +472,7 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
         `${company.companyName} ${company.status === "active" ? "suspended" : "activated"}`,
       );
     } catch (e) {
-      toast(e.message);
+      toast(e.message, "error");
     }
   }
   async function toggleModule(company, module, enabled) {
@@ -451,14 +480,14 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
       await api(`/companies/${company.id}/modules`, {method:"PATCH",body:JSON.stringify({module,enabled})});
       await refresh();
       toast(`${module} module ${enabled ? "enabled" : "disabled"} for ${company.companyName}`);
-    } catch (e) { toast(e.message); }
+    } catch (e) { toast(e.message, "error"); }
   }
   async function setInvoiceStatus(invoice, status) {
     try {
       await api(`/saas-invoices/${invoice.id}/status`, {method:"PATCH",body:JSON.stringify({status})});
       await refresh();
       toast(`${invoice.companyName} invoice marked ${status}`);
-    } catch (e) { toast(e.message); }
+    } catch (e) { toast(e.message, "error"); }
   }
   async function confirmMasterAction(typed = "") {
     const action = masterAction;
@@ -475,12 +504,12 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
       setMasterAction(null);
       await refresh();
     } catch (e) {
-      toast(e.message);
+      toast(e.message, "error");
     } finally {
       setActionBusy(false);
     }
   }
-  async function reviewRegistration(request,status){setReviewBusy(request.id);try{await api(`/company-registrations/${request.id}/${status}`,{method:"POST",body:JSON.stringify({reviewNote:status==="reject"?"Application declined by Byteberrytech Master":"Approved by Byteberrytech Master"})});await refresh();toast(status==="approve"?`${request.companyName} approved · applicant can now complete setup and payment`:`${request.companyName} registration rejected`)}catch(error){toast(error.message)}finally{setReviewBusy(null)}}
+  async function reviewRegistration(request,status){setReviewBusy(request.id);try{await api(`/company-registrations/${request.id}/${status}`,{method:"POST",body:JSON.stringify({reviewNote:status==="reject"?"Application declined by Byteberrytech Master":"Approved by Byteberrytech Master"})});await refresh();toast(status==="approve"?`${request.companyName} approved · applicant can now complete setup and payment`:`${request.companyName} registration rejected`)}catch(error){toast(error.message, "error")}finally{setReviewBusy(null)}}
   if (!user)
     return (
       <MasterLogin
@@ -491,6 +520,7 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
         }}
       />
     );
+  if (!data && !notice) return <WorkspaceSkeleton label="Opening Byteberrytech Master…"/>;
   if (!data)
     return (
       <div className="loading">
@@ -501,20 +531,34 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
   const companies = data.companies || [],
     registrationRequests=data.registrationRequests||[],pendingRegistrations=registrationRequests.filter((request)=>request.status==="pending"),
     selectedRegistration=registrationRequests.find(request=>request.id===selectedRegistrationId)||null,
-    selectedCompany = companies.find((company) => company.id === selectedCompanyId) || null,
-    visibleCompanies = companies.filter((company) => {
-      const matchesStatus = companyFilter === "all" || company.status === companyFilter || (companyFilter === "attention" && (!company.online || company.lowStock > 0));
-      const query = companySearch.trim().toLowerCase();
-      return matchesStatus && (!query || [company.companyName, company.databaseName, company.adminName].some((value) => String(value || "").toLowerCase().includes(query)));
-    });
+    selectedCompany = companies.find((company) => company.id === selectedCompanyId) || null;
   const logoutMaster = () => {
     sessionStorage.removeItem("knockout-master-user");
     sessionStorage.removeItem("knockout-access-token");
     if (onLogout) onLogout();
     else setUser(null);
   };
+  const open={
+    page:(id)=>{setMasterPage(id);setSelectedCompanyId(null);setSelectedRegistrationId(null)},
+    company:(id,section="overview")=>{setSelectedRegistrationId(null);setSelectedCompanyId(id);setCompanySection(section)},
+    registration:(id)=>{setSelectedCompanyId(null);setSelectedRegistrationId(id)},
+  };
+  const go={...open,tenants:(filter="all",template="")=>{setCompanyFilter(filter);setTemplateFilter(template);open.page("tenants")},approvals:()=>open.page("approvals"),templates:()=>open.page("templates"),billing:()=>open.page("billing"),appearance:()=>open.page("appearance")};
+  const pages=[["dashboard","Dashboard",LayoutDashboard],["tenants","Tenants",Building2],["approvals","Approvals",Clock3],["billing","SaaS Billing",CreditCard],["templates","Tenant Templates",Palette],["appearance","My Appearance",Sparkles]];
+  const waiting=pendingRegistrations.length+(data.pendingTemplateRequests||0);
+  const masterNotices=[
+    ...(pendingRegistrations.length?[{title:`${pendingRegistrations.length} registration${pendingRegistrations.length===1?"":"s"} waiting`,detail:"Review new tenant applications",page:"approvals"}]:[]),
+    ...(data.pendingTemplateRequests?[{title:`${data.pendingTemplateRequests} template request${data.pendingTemplateRequests===1?"":"s"}`,detail:"Admins are waiting for a decision",page:"approvals"}]:[]),
+    ...companies.filter(company=>!company.online).map(company=>({title:`${company.companyName} database unavailable`,detail:"Open the tenant to check it",page:`company:${company.id}`})),
+    ...companies.filter(company=>company.online&&!company.adminLoginActive).map(company=>({title:`${company.companyName} has no active Admin`,detail:"Open users to restore access",page:`company:${company.id}`})),
+  ];
+  const openNotice=(page)=>page.startsWith("company:")?open.company(Number(page.slice(8))):open.page(page);
+  // Masthead, rail and text shells need tenant navigation parts; the console keeps a sidebar with the same tokens.
+  const layout=["floating","split"].includes(resolveTemplate(appearance).shell)?resolveTemplate(appearance).shell:"sidebar";
+  const navButton=(id,label,Icon,badge)=><button key={id} className={!selectedCompany&&!selectedRegistration&&masterPage===id?"active":""} aria-current={!selectedCompany&&!selectedRegistration&&masterPage===id?"page":undefined} title={collapsed?label:undefined} onClick={()=>open.page(id)}><Icon size={18}/><span className="nav-label">{label}</span>{badge?<span className="nav-count-badge">{badge}</span>:null}</button>;
   return (
-    <div className="master-shell">
+    <TemplateProvider tenant={`master:${user.id}`} config={appearance===undefined?(user.appearance??null):appearance} pending={<WorkspaceSkeleton label="Opening Byteberrytech Master…"/>}>
+    <div className={`shell master-shell layout-${layout} ${collapsed?"sidebar-collapsed":""}`}>
       <aside>
         <div className="brand">
           <span className="logo">B</span>
@@ -523,74 +567,63 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
             <small>MASTER CONTROL</small>
           </div>
         </div>
-        <ResponsiveNavigation><nav>
-          <button className={!selectedCompany&&!selectedRegistration&&masterPage==="companies" ? "active" : ""} onClick={() => { setMasterPage("companies");setSelectedCompanyId(null);setSelectedRegistrationId(null); setCompanySection("overview"); }}>
-            <LayoutDashboard size={18} />
-            Companies
-          </button>
-          <button className={!selectedCompany&&masterPage==="waiting"?"active":""} onClick={()=>{setMasterPage("waiting");setSelectedCompanyId(null);setSelectedRegistrationId(null)}}><Clock3 size={18}/>Tenant Waiting List <span className="nav-count-badge">{pendingRegistrations.length}</span></button>
-          <button className={!selectedCompany&&!selectedRegistration&&masterPage==="billing"?"active":""} onClick={()=>{setMasterPage("billing");setSelectedCompanyId(null);setSelectedRegistrationId(null)}}><CreditCard size={18}/>Monthly SaaS Billing</button>
+        <ResponsiveNavigation title="Master Admin"><nav aria-label="Master navigation">
+          {navButton("dashboard","Dashboard",LayoutDashboard)}
+          {navButton("tenants","Tenants",Building2)}
+          {navButton("approvals","Approvals",Clock3,waiting)}
+          {navButton("billing","SaaS Billing",CreditCard)}
+          {navButton("templates","Tenant Templates",Palette,data.pendingTemplateRequests)}
+          {navButton("appearance","My Appearance",Sparkles)}
           <div className="master-company-nav">
-            <small>COMPANY USERS</small>
-            {companies.map((company) => <button key={company.id} className={selectedCompany?.id === company.id ? "active" : ""} onClick={() => { setSelectedRegistrationId(null);setSelectedCompanyId(company.id); setCompanySection("overview"); }}><Building2 size={17}/><span>{company.companyName}<small>{company.staffCount} users</small></span></button>)}
+            <small>TENANTS</small>
+            {companies.map((company) => <button key={company.id} className={selectedCompany?.id === company.id ? "active" : ""} onClick={() => open.company(company.id)}><Building2 size={17}/><span>{company.companyName}<small>{company.staffCount} users</small></span></button>)}
           </div>
         </nav></ResponsiveNavigation>
+        <button type="button" className="sidebar-toggle" aria-label={collapsed?"Expand sidebar":"Collapse sidebar"} aria-pressed={collapsed} onClick={()=>setCollapsed(!collapsed)}>{collapsed?<PanelLeftOpen size={18}/>:<PanelLeftClose size={18}/>}<span className="nav-label">{collapsed?"":"Collapse"}</span></button>
+        <div className="mobile-header-account">
+          <NoticeCentre notices={masterNotices} open={openNotice}/>
+          <span className="mobile-header-name" title={user.name || "Master Admin"}>{user.name?.trim().split(/\s+/)[0] || "Master"}</span>
+          <button type="button" onClick={logoutMaster} aria-label="Logout" title="Logout"><LogOut size={18}/></button>
+        </div>
       </aside>
       <main>
         <header>
-          <div>
-            <span className="eyebrow">MULTI-COMPANY CONTROL</span>
-            <h2>Byteberrytech Master</h2>
-          </div>
+          <ConsoleSearch data={data} pages={pages} go={go}/>
           <div className="master-header-actions">
-            <button className="master-pending-counter" onClick={()=>{setMasterPage("waiting");setSelectedCompanyId(null);setSelectedRegistrationId(null)}}><Bell size={15}/><span><b>{pendingRegistrations.length}</b><small>Pending registrations</small></span></button>
+            <NoticeCentre notices={masterNotices} open={openNotice}/>
             <div className="header-user">
               <span className="header-avatar">BT</span>
-              <span className="header-user-copy"><b>Byteberrytech Master</b><small>Super Admin</small></span>
-              <button onClick={logoutMaster} title="Logout"><LogOut size={17}/></button>
+              <span className="header-user-copy"><b>{user.name || "Byteberrytech Master"}</b><small>Super Admin</small></span>
+              <button onClick={logoutMaster} title="Logout" aria-label="Logout"><LogOut size={17}/></button>
             </div>
           </div>
         </header>
         <div className="page">
           {selectedRegistration ? <MasterRegistrationDetail request={selectedRegistration} busy={reviewBusy} review={reviewRegistration} back={()=>setSelectedRegistrationId(null)}/> : selectedCompany ? <>
-            <PageHead kicker="COMPANY WORKSPACE" title={selectedCompany.companyName} sub={`All details and controls for the isolated ${selectedCompany.databaseName} database.`} action={<button className="secondary" onClick={() => {setSelectedCompanyId(null);setMasterPage("companies")}}><ChevronLeft size={15}/> All companies</button>}/>
-            <div className="company-detail-tabs"><div>{[["overview","Overview",LayoutDashboard],["users","Users",Users],["revenue","SaaS Billing",CreditCard],["controls","Controls",Settings]].map(([id,label,Icon])=><button key={id} className={companySection===id?"active":""} onClick={()=>setCompanySection(id)}><Icon size={15}/>{label}{id==="users"?<b>{selectedCompany.users?.length||0}</b>:null}</button>)}</div><span><i className={selectedCompany.online ? "online" : ""}/>{selectedCompany.online ? "Database online" : "Database unavailable"}</span></div>
+            <PageHead kicker="COMPANY WORKSPACE" title={selectedCompany.companyName} sub={`All details and controls for the isolated ${selectedCompany.databaseName} database.`} action={<div className="console-row-actions"><button className="secondary" onClick={() => setAssigning(selectedCompany)}><Palette size={15}/> Template</button><button className="secondary" onClick={() => status(selectedCompany)}>{selectedCompany.status==="active"?"Suspend":"Activate"}</button><button className="secondary" onClick={() => open.page("tenants")}><ChevronLeft size={15}/> All tenants</button></div>}/>
+            <div className="company-detail-tabs"><div>{[["overview","Overview",LayoutDashboard],["users","Users",Users],["controls","Configuration",Settings],["templates","Templates",Palette],["activity","Activity",Clock3],["revenue","SaaS Billing",CreditCard]].map(([id,label,Icon])=><button key={id} className={companySection===id?"active":""} onClick={()=>setCompanySection(id)}><Icon size={15}/>{label}{id==="users"?<b>{selectedCompany.users?.length||0}</b>:null}</button>)}</div><span><i className={selectedCompany.online ? "online" : ""}/>{selectedCompany.online ? "Database online" : "Database unavailable"}</span></div>
             {companySection === "overview" ? <CompanyWorkspaceOverview company={selectedCompany} invoice={(data.invoices||[]).find((invoice)=>invoice.companyId===selectedCompany.id)} subscription={(data.subscriptions||[]).find((item)=>item.companyId===selectedCompany.id)} usage={(data.usage||[]).find((item)=>item.companyId===selectedCompany.id)} openUsers={()=>setCompanySection("users")} openRevenue={()=>setCompanySection("revenue")}/> : null}
             {companySection === "users" ? <MasterUsers company={selectedCompany} changePin={setPinUser}/> : null}
             {companySection === "revenue" ? <MasterBilling invoices={(data.invoices||[]).filter((invoice)=>invoice.companyId===selectedCompany.id)} companies={[selectedCompany]} setStatus={setInvoiceStatus}/> : null}
             {companySection === "controls" ? <CompanyControls company={selectedCompany} status={status} toggleModule={toggleModule} setMasterAction={setMasterAction}/> : null}
+            {companySection === "templates" ? <TenantTemplates company={selectedCompany} refreshKey={data} assign={setAssigning}/> : null}
+            {companySection === "activity" ? <TenantAudit company={selectedCompany} refreshKey={data}/> : null}
+          </> : masterPage === "approvals" ? <>
+          <PageHead kicker="APPROVAL QUEUE" title="Approvals" sub="New tenant registrations and Admin template change requests, in one place."/>
+          <ApprovalQueue data={data} openRegistration={open.registration} toast={toast} confirm={confirmAction} refreshKey={data} refresh={refresh}/>
+          </> : masterPage === "tenants" ? <>
+          <PageHead kicker="TENANT MANAGEMENT" title="Tenants" sub="Every company on the platform, with status, contact, template and usage."/>
+          <TenantDirectory data={data} filter={companyFilter} setFilter={setCompanyFilter} template={templateFilter} setTemplate={setTemplateFilter} open={(id)=>open.company(id)} status={status} assign={setAssigning}/>
+          </> : masterPage === "appearance" ? <>
+          <PageHead kicker="YOUR CONSOLE" title="My Appearance" sub="Pick any template for your own Superadmin console. Tenants are not affected."/>
+          <MasterAppearance current={appearance===undefined?user.appearance:appearance} apply={(next)=>{setAppearance(next);try{sessionStorage.setItem("knockout-master-user",JSON.stringify({...user,appearance:next}))}catch{}}} toast={toast}/>
+          </> : masterPage === "templates" ? <><PageHead kicker="TENANT APPEARANCE" title="UI Templates" sub="Choose how each company’s workspace looks. Changes apply without a new release."/><Suspense fallback={<p role="status" className="panel">Loading templates…</p>}><TemplateManager toast={toast} confirm={confirmAction} refreshKey={data}/></Suspense>
+          </> : masterPage === "billing" ? <>
+          <PageHead kicker="SUBSCRIPTIONS" title="Monthly SaaS Billing" sub="Invoices and module pricing for every company."/>
+          <MasterBilling invoices={data.invoices||[]} companies={companies} setStatus={setInvoiceStatus}/>
           </> : <>
-          <PageHead kicker="EXECUTIVE COMMAND" title="Company Network" sub="A live operational view of every company in the Byteberrytech group." />
-          <MasterRegistrationRequests requests={registrationRequests} open={request=>setSelectedRegistrationId(request.id)}/>
-          <MasterNetworkOverview companies={companies} invoices={data.invoices||[]} usage={data.usage||[]}/>
-          <MasterTurnoverCharts companies={companies}/>
-          <div className="master-directory-toolbar">
-            <div><span className="eyebrow">COMPANY DIRECTORY</span><b>{visibleCompanies.length} of {companies.length} companies</b></div>
-            <label><Search size={15}/><input value={companySearch} onChange={(event)=>setCompanySearch(event.target.value)} placeholder="Search company, database or admin"/></label>
-            <div className="master-filter-chips">{[["all","All"],["active","Active"],["suspended","Suspended"],["attention","Needs attention"]].map(([id,label])=><button key={id} className={companyFilter===id?"active":""} onClick={()=>setCompanyFilter(id)}>{label}</button>)}</div>
-          </div>
-          <div className="company-grid">
-            {visibleCompanies.map((company) => (
-              <article
-                className={`company-card ${company.status}`}
-                key={company.id}
-              >
-                <header>
-                  <span>
-                    <Building2 size={19} />
-                  </span>
-                  <Status status={company.status} />
-                </header>
-                <h2>{company.companyName}</h2>
-                <code>CY-DB · {company.cyDb||company.databaseName}</code>
-                <p>{company.adminName} · {company.staffCount} active users</p>
-                <div className="company-card-metrics"><span><b className="bill-amount">{money((data.invoices||[]).find((invoice)=>invoice.companyId===company.id)?.total||0)}</b><small>Monthly SaaS bill</small></span><span><b>{company.activeOrders}</b><small>Live orders</small></span><span className={company.lowStock?"warning":""}><b>{company.lowStock}</b><small>Low stock</small></span></div>
-                <footer className="company-health"><span><i className={company.online?"online":""}/>{company.online?"Database online":"Database offline"}</span><small>{(data.usage||[]).find(item=>item.companyId===company.id)?.totalLogins||0} logins tracked</small></footer>
-                <button className="company-users-button" onClick={() => { setSelectedRegistrationId(null);setSelectedCompanyId(company.id); setCompanySection("overview"); }}><LayoutDashboard size={15}/><span>Open company workspace<small>All details and controls</small></span><ArrowRight size={16}/></button>
-              </article>
-            ))}
-          </div>
-          {!visibleCompanies.length?<div className="master-directory-empty"><Search/><b>No companies found</b><small>Change the search or status filter.</small></div>:null}
+          <PageHead kicker="SUPERADMIN CONSOLE" title="Platform overview" sub="Live tenants, approvals and service health across Byteberrytech."/>
+          <MasterDashboard data={data} range={range} setRange={setRange} go={go} refreshKey={data}/>
           </>}
         </div>
         <footer className="powered-by-knockout">Powered by <b>Byteberrytech</b></footer>
@@ -611,8 +644,11 @@ function SuperAdminApp({ authenticatedUser = null, onLogout = null }) {
           toast={toast}
         />
       ) : null}
-      <div role="status" aria-live="polite" className={`toast ${notice ? "show" : ""}`}>{notice}</div>
+      {assigning ? <AssignTemplate company={assigning} close={()=>setAssigning(null)} toast={toast} done={refresh}/> : null}
+      <Toast notice={notice} tone={noticeTone}/>
+      <ConfirmHost/>
     </div>
+    </TemplateProvider>
   );
 }
 
@@ -624,46 +660,6 @@ function MasterRegistrationRequests({ requests,open }) {
 function MasterRegistrationDetail({request,busy,review,back}){
   const names={tables:"Tables & Waiters",bookings:"Table Bookings",billing:"Orders & Billing",parcels:"Parcel Orders",menu:"Food & Photos",stock:"Stock Management",finance:"Finance Management",staff:"Staff Management",kitchen:"Chef Portal",juicer:"Juicer Portal"};
   return <div className="registration-detail-page"><PageHead kicker="TENANT APPLICATION" title={request.companyName} sub={`Application #${request.id} · submitted ${new Date(request.createdAt).toLocaleString('en-IN')}`} action={<button className="secondary" onClick={back}><ChevronLeft/>Waiting list</button>}/><section className="panel registration-detail-card"><header><div><span className="registration-company-icon"><Building2/></span><div><small>APPLICATION STATUS</small><Status status={request.status}/></div></div><span>{request.periodMonths} month subscription</span></header><div className="registration-detail-grid"><article><small>BUSINESS DETAILS</small><p><span>Business name</span><b>{request.companyName}</b></p><p><span>Application ID</span><b>#{request.id}</b></p><p><span>Submitted</span><b>{new Date(request.createdAt).toLocaleString('en-IN')}</b></p></article><article><small>FIRST ADMINISTRATOR</small><p><span>Name</span><b>{request.adminName}</b></p><p><span>Email</span><b>{request.email}</b></p><p><span>Mobile</span><b>{request.phone}</b></p></article><article><small>SELECTED PACKAGE</small><p><span>Package</span><b className="capitalize">{request.packageCode}</b></p><p><span>Billing period</span><b>{request.periodMonths} month{request.periodMonths>1?'s':''}</b></p><p><span>Tenant database</span><b>Not created yet</b></p></article></div><div className="registration-detail-modules"><small>PACKAGE MODULES</small><div>{(request.selectedModules||[]).map(key=><span key={key}><CheckCircle2/>{names[key]||key}</span>)}</div></div>{request.reviewNote?<div className="registration-review-note"><small>MASTER REVIEW NOTE</small><p>{request.reviewNote}</p></div>:null}{request.status==='pending'?<footer><button disabled={busy===request.id} onClick={()=>review(request,'reject')}>Reject application</button><button className="primary" disabled={busy===request.id} onClick={()=>review(request,'approve')}><CheckCircle2/>{busy===request.id?'Processing…':'Approve application'}</button></footer>:<footer><Status status={request.status}/><span>{request.completedAt?'Tenant registration completed':request.status==='approved'?'Applicant can now continue setup and payment':'Application review completed'}</span></footer>}</section></div>;
-}
-
-function MasterTurnoverCharts({companies}) {
-  const [selected,setSelected]=useState("all");
-  const visible=selected==="all"?companies:companies.filter(c=>String(c.id)===selected);
-  const totals=new Map();
-  visible.forEach(c=>(c.dailyRevenue||[]).forEach(row=>totals.set(row.date,(totals.get(row.date)||0)+Number(row.total||0))));
-  const days=[...totals].sort(([a],[b])=>a.localeCompare(b)).slice(-14);
-  const peak=Math.max(1,...days.map(([,v])=>v));
-  const comparison=companies.filter(c=>c.online).map(c=>({...c,value:Number(c.revenue||0)})).sort((a,b)=>b.value-a.value);
-  const maxCompany=Math.max(1,...comparison.map(c=>c.value));
-  return <section className="master-turnover" aria-label="Company turnover graphs">
-    <div className="panel"><div className="master-chart-head"><div><span className="eyebrow">PAID COMPANY SALES</span><h2>Turnover by company</h2><p>All-time paid order totals · excludes SaaS fees</p></div></div>
-      {comparison.length?<div className="master-company-bars">{comparison.map(c=><div key={c.id}><div><span>{c.companyName}</span><b className="bill-amount">{money(c.value)}</b></div><div className="master-bar-track" role="img" aria-label={`${c.companyName}: ${money(c.value)} turnover`}><span style={{width:`${c.value/maxCompany*100}%`}}/></div></div>)}</div>:<p>No company sales data available.</p>}
-      {comparison.length>0&&!comparison.some(c=>c.value>0)?<p className="master-chart-empty">No paid orders yet. Turnover will appear after payments are recorded.</p>:null}
-      {companies.some(c=>!c.online)?<p>Unavailable companies are excluded from these totals.</p>:null}
-    </div>
-    <div className="panel"><div className="master-chart-head"><div><span className="eyebrow">SERVICE PERFORMANCE</span><h2>Daily turnover</h2><p>Latest 14 reported sales dates · completed paid orders</p></div><label>Company<select value={selected} onChange={e=>setSelected(e.target.value)}><option value="all">All companies</option>{companies.map(c=><option key={c.id} value={String(c.id)}>{c.companyName}</option>)}</select></label></div>
-      {days.length?<div className="master-daily-chart">{days.map(([date,value])=><div key={date}><b className="bill-amount">{money(value)}</b><div><span style={{height:`${value/peak*100}%`}} role="img" aria-label={`${date}: ${money(value)}`}/></div><small>{date.slice(5)}</small></div>)}</div>:<p className="master-chart-empty">No completed paid orders in the available history.</p>}
-    </div>
-  </section>;
-}
-
-function MasterNetworkOverview({ companies, invoices, usage }) {
-  const currentMonth=new Date().toISOString().slice(0,7),currentInvoices=(invoices||[]).filter((invoice)=>invoice.billingMonth===currentMonth),totalRevenue=currentInvoices.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0),
-    activeOrders = companies.reduce((sum, company) => sum + Number(company.activeOrders || 0), 0),
-    activeUsers = (usage||[]).reduce((sum, item) => sum + Number(item.uniqueUsers || 0), 0), totalLogins=(usage||[]).reduce((sum,item)=>sum+Number(item.totalLogins||0),0),
-    alerts = companies.filter((company) => !company.online || company.lowStock > 0 || !company.adminLoginActive),
-    collectedRevenue=currentInvoices.filter((invoice)=>invoice.status==='paid').reduce((sum,invoice)=>sum+Number(invoice.total||0),0);
-  return <>
-    <div className="stats master-stats master-network-stats">
-      <Stat icon={Building2} label="Companies" value={companies.length} note={`${companies.filter((company)=>company.status==="active").length} active tenants`}/>
-      <Stat icon={TrendingUp} label="Byteberrytech monthly revenue" value={money(totalRevenue)} note={`${money(collectedRevenue)} subscription fees collected`}/>
-      <Stat icon={ReceiptText} label="Live orders" value={activeOrders} note="Across the company network"/>
-      <Stat icon={Users} label="Software users" value={activeUsers} note={`${totalLogins} successful logins tracked`}/>
-    </div>
-    <section className={`master-command-strip ${alerts.length?"has-alerts":"healthy"}`}>
-      <Gauge/><div><span className="eyebrow">NETWORK HEALTH</span><b>{alerts.length?`${alerts.length} compan${alerts.length===1?"y needs":"ies need"} attention`:"All companies operating normally"}</b><small>{alerts.length?alerts.map((company)=>company.companyName).join(" · "):"Databases, administrators, and stock levels are healthy."}</small></div><span>{companies.filter((company)=>company.online).length}/{companies.length}<small>online</small></span>
-    </section>
-  </>;
 }
 
 function MasterActionModal({ action, busy, close, confirm }) {
@@ -745,7 +741,7 @@ function MasterUsers({ company, changePin }) {
         </p>
       </div>
       <div className="table-scroll">
-        <table className="master-users-table">
+        <DataTable className="master-users-table" search="Search users">
           <thead>
             <tr>
               <th>User</th>
@@ -788,7 +784,7 @@ function MasterUsers({ company, changePin }) {
               </tr>
             ))}
           </tbody>
-        </table>
+        </DataTable>
         {!rows.length ? <div className="master-users-empty"><Users/><b>No company users yet</b><small>Create staff from this company’s Admin portal.</small></div> : null}
       </div>
     </section>
@@ -1065,74 +1061,137 @@ const portalNav = {
     ["preparation-history", "Preparation History", Clock3],
   ],
 };
-function ResponsiveNavigation({children}) {
+function ResponsiveNavigation({children,actions,title="Navigation"}) {
   const [open,setOpen]=useState(false);
-  return <div className={`responsive-navigation ${open ? "is-open" : ""}`}>
-    <button type="button" className="responsive-menu-toggle" aria-expanded={open} onClick={()=>setOpen(!open)}><LayoutDashboard size={18}/><span>{open ? "Close navigation" : "Menu"}</span>{open ? <X size={18}/> : <ChevronRight size={18}/>}</button>
-    <div className="responsive-menu-items" onKeyDown={event=>{if(event.key==="Escape"){setOpen(false);event.currentTarget.previousElementSibling?.focus()}}} onClick={event=>{if(event.target.closest('button')){if(document.activeElement?.matches('input,textarea'))document.activeElement.blur();setOpen(false);const toggle=event.currentTarget.previousElementSibling;if(toggle && getComputedStyle(toggle).display!=="none")toggle.focus()}}}>{children}</div>
+  useEffect(()=>{const desktop=window.matchMedia('(min-width:1100px)');const resized=()=>{if(desktop.matches)setOpen(false)};desktop.addEventListener('change',resized);return()=>desktop.removeEventListener('change',resized)},[]);
+  return <div className="responsive-navigation">
+    <button type="button" className="responsive-menu-toggle" aria-label="Menu" aria-haspopup="dialog" aria-expanded={open} onClick={()=>setOpen(true)}><MenuIcon size={22}/></button>
+    <div className="responsive-menu-items">{children}</div>
+    {open&&<Modal label="Navigation menu" className="mobile-navigation-drawer" close={()=>setOpen(false)}><div className="mobile-navigation-heading"><span className="eyebrow">WORKSPACE</span><h2>{title}</h2><p>Choose where you want to go</p></div><div onClick={event=>{if(event.target.closest('button'))setOpen(false)}}>{children}{actions&&<div className="mobile-navigation-account"><span className="eyebrow">YOUR ACCOUNT</span>{actions}</div>}</div></Modal>}
   </div>;
 }
 
-function Shell({ role, user, page, setPage, logout, children, settings, navBadges = {} }) {
+// Most-used destinations per role; everything else stays in the menu drawer.
+const primaryTabs = {
+  admin: ["overview", "tables", "orders", "parcels", "stock"],
+  waiter: ["overview", "floor", "orders"],
+  chef: ["kitchen", "parcels", "ready", "dishes", "overview"],
+  juicer: ["queue", "parcel-queue", "ready", "juices", "overview"],
+};
+const tabLabels = { overview: "Home", orders: "Orders", parcels: "Parcels", stock: "Stock", kitchen: "Tables", queue: "Tables", "parcel-queue": "Parcels", ready: "Ready" };
+function NoticeCentre({ notices, open }) {
+  const [shown,setShown]=useState(false),root=useRef(null);
+  useEffect(()=>{
+    if(!shown)return;
+    const outside=event=>{if(!root.current?.contains(event.target))setShown(false)},escape=event=>{if(event.key==="Escape"){setShown(false);root.current?.querySelector("button")?.focus()}};
+    document.addEventListener("mousedown",outside);document.addEventListener("keydown",escape);
+    return()=>{document.removeEventListener("mousedown",outside);document.removeEventListener("keydown",escape)};
+  },[shown]);
+  return <div className="notice-centre" ref={root}>
+    <button type="button" aria-label={notices.length?`Notifications, ${notices.length} need attention`:"Notifications"} aria-expanded={shown} onClick={()=>setShown(!shown)}><Bell size={18}/>{notices.length?<i aria-hidden="true">{notices.length}</i>:null}</button>
+    {shown?<div className="notice-panel" role="region" aria-label="Notifications"><h3>Needs attention</h3>{notices.length?notices.map(notice=><button type="button" key={notice.title} onClick={()=>{setShown(false);open(notice.page)}}><span><b>{notice.title}</b><small>{notice.detail}</small></span><ArrowRight size={16}/></button>):<p><CheckCircle2 size={18}/> You are all caught up.</p>}</div>:null}
+  </div>;
+}
+function QuickJump({ nav, open }) {
+  const [query,setQuery]=useState(""),[focused,setFocused]=useState(false),input=useRef(null);
+  useEffect(()=>{const key=event=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==="k"&&input.current?.offsetParent){event.preventDefault();input.current.focus()}};document.addEventListener("keydown",key);return()=>document.removeEventListener("keydown",key)},[]);
+  const matches=nav.filter(([,label])=>label.toLowerCase().includes(query.trim().toLowerCase()));
+  const go=id=>{open(id);setQuery("");input.current?.blur()};
+  return <div className="global-search" onBlur={event=>{if(!event.currentTarget.contains(event.relatedTarget))setFocused(false)}}>
+    <Search size={16}/>
+    <input ref={input} value={query} onFocus={()=>setFocused(true)} onChange={event=>setQuery(event.target.value)} onKeyDown={event=>{if(event.key==="Enter"&&query.trim()&&matches[0])go(matches[0][0]);if(event.key==="Escape"){setQuery("");input.current.blur()}}} placeholder="Go to a screen…" aria-label="Go to a screen"/>
+    {focused&&query.trim()?<div className="quick-results">{matches.length?matches.map(([id,label,Icon])=><button type="button" key={id} onMouseDown={event=>event.preventDefault()} onClick={()=>go(id)}><Icon size={16}/>{label}</button>):<p>No matching screen</p>}</div>:null}
+  </div>;
+}
+function Toast({ notice, tone }) {
+  const [last,setLast]=useState("");
+  useEffect(()=>{if(notice)setLast(notice)},[notice]);
+  return <div role={tone==="error"?"alert":"status"} aria-live={tone==="error"?"assertive":"polite"} className={`toast ${tone} ${notice ? "show" : ""}`}>{tone==="error"?<CircleAlert size={18} aria-hidden="true"/>:<CheckCircle2 size={18} aria-hidden="true"/>}<span>{notice||<span aria-hidden="true">{last}</span>}</span></div>;
+}
+// Promise-based confirmation used for every destructive action.
+let askConfirmation = null;
+function confirmAction(options) { return askConfirmation ? askConfirmation(options) : Promise.resolve(window.confirm(options.title)); }
+function ConfirmHost() {
+  const [request,setRequest]=useState(null);
+  useEffect(()=>{const ask=options=>new Promise(resolve=>setRequest({...options,resolve}));askConfirmation=ask;return()=>{if(askConfirmation===ask)askConfirmation=null}},[]);
+  if(!request)return null;
+  const finish=answer=>{request.resolve(answer);setRequest(null)};
+  return <Modal close={()=>finish(false)} className="confirm-dialog" label={request.title} hideX>
+    <span className="confirm-icon"><AlertTriangle size={22}/></span><h2>{request.title}</h2><p>{request.message}</p>
+    <div className="confirm-actions"><button type="button" className="secondary" onClick={()=>finish(false)}>{request.cancelLabel||"Keep it"}</button><button type="button" className="danger" onClick={()=>finish(true)}>{request.confirmLabel||"Delete"}</button></div>
+  </Modal>;
+}
+
+function Shell({ role, user, page, setPage, logout, children, settings, navBadges = {}, notices = [] }) {
   const [profileOpen,setProfileOpen]=useState(false),[profile,setProfile]=useState(user);
+  useEffect(()=>{if(window.matchMedia('(max-width:1099px)').matches)window.scrollTo({top:0,left:0,behavior:'instant'})},[page]);
   const navModule={tables:"tables",floor:"tables",bookings:"bookings",orders:"billing",parcels:"parcels",menu:"menu",stock:"stock",finance:"finance",staff:"staff",team:"staff","stock-booking":"stock",dishes:"menu",kitchen:"kitchen",ready:"kitchen",juices:"juicer",queue:"juicer","parcel-queue":"juicer"};
   const visibleNav=portalNav[role].filter(([id])=>!navModule[id]||user.modules?.[navModule[id]]!==false);
   useEffect(() => {
     if (!visibleNav.some(([id]) => id === page)) setPage("overview");
   }, [page, setPage, user.modules]);
   async function openProfile(){setProfileOpen(true);try{setProfile(await api("/profile"))}catch{/* Keep the signed-in identity visible if loading fails. */}}
-  return (
-    <div className={`shell ${role === "waiter" ? "waiter-layout" : ""}`}>
-      <aside>
-        <div className="brand">
-          <span className="logo restaurant-sidebar-logo"><RestaurantLogo url={settings?.logoUrl} fallback="B"/></span>
-          <div>
-            <b>{user.companyName || "Your hotel"}</b>
-            <small>{role} portal</small>
-          </div>
-        </div>
-        <ResponsiveNavigation><nav aria-label={`${role} navigation`}>
-          {visibleNav.map(([id, label, Icon]) => (
-            <button
-              key={id}
-              className={page === id ? "active" : ""}
-              aria-current={page === id ? "page" : undefined}
-              onClick={() => setPage(id)}
-            >
-              <Icon size={18} />
-              {label}
-              {navBadges[id] > 0 ? (
-                <span className="nav-count-badge">{navBadges[id]}</span>
-              ) : null}
-            </button>
-          ))}
-        </nav></ResponsiveNavigation>
-      </aside>
-      <main>
-        <header>
-          <div className="global-search">
-            <Search size={16} />
-            <input placeholder="Search anything…" aria-label="Search workspace" />
-          </div>
-          <div className="header-actions">
-            <button aria-label="Notifications">
-              <Bell size={17} />
-            </button>
+  const [collapsed,setCollapsed]=usePreference("knockout-sidebar-collapsed",false);
+  const current=visibleNav.find(([id])=>id===page);
+  const primaryNav=visibleNav.filter(([id])=>primaryTabs[role].includes(id)).sort((a,b)=>primaryTabs[role].indexOf(a[0])-primaryTabs[role].indexOf(b[0]));
+  const headerActions = (<div className="header-actions">
+            <NoticeCentre notices={notices} open={setPage}/>
             <div className="header-user">
               <button className="header-profile" onClick={openProfile} title="Open my profile">
                 <span className="header-avatar">{profile.profileImageUrl?<img src={profile.profileImageUrl} alt=""/>:profile.name.split(" ").map((x) => x[0]).join("").slice(0, 2)}</span>
                 <span className="header-user-copy"><b>{profile.name}</b><small>{role} · Edit profile</small></span>
               </button>
-              <button className="header-logout" onClick={logout} title="Logout"><LogOut size={17}/></button>
+              <button className="header-logout" onClick={logout} title="Logout" aria-label="Logout"><LogOut size={17}/></button>
             </div>
+          </div>);
+  const template = useTemplate(), Layout = shellLayouts[template.shell] || shellLayouts.sidebar;
+  const groupOf = (id) => ["menu","stock","finance","staff","team","stock-booking","dishes","juices"].includes(id) ? "Manage" : ["settings","preparation-history"].includes(id) ? "More" : "Service";
+  const navGroups = ["Service","Manage","More"].map((group) => [group, visibleNav.filter(([id]) => groupOf(id) === group)]).filter(([, items]) => items.length);
+  const nav = (<nav aria-label={`${role} navigation`}>
+          {navGroups.map(([group, items]) => <div className="nav-group" key={group}><small className="nav-group-title">{group}</small>{items.map(([id, label, Icon]) => (
+            <button
+              key={id}
+              className={page === id ? "active" : ""}
+              aria-current={page === id ? "page" : undefined}
+              onClick={() => setPage(id)}
+              title={collapsed ? label : undefined}
+            >
+              <Icon size={18} />
+              <span className="nav-label">{label}</span>
+              {navBadges[id] > 0 ? (
+                <span className="nav-count-badge">{navBadges[id]}</span>
+              ) : null}
+            </button>
+          ))}</div>)}
+        </nav>);
+  const parts = {
+    brand: <div className="brand">
+          <span className="logo restaurant-sidebar-logo"><RestaurantLogo url={settings?.logoUrl} fallback="B"/></span>
+          <div>
+            <b>{user.companyName || "Your hotel"}</b>
+            <small>{role} portal</small>
+            <span className="mobile-page-title" aria-hidden="true">{current?.[1]}</span>
           </div>
-        </header>
-        <div className="page">{children}</div>
-        <footer className="powered-by-knockout">Powered by <b>Byteberrytech</b></footer>
-      </main>
-      {profileOpen?<ProfileEditor user={profile} close={()=>setProfileOpen(false)} saved={(updated)=>{const next={...user,...updated};setProfile(next);sessionStorage.setItem("knockout-portal-user",JSON.stringify(next));window.dispatchEvent(new CustomEvent("knockout:profile-updated",{detail:next}));setProfileOpen(false)}}/>:null}
-    </div>
-  );
+        </div>,
+    nav,
+    navigation: <ResponsiveNavigation title={user.companyName || "Your hotel"}>{nav}</ResponsiveNavigation>,
+    toggle: <button type="button" className="sidebar-toggle" aria-expanded={!collapsed} onClick={()=>setCollapsed(!collapsed)} title={collapsed?"Expand sidebar":"Collapse sidebar"}>{collapsed?<PanelLeftOpen size={18}/>:<PanelLeftClose size={18}/>}<span className="nav-label">{collapsed?"Expand sidebar":"Collapse"}</span></button>,
+    account: <div className="mobile-header-account">
+          <NoticeCentre notices={notices} open={setPage}/>
+          <button type="button" className="mobile-header-name" onClick={openProfile} title={profile.name} aria-label={`Open profile for ${profile.name}`}>{profile.name?.trim().split(/\s+/)[0] || "Profile"}</button>
+          <button type="button" onClick={logout} aria-label="Logout" title="Logout"><LogOut size={18}/></button>
+        </div>,
+    title: <div className="topbar-title"><small>{user.companyName || "Your hotel"}</small><b>{current?.[1]}</b></div>,
+    wordmark: <div className="masthead-brand"><span className="logo restaurant-sidebar-logo"><RestaurantLogo url={settings?.logoUrl} fallback="B"/></span><b>{user.companyName || "Your hotel"}</b></div>,
+    search: <QuickJump nav={visibleNav} open={setPage}/>,
+    actions: headerActions,
+    footer: <footer className="powered-by-knockout">Powered by <b>Byteberrytech</b></footer>,
+    tabbar: <nav className="mobile-tabbar" aria-label="Quick navigation">
+        {primaryNav.map(([id,label,Icon])=><button type="button" key={id} className={page===id?"active":""} aria-current={page===id?"page":undefined} aria-label={`${label}${navBadges[id]>0?`, ${navBadges[id]} active`:""}`} onClick={()=>setPage(id)}><span><Icon size={21}/>{navBadges[id]>0?<i>{navBadges[id]>99?"99+":navBadges[id]}</i>:null}</span><small>{tabLabels[id]||label}</small></button>)}
+      </nav>,
+    overlay: profileOpen?<ProfileEditor user={profile} close={()=>setProfileOpen(false)} saved={(updated)=>{const next={...user,...updated};setProfile(next);sessionStorage.setItem("knockout-portal-user",JSON.stringify(next));window.dispatchEvent(new CustomEvent("knockout:profile-updated",{detail:next}));setProfileOpen(false)}}/>:null,
+  };
+  return <Layout parts={parts} shellClass={`shell layout-${template.shell} role-${role} ${role === "waiter" ? "waiter-layout" : ""} ${collapsed && template.shell === "sidebar" ? "sidebar-collapsed" : ""}`}>{children}</Layout>;
 }
 
 function ProfileEditor({user,close,saved}){
@@ -1207,19 +1266,28 @@ function ThemeSelect({ value, onChange, options, placeholder = "Choose an option
 function Admin({ data, refresh, user, logout, toast }) {
   const [page, setPage] = useState("overview"), [booking, setBooking] = useState(false);
   const pendingStockRequests = (data.stockRequests || []).filter((request) => request.status !== "resolved"), lowStock = (data.inventory || []).filter((item) => item.quantity <= item.min);
+  const pendingStaff = (data.staffRequests || []).filter((r) => r.approvalStatus === "pending"), billing = data.orders.filter((o) => o.status === "billing_requested");
+  const [settingsTab, setSettingsTab] = useState("business");
+  const openPage = (next) => { if (next === "appearance") { setSettingsTab("appearance"); setPage("settings"); } else setPage(next); };
+  const notices = [
+    user.templateNotice && { title: `Template request ${user.templateNotice.status}`, detail: `${user.templateNotice.templateName} · open Appearance`, page: "appearance" },
+    billing.length && { title: `${billing.length} table${billing.length === 1 ? "" : "s"} waiting to pay`, detail: "Open Tables to take payment", page: "tables" },
+    pendingStaff.length && { title: `${pendingStaff.length} pending staff approval${pendingStaff.length === 1 ? "" : "s"}`, detail: "Review chef requests", page: "staff" },
+    pendingStockRequests.length && { title: `${pendingStockRequests.length} kitchen stock request${pendingStockRequests.length === 1 ? "" : "s"}`, detail: "Chef requested replenishment", page: "stock" },
+    lowStock.length && { title: `${lowStock.length} low-stock item${lowStock.length === 1 ? "" : "s"}`, detail: "At or below minimum level", page: "stock" },
+  ].filter(Boolean);
   return (
     <>
       <Shell
+        notices={notices}
         role="admin"
         settings={data.settings}
         user={user}
         page={page}
-        setPage={setPage}
+        setPage={openPage}
         logout={logout}
       >
-        {(data.staffRequests||[]).some(r=>r.approvalStatus==="pending") ? <button className="admin-stock-notification" onClick={()=>setPage("staff")}><Bell/><span><b>{data.staffRequests.filter(r=>r.approvalStatus==="pending").length} pending staff approvals</b><small>Review chef requests in Staff Management</small></span><ArrowRight/></button> : null}
-        {(pendingStockRequests.length || lowStock.length) ? <button className="admin-stock-notification" onClick={()=>setPage("stock")}><Bell/><span><b>{pendingStockRequests.length ? `${pendingStockRequests.length} kitchen stock request${pendingStockRequests.length===1?"":"s"}` : `${lowStock.length} low-stock item${lowStock.length===1?"":"s"}`}</b><small>{pendingStockRequests.length ? "Chef requested replenishment · open Stock Management" : "Inventory has reached its minimum level"}</small></span><ArrowRight/></button> : null}
-        {page === "overview" && <AdminOverview data={data} setPage={setPage} user={user} />}{" "}
+        {page === "overview" && <AdminDashboard data={data} setPage={openPage} user={user} notices={notices} />}{" "}
         {page === "tables" && (
           <AdminTables data={data} refresh={refresh} toast={toast} user={user} />
         )}{" "}
@@ -1251,105 +1319,12 @@ function Admin({ data, refresh, user, logout, toast }) {
           <StaffManagement data={data} refresh={refresh} toast={toast} />
         )}{" "}
         {page === "settings" && (
-          <SettingsPanel data={data} refresh={refresh} toast={toast} />
+          <><div className="menu-tabs settings-tabs" role="group" aria-label="Settings sections"><button type="button" className={settingsTab === "business" ? "active" : ""} aria-pressed={settingsTab === "business"} onClick={() => setSettingsTab("business")}>Business & Billing</button><button type="button" className={settingsTab === "appearance" ? "active" : ""} aria-pressed={settingsTab === "appearance"} onClick={() => setSettingsTab("appearance")}>Appearance & Templates</button></div>
+          {settingsTab === "appearance" ? <><PageHead kicker="ADMIN SETTINGS" title="Appearance & Templates" sub="Choose how your workspace looks for Admin, Waiter, Chef and Juicer."/><Suspense fallback={<p role="status" className="panel">Loading templates…</p>}><AppearancePanel toast={toast} confirm={confirmAction} refresh={refresh} refreshKey={data}/></Suspense></> : <SettingsPanel data={data} refresh={refresh} toast={toast} />}</>
         )}
         {booking ? <BookingModal data={data} initialDate={typeof booking === "string" ? booking : undefined} close={() => setBooking(false)} refresh={refresh} toast={toast} /> : null}
       </Shell>
     </>
-  );
-}
-function AdminOverview({ data, setPage, user }) {
-  const dashboard=data.dashboard;
-  const active = data.orders.filter(o=>['new','preparing','ready','collected','received','served','billing_requested'].includes(o.status));
-  if(!dashboard)return <div role="alert" className="panel">Dashboard metrics are unavailable. Refresh the page or contact support.</div>;
-  const formatRevenue=value=>new Intl.NumberFormat('en-IN',{style:'currency',currency:data.settings.currency||'INR',maximumFractionDigits:2}).format(value);
-  const growth=dashboard.growthKind==='new-sales'?'New sales':dashboard.growthKind==='no-previous-sales'?'No previous sales':`${dashboard.growthPercent>0?'+':''}${dashboard.growthPercent.toFixed(1)}% vs yesterday`;
-  const maxRevenue=Math.max(0,...dashboard.revenueDays.map(day=>day.revenue));
-  const hour = new Date().getHours(),
-    greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-  return (
-    <div className="portal-overview admin-overview">
-      <PageHead
-        kicker="ADMIN COMMAND CENTER"
-        title={`${greeting}, ${user?.name || "Admin"}`}
-        sub="A complete view of today's restaurant operations."
-        action={
-          <button className="primary" onClick={() => setPage("orders")}>
-            View all orders <ArrowRight size={15} />
-          </button>
-        }
-      />
-      <div className="stats">
-        <Stat
-          icon={TrendingUp}
-          label="Today's Revenue"
-          value={formatRevenue(dashboard.todayRevenue)}
-          note={growth}
-        />
-        <Stat
-          icon={Armchair}
-          label="Occupied Tables"
-          value={`${dashboard.occupiedTables} / ${dashboard.totalTables}`}
-          note={`${data.tables.filter((t) => t.status === "reserved").length} reservations · ${data.tables.filter((t) => t.status === "cleaning").length} cleaning`}
-        />
-        <Stat
-          icon={ReceiptText}
-          label="Active Orders"
-          value={dashboard.activeOrders}
-          note={`${active.filter((o) => o.status === "ready").length} ready to serve`}
-        />
-        <Stat
-          icon={AlertTriangle}
-          label="Low Stock"
-          value={dashboard.lowStock}
-          note="Requires attention"
-          tone="warning"
-        />
-      </div>
-      <div className="admin-grid">
-        <section className="panel revenue-panel">
-          <PanelHead
-            title="Revenue Overview"
-            sub="Sales over the last 7 days"
-          />
-          <div className="chart" aria-label="Revenue for the last seven business dates">
-            {dashboard.revenueDays.map(day=><div key={day.date} title={`${day.date}: ${formatRevenue(day.revenue)}`}>
-              <span aria-label={`${day.date}: ${formatRevenue(day.revenue)}`} style={{height:`${maxRevenue?Math.max(0,day.revenue)/maxRevenue*100:0}%`,minHeight:0}}/>
-              <small>{new Intl.DateTimeFormat('en',{weekday:'short',timeZone:'UTC'}).format(new Date(`${day.date}T12:00:00Z`))}</small>
-            </div>)}
-          </div>
-          {!dashboard.revenueDays.some(day=>day.revenue!==0)?<p className="empty-state">No sales data for the last seven days.</p>:null}
-          <small>Business time zone: {dashboard.timezone}</small>
-        </section>
-        <section className="panel">
-          <PanelHead title="Live Operations" sub="Current service health" />
-          <div className="operations">
-            <Ring value={dashboard.occupancyPercent}/>
-            <div>
-              {["available", "occupied", "reserved", "cleaning"].map((s) => (
-                <p key={s}>
-                  <i className={s} />
-                  <span>{s}</span>
-                  <b>{data.tables.filter((t) => t.status === s).length}</b>
-                </p>
-              ))}
-            </div>
-          </div>
-        </section>
-      </div>
-      <section className="panel">
-        <PanelHead
-          title="Live Orders"
-          sub="Updates shared across waiter and chef portals"
-          action={
-            <button className="link" onClick={() => setPage("orders")}>
-              View all →
-            </button>
-          }
-        />
-        {active.length?<OrderTable orders={active.slice(0, 6)} tables={data.tables} />:<p className="empty-state">No active orders</p>}
-      </section>
-    </div>
   );
 }
 function PanelHead({ title, sub, action }) {
@@ -1360,19 +1335,6 @@ function PanelHead({ title, sub, action }) {
         <p>{sub}</p>
       </div>
       {action}
-    </div>
-  );
-}
-function Ring({ value }) {
-  return (
-    <div
-      className="ring"
-      style={{ background: `conic-gradient(var(--color-primary) ${value}%,var(--color-border) 0)` }}
-    >
-      <span>
-        <b>{value}%</b>
-        <small>occupied</small>
-      </span>
     </div>
   );
 }
@@ -1406,6 +1368,7 @@ function orderDepartmentProgress(order, data, wantsJuice) {
 function AdminTables({ data, refresh, toast, user }) {
   const [selected, setSelected] = useState(null),
     [creating, setCreating] = useState(false),
+    [editing, setEditing] = useState(null),
     [billOrder, setBillOrder] = useState(null),
     [payOrder, setPayOrder] = useState(null),
     [statusFilter, setStatusFilter] = useState("all"),
@@ -1416,7 +1379,7 @@ function AdminTables({ data, refresh, toast, user }) {
       <PageHead
         kicker="FLOOR MANAGEMENT"
         title="All Tables"
-        sub="Add tables and inspect their live service status."
+        sub="Add or edit table details and inspect their live service status."
         action={
           <button className="primary" onClick={() => setCreating(true)}>
             <Plus size={15} /> Add table
@@ -1432,6 +1395,7 @@ function AdminTables({ data, refresh, toast, user }) {
             order={data.orders.find((o) => o.id === t.orderId)}
             data={data}
             onClick={() => setSelected(t.id)}
+            onEdit={() => setEditing(t)}
             onBill={(order) => activeTableSessions(data,t.id).length>1?setSelected(t.id):setBillOrder(order)}
             onPay={(order) => activeTableSessions(data,t.id).length>1?setSelected(t.id):setPayOrder(order)}
           />
@@ -1448,6 +1412,7 @@ function AdminTables({ data, refresh, toast, user }) {
           user={user}
         />
       ) : null}
+      {editing ? <TableEditor table={editing} close={() => setEditing(null)} refresh={refresh} toast={toast}/> : null}
       {creating ? (
         <TableEditor
           close={() => setCreating(false)}
@@ -1538,7 +1503,8 @@ function TableSummary({ data, activeFilter = "all", onFilterChange }) {
     </div>
   );
 }
-function TableCard({ table, order, data, onClick, onBill, onPay }) {
+function TableCard({ table, order, data, onClick, onBill, onPay, onEdit }) {
+  useNow();
   const idle =
       table.status === "cleaning" ? "Cleaning in progress" : "Clean & ready",
     paymentRequested = order?.status === "billing_requested",
@@ -1651,15 +1617,16 @@ function TableCard({ table, order, data, onClick, onBill, onPay }) {
           </footer>
         )}
       </button>
-      {order && (onBill || (paymentRequested && onPay)) ? (
+      {onEdit || (order && (onBill || (paymentRequested && onPay))) ? (
         <div className={`table-card-actions ${paymentRequested ? "urgent" : ""}`}>
-          {onBill ? (
+          {onEdit ? <button type="button" className="table-edit" aria-label={`Edit Table ${table.number}`} onClick={onEdit}><Pencil size={14}/> Edit</button> : null}
+          {order && onBill ? (
             <button onClick={() => onBill(order)}>
               <Printer size={14} /> Bill / Print
             </button>
           ) : null}
-          {paymentRequested ? (
-            <button className="pay" onClick={() => onPay?.(order)}>
+          {order && paymentRequested && onPay ? (
+            <button className="pay" onClick={() => onPay(order)}>
               <Wallet size={14} /> Pay
             </button>
           ) : null}
@@ -1681,14 +1648,14 @@ function AdminTableDetails({ table, order, data, close, refresh, toast, user }) 
       ? [orderDepartmentProgress(order, data, false), orderDepartmentProgress(order, data, true)].filter(Boolean)
       : [];
   async function remove() {
-    if (!confirm(`Delete Table ${table.number}?`)) return;
+    if (!(await confirmAction({title:`Delete Table ${table.number}?`,message:"The table is removed from the Admin and Waiter floor views. Past orders are kept.",confirmLabel:"Delete table"}))) return;
     try {
       await api(`/tables/${table.id}`, { method: "DELETE" });
       await refresh();
       toast(`Table ${table.number} deleted`);
       close();
     } catch (e) {
-      toast(e.message);
+      toast(e.message, "error");
     }
   }
   return (
@@ -1794,26 +1761,28 @@ function AdminTableDetails({ table, order, data, close, refresh, toast, user }) 
     </Modal>
   );
 }
-function TableEditor({ close, refresh, toast }) {
-  const [form, setForm] = useState({ number: "", seats: 4, area: "Main Hall" }),
-    [error, setError] = useState("");
+function TableEditor({ table, close, refresh, toast }) {
+  const [form, setForm] = useState(table ? {number:table.number,seats:table.seats,area:table.area} : { number: "", seats: 4, area: "Main Hall" }),
+    [error, setError] = useState(""), [saving,setSaving] = useState(false);
+  const saveLock=useRef(false);
   async function save(e) {
     e.preventDefault();
+    if(saveLock.current)return;saveLock.current=true;setSaving(true);
     setError("");
     try {
-      await api("/tables", { method: "POST", body: JSON.stringify(form) });
+      await api(table ? `/tables/${table.id}` : "/tables", { method: table ? "PATCH" : "POST", body: JSON.stringify({...form,...(table?{previous:{number:table.number,seats:table.seats,area:table.area}}:{})}) });
       await refresh();
-      toast(`Table ${form.number} added`);
+      toast(`Table ${form.number} ${table ? "updated" : "added"}`);
       close();
     } catch (e) {
       setError(e.message);
-    }
+    } finally {saveLock.current=false;setSaving(false);}
   }
   return (
-    <Modal close={close}>
+    <Modal close={close} hideClose={saving}>
       <span className="eyebrow">FLOOR SETUP</span>
-      <h2>Add a table</h2>
-      <p>Create a new table for Admin and Waiter floor views.</p>
+      <h2>{table ? "Edit table details" : "Add a table"}</h2>
+      <p>{table ? "Update the table number, seats and service area." : "Create a new table for Admin and Waiter floor views."}</p>
       <form className="modal-form" onSubmit={save}>
         <div className="form-grid">
           <label>
@@ -1822,6 +1791,8 @@ function TableEditor({ close, refresh, toast }) {
               required
               type="number"
               min="1"
+              max="2147483647"
+              disabled={saving}
               value={form.number}
               onChange={(e) => setForm({ ...form, number: e.target.value })}
             />
@@ -1832,6 +1803,8 @@ function TableEditor({ close, refresh, toast }) {
               required
               type="number"
               min="1"
+              max="2147483647"
+              disabled={saving}
               value={form.seats}
               onChange={(e) => setForm({ ...form, seats: e.target.value })}
             />
@@ -1841,14 +1814,16 @@ function TableEditor({ close, refresh, toast }) {
           Service area
           <input
             required
+            maxLength={80}
+            disabled={saving}
             value={form.area}
             onChange={(e) => setForm({ ...form, area: e.target.value })}
             placeholder="Main Hall, Terrace, Rooftop…"
           />
         </label>
-        {error ? <div className="form-error">{error}</div> : null}
-        <button className="primary wide">
-          <Plus size={15} /> Add table
+        {error ? <div className="form-error" role="alert">{error}</div> : null}
+        <button className="primary wide" disabled={saving}>
+          {saving ? "Saving…" : table ? "Save changes" : "Add table"}
         </button>
       </form>
     </Modal>
@@ -1864,9 +1839,9 @@ function OperationsCalendar({ orders, kicker, title, sub, label, onSelect, actio
     <PageHead kicker={kicker} title={title} sub={sub} action={action}/>
     <section className="finance-calendar operations-calendar">
       <header><div><span>{label}</span><h2>{month.toLocaleDateString("en-IN", { month: "long", year: "numeric" })}</h2></div><div>
-        <button onClick={() => setMonth(new Date(year, monthIndex - 1, 1))}><ChevronLeft size={18}/></button>
+        <button aria-label="Previous month" onClick={() => setMonth(new Date(year, monthIndex - 1, 1))}><ChevronLeft size={18}/></button>
         <button className="calendar-today" onClick={() => setMonth(new Date(today.getFullYear(), today.getMonth(), 1))}>Today</button>
-        <button onClick={() => setMonth(new Date(year, monthIndex + 1, 1))}><ChevronRight size={18}/></button>
+        <button aria-label="Next month" onClick={() => setMonth(new Date(year, monthIndex + 1, 1))}><ChevronRight size={18}/></button>
       </div></header>
       <div className="finance-weekdays">{["SUN","MON","TUE","WED","THU","FRI","SAT"].map((day) => <span key={day}>{day}</span>)}</div>
       <div className="finance-month-grid">{cells.map((day, index) => {
@@ -1875,7 +1850,7 @@ function OperationsCalendar({ orders, kicker, title, sub, label, onSelect, actio
           paid = daily.filter((order) => order.paymentStatus === "paid"), revenue = paid.reduce((sum, order) => sum + Number(order.total || 0), 0),
           open = daily.filter((order) => !["completed","cancelled"].includes(order.status)).length, isToday = key === dateKey(today), weekend = index % 7 === 0 || index % 7 === 6;
         return <button key={key} className={`${daily.length ? "has-activity" : ""} ${isToday ? "is-today" : ""} ${weekend ? "weekend" : ""}`} onClick={() => onSelect(key)}>
-          <header><b>{day}</b><em>{daily.length ? `${daily.length} ${daily.length === 1 ? "ORDER" : "ORDERS"}` : weekend ? "W/E" : "OPEN"}</em></header>
+          <header><b>{day}</b><span className="mobile-calendar-weekday">{new Date(year, monthIndex, day).toLocaleDateString("en-IN", {weekday:"short"})}</span><em>{daily.length ? `${daily.length} ${daily.length === 1 ? "ORDER" : "ORDERS"}` : weekend ? "W/E" : "OPEN"}</em></header>
           {daily.length ? <div className="order-day-data"><strong className="bill-amount">{revenue ? money(revenue) : `${daily.length} order${daily.length === 1 ? "" : "s"}`}</strong><small>{paid.length} paid · {open} active</small><p>{daily.slice(0, 3).map((order) => <span key={order.id}>#{order.id}</span>)}</p></div> : <div className="calendar-no-data"><ReceiptText size={19}/><small>No orders</small></div>}
         </button>;
       })}</div>
@@ -1884,9 +1859,13 @@ function OperationsCalendar({ orders, kicker, title, sub, label, onSelect, actio
   </>;
 }
 function DailyOrderCards({ orders, data }) {
-  const [receipt, setReceipt] = useState(null);
+  const [receipt, setReceipt] = useState(null), [query, setQuery] = useState(""), [filter, setFilter] = useState("all");
+  const needle = query.trim().toLowerCase(), kindOf = (order) => order.status === "cancelled" ? "cancelled" : order.paymentStatus === "paid" ? "paid" : "open";
+  const visible = orders.filter((order) => (filter === "all" || kindOf(order) === filter) && (!needle || `#${order.id} ${order.guestName || ""} ${order.waiter || ""} ${order.orderType === "parcel" ? "parcel" : `table ${data.tables.find((t) => t.id === order.tableId)?.number || ""}`} ${order.items.map((line) => data.menu.find((m) => m.id === line.menuId)?.name || "").join(" ")}`.toLowerCase().includes(needle)));
   return <>
-    <div className="daily-order-grid">{orders.map((order) => {
+    {orders.length ? <div className="list-toolbar"><SearchField value={query} onChange={setQuery} label="Search order, guest, table or dish"/><div className="category-row" role="group" aria-label="Filter orders">{[["all","All"],["open","Open"],["paid","Paid"],["cancelled","Cancelled"]].map(([id,label]) => <button type="button" key={id} className={filter === id ? "active" : ""} aria-pressed={filter === id} onClick={() => setFilter(id)}>{label} <b>{id === "all" ? orders.length : orders.filter((order) => kindOf(order) === id).length}</b></button>)}</div></div> : null}
+    {orders.length && !visible.length ? <div className="empty-state"><Search/><h3>No matching orders</h3><p>Clear the search or choose another filter.</p></div> : null}
+    <div className="daily-order-grid">{visible.map((order) => {
       const table = data.tables.find((item) => item.id === order.tableId), bill = calculateBill(order, data), itemCount = order.items.reduce((sum, item) => sum + item.qty, 0);
       return <article className={`order-history-card ${order.status}`} key={order.id}>
         <header><div><span>{order.orderType === "parcel" ? "PARCEL" : `TABLE ${table?.number || "—"}`}</span><h2>#{order.id}</h2></div><Status status={order.paymentStatus === "paid" ? "paid" : order.status}/></header>
@@ -1921,7 +1900,7 @@ function FoodManager({ data, refresh, toast }) {
       await refresh();
       toast(`${item.name} photo saved to MinIO`);
     } catch (e) {
-      toast(e.message);
+      toast(e.message, "error");
     } finally {
       setUploading(null);
     }
@@ -1976,10 +1955,13 @@ function FoodManager({ data, refresh, toast }) {
 function MenuManager({ data, refresh, toast }) {
   const [tab, setTab] = useState("dishes"),
     [editor, setEditor] = useState(null),
-    [uploading, setUploading] = useState(null);
-  const list = data.menu.filter((i) =>
+    [uploading, setUploading] = useState(null),
+    [query, setQuery] = useState(""),
+    [category, setCategory] = useState("All");
+  const scoped = data.menu.filter((i) =>
     tab === "combos" ? i.isCombo : !i.isCombo,
-  );
+  ), categories = ["All", ...new Set(scoped.map((i) => i.category).filter(Boolean))], needle = query.trim().toLowerCase();
+  const list = scoped.filter((i) => (category === "All" || i.category === category) && (!needle || `${i.name} ${i.category} ${i.description || ""}`.toLowerCase().includes(needle)));
   async function upload(item, file) {
     if (!file) return;
     setUploading(item.id);
@@ -1990,7 +1972,7 @@ function MenuManager({ data, refresh, toast }) {
       await refresh();
       toast("Photo saved to MinIO");
     } catch (e) {
-      toast(e.message);
+      toast(e.message, "error");
     } finally {
       setUploading(null);
     }
@@ -2018,17 +2000,19 @@ function MenuManager({ data, refresh, toast }) {
       <div className="menu-tabs">
         <button
           className={tab === "dishes" ? "active" : ""}
-          onClick={() => setTab("dishes")}
+          onClick={() => { setTab("dishes"); setCategory("All"); }}
         >
           Dishes & Juices <b>{data.menu.filter((i) => !i.isCombo).length}</b>
         </button>
         <button
           className={tab === "combos" ? "active" : ""}
-          onClick={() => setTab("combos")}
+          onClick={() => { setTab("combos"); setCategory("All"); }}
         >
           Combo Offers <b>{data.menu.filter((i) => i.isCombo).length}</b>
         </button>
       </div>
+      <div className="list-toolbar"><SearchField value={query} onChange={setQuery} label={tab === "combos" ? "Search combos" : "Search dishes and juices"}/>{categories.length > 2 ? <div className="category-row" role="group" aria-label="Filter by category">{categories.map((name) => <button type="button" key={name} className={category === name ? "active" : ""} aria-pressed={category === name} onClick={() => setCategory(name)}>{name}</button>)}</div> : null}</div>
+      {!list.length ? <div className="empty-state"><UtensilsCrossed/><h3>{scoped.length ? "Nothing matches your search" : tab === "combos" ? "No combo offers yet" : "Your menu is empty"}</h3><p>{scoped.length ? "Try another name or category." : "Use the button above to add the first one."}</p></div> : null}
       <div className="food-grid">
         {list.map((item) => (
           <article className="food-card" key={item.id}>
@@ -2098,6 +2082,7 @@ function MenuManager({ data, refresh, toast }) {
   );
 }
 function DishEditor({ item, close, refresh, toast }) {
+  const [saving, setSaving] = useState(false), [error, setError] = useState(""), saveLock = useRef(false);
   const [form, setForm] = useState({
     name: item?.name || "",
     category: item?.category || "Mains",
@@ -2108,13 +2093,19 @@ function DishEditor({ item, close, refresh, toast }) {
   });
   async function save(e) {
     e.preventDefault();
-    await api(item ? `/menu/${item.id}` : "/menu", {
-      method: item ? "PUT" : "POST",
-      body: JSON.stringify(form),
-    });
-    await refresh();
-    toast(item ? "Dish customized" : "New dish added");
-    close();
+    if (saveLock.current) return;
+    saveLock.current = true; setSaving(true); setError("");
+    try {
+      await api(item ? `/menu/${item.id}` : "/menu", {
+        method: item ? "PUT" : "POST",
+        body: JSON.stringify(form),
+      });
+      await refresh();
+      toast(item ? "Dish customized" : "New dish added");
+      close();
+    } catch (err) {
+      setError(err.message);
+    } finally { saveLock.current = false; setSaving(false); }
   }
   return (
     <Modal close={close}>
@@ -2174,14 +2165,16 @@ function DishEditor({ item, close, refresh, toast }) {
           />{" "}
           Available for ordering
         </label>
-        <button className="primary wide">
-          {item ? "Save customization" : "Add to menu"}
+        {error ? <div className="form-error" role="alert">{error}</div> : null}
+        <button className="primary wide" disabled={saving}>
+          {saving ? "Saving…" : item ? "Save customization" : "Add to menu"}
         </button>
       </form>
     </Modal>
   );
 }
 function ComboEditor({ item, dishes, close, refresh, toast }) {
+  const [saving, setSaving] = useState(false), [error, setError] = useState(""), saveLock = useRef(false);
   const [form, setForm] = useState({
       name: item?.name || "",
       description: item?.description || "",
@@ -2210,13 +2203,19 @@ function ComboEditor({ item, dishes, close, refresh, toast }) {
   }
   async function save(e) {
     e.preventDefault();
-    await api(item ? `/combos/${item.id}` : "/combos", {
-      method: item ? "PUT" : "POST",
-      body: JSON.stringify({ ...form, components: parts }),
-    });
-    await refresh();
-    toast(item ? "Combo customized" : "Combo offer created");
-    close();
+    if (saveLock.current) return;
+    saveLock.current = true; setSaving(true); setError("");
+    try {
+      await api(item ? `/combos/${item.id}` : "/combos", {
+        method: item ? "PUT" : "POST",
+        body: JSON.stringify({ ...form, components: parts }),
+      });
+      await refresh();
+      toast(item ? "Combo customized" : "Combo offer created");
+      close();
+    } catch (err) {
+      setError(err.message);
+    } finally { saveLock.current = false; setSaving(false); }
   }
   return (
     <Modal close={close} wide>
@@ -2293,8 +2292,8 @@ function ComboEditor({ item, dishes, close, refresh, toast }) {
         </div>
         <div className="combo-footer">
           <span>{parts.length} different items selected</span>
-          <button className="primary" disabled={!parts.length}>
-            {item ? "Save combo" : "Create combo"}
+          {error ? <div className="form-error" role="alert">{error}</div> : null}<button className="primary" disabled={!parts.length || saving}>
+            {saving ? "Saving…" : item ? "Save combo" : "Create combo"}
           </button>
         </div>
       </form>
@@ -2310,11 +2309,11 @@ function ParcelPanel({ data, refresh, user, toast }) {
     canCreateParcel = selectedDate === todayKey,
     allParcels = data.orders.filter((o) => o.orderType === "parcel"),
     parcels = selectedDate ? allParcels.filter((order) => dateKey(order.createdAt) === selectedDate) : allParcels;
-  async function collect(order, method) {
+  async function collect(order, method, parcelCharge) {
     try {
       const result = await api(`/orders/${order.id}/finalize`, {
         method: "POST",
-        body: JSON.stringify({ paymentMethod: method }),
+        body: JSON.stringify({ paymentMethod: method, ...(parcelCharge === undefined ? {} : { parcelCharge }) }),
       });
       await refresh();
       toast(
@@ -2322,7 +2321,7 @@ function ParcelPanel({ data, refresh, user, toast }) {
       );
       return result;
     } catch (e) {
-      toast(e.message);
+      toast(e.message, "error");
       throw e;
     }
   }
@@ -2336,7 +2335,7 @@ function ParcelPanel({ data, refresh, user, toast }) {
       setPrepaying(null);
       toast(`Parcel #${order.id} marked paid by ${method}`);
     } catch (e) {
-      toast(e.message);
+      toast(e.message, "error");
     }
   }
   if (!selectedDate) return <>
@@ -2463,20 +2462,48 @@ function ParcelPanel({ data, refresh, user, toast }) {
 }
 function ParcelHandoffModal({ order: initialOrder, data, complete, close }) {
   const [finalNumbering, setFinalNumbering] = useState(null);
-  const order = finalNumbering ? {...initialOrder, ...finalNumbering} : initialOrder;
-  const alreadyComplete = order.status === "completed";
-  const alreadyPaid = order.paymentStatus === "paid";
+  const baseOrder = finalNumbering ? {...initialOrder, ...finalNumbering} : initialOrder;
+  const alreadyComplete = baseOrder.status === "completed";
+  const alreadyPaid = baseOrder.paymentStatus === "paid";
+  const locked = alreadyPaid || alreadyComplete || Boolean(finalNumbering);
   const [step, setStep] = useState(alreadyComplete ? "complete" : "bill"),
-    [paymentMethod, setPaymentMethod] = useState(order.paymentMethod || ""),
-    [finishing, setFinishing] = useState(false);
+    [paymentMethod, setPaymentMethod] = useState(baseOrder.paymentMethod || ""),
+    [finishing, setFinishing] = useState(false),
+    [chargeText, setChargeText] = useState(String(Number(baseOrder.parcelCharges) || 0)),
+    [savingCharge, setSavingCharge] = useState(false),
+    [chargeError, setChargeError] = useState(""),
+    [savedCharge, setSavedCharge] = useState(Number(baseOrder.parcelCharges) || 0);
+  const chargeValue = chargeText.trim() === "" ? 0 : Number(chargeText),
+    chargeValid = Number.isFinite(chargeValue) && chargeValue >= 0 && chargeValue <= 100000 && Math.round(chargeValue * 100) === chargeValue * 100;
+  // Before payment the preview follows the field; after payment the stored amounts are final.
+  const order = locked ? baseOrder : {...baseOrder, parcelCharges: chargeValid ? chargeValue : savedCharge, total: null};
   const bill = useMemo(() => calculateBill(order, data), [order, data]);
+  /** Saves the charge (idempotent: the server stores one value, never adds). */
+  const saving = useRef(null);
+  function saveCharge() {
+    if (locked) return Promise.resolve(true);
+    if (!chargeValid) { setChargeError("Enter an amount of ₹0 or more, with up to 2 decimals."); return Promise.resolve(false); }
+    setChargeError("");
+    // Blur and button clicks can fire together; they share one request for the same value.
+    if (saving.current?.value === chargeValue) return saving.current.promise;
+    if (chargeValue === savedCharge) return Promise.resolve(true);
+    setSavingCharge(true);
+    const promise = api(`/orders/${baseOrder.id}/parcel-charge`, { method: "PUT", body: JSON.stringify({ parcelCharge: chargeValue }) })
+      .then(() => { setSavedCharge(chargeValue); return true; })
+      .catch((e) => { setChargeError(e.message); return false; })
+      .finally(() => { saving.current = null; setSavingCharge(false); });
+    saving.current = { value: chargeValue, promise };
+    return promise;
+  }
 
   async function finish() {
     if (!alreadyPaid && !paymentMethod) return;
+    if (!(await saveCharge())) { setStep("bill"); return; }
     setFinishing(true);
     try {
-      const result = await complete(order, alreadyPaid ? order.paymentMethod : paymentMethod);
-      setFinalNumbering({billNumber: result.billNumber, billDate: result.billDate});
+      const result = await complete(order, alreadyPaid ? order.paymentMethod : paymentMethod, locked ? undefined : chargeValue);
+      // The final receipt shows the amounts the server recorded.
+      setFinalNumbering({billNumber: result.billNumber, billDate: result.billDate, status: "completed", paymentStatus: "paid", paymentMethod: result.paymentMethod, ...(result.bill ? {subtotal: result.bill.subtotal, parcelCharges: result.bill.parcelCharges, total: result.bill.total} : {})});
       setStep("complete");
     } catch {
       // The parent displays the API error as an application toast.
@@ -2516,10 +2543,15 @@ function ParcelHandoffModal({ order: initialOrder, data, complete, close }) {
                 Review the parcel invoice and print it before choosing how the
                 customer paid.
               </p>
-              <button className="secondary wide" onClick={openPrinter}>
+              <label className="parcel-charge-field">
+                <span>Parcel Charge (₹)</span>
+                <input type="number" inputMode="decimal" min="0" max="100000" step="0.01" value={chargeText} disabled={locked} aria-invalid={Boolean(chargeError) || !chargeValid} aria-describedby="parcel-charge-help" onChange={(event) => { setChargeText(event.target.value); setChargeError(""); }} onBlur={saveCharge}/>
+                <small id="parcel-charge-help" className={chargeError || !chargeValid ? "form-error" : ""}>{chargeError || (!chargeValid ? "Enter an amount of ₹0 or more, with up to 2 decimals." : locked ? "Locked after payment." : bill.parcelCharges ? `Food ${money(bill.subtotal)} + parcel charge ${money(bill.parcelCharges)}` : "Optional. Leave 0 for no parcel charge.")}</small>
+              </label>
+              <button className="secondary wide" disabled={!chargeValid} onClick={async () => { if (await saveCharge()) openPrinter(); }}>
                 <Printer size={17} /> Print bill
               </button>
-              <button className="primary wide" onClick={() => setStep("payment")}>
+              <button className="primary wide" disabled={!chargeValid} aria-busy={savingCharge} onClick={async () => { if (await saveCharge()) setStep("payment"); }}>
                 Continue to payment <ArrowRight size={16} />
               </button>
             </>
@@ -2629,6 +2661,7 @@ function ParcelPaymentModal({ order, title, copy, action, close }) {
   );
 }
 function ParcelBuilder({ data, user, close, refresh, toast }) {
+  const [sending, setSending] = useState(false), sendLock = useRef(false);
   const [cart, setCart] = useState([]),
     [cat, setCat] = useState("All"),
     [query, setQuery] = useState(""),
@@ -2661,6 +2694,8 @@ function ParcelBuilder({ data, user, close, refresh, toast }) {
     );
   }
   async function send() {
+    if (sendLock.current) return;
+    sendLock.current = true; setSending(true);
     try {
       await api("/parcels", {
         method: "POST",
@@ -2680,8 +2715,8 @@ function ParcelBuilder({ data, user, close, refresh, toast }) {
       );
       close();
     } catch (e) {
-      toast(e.message);
-    }
+      toast(e.message, "error");
+    } finally { sendLock.current = false; setSending(false); }
   }
   return (
     <Modal close={close} wide>
@@ -2824,63 +2859,20 @@ function ParcelBuilder({ data, user, close, refresh, toast }) {
           </div>
           <button
             className="primary wide"
-            disabled={!cart.length || !customer}
+            disabled={!cart.length || !customer || sending}
             onClick={send}
           >
-            Send parcel to kitchen <ChefHat size={15} />
+            {sending ? "Sending…" : "Send parcel to kitchen"} <ChefHat size={15} />
           </button>
         </aside>
       </div>
     </Modal>
   );
 }
-function OrderTable({ orders, tables }) {
-  return (
-    <div className="table-scroll">
-      <table>
-        <thead>
-          <tr>
-            <th>Order</th>
-            <th>Type / Guest</th>
-            <th>Created by</th>
-            <th>Items</th>
-            <th>Status</th>
-            <th>Started</th>
-          </tr>
-        </thead>
-        <tbody>
-          {orders.map((o) => (
-            <tr key={o.id}>
-              <td>
-                <b>#{o.id}</b>
-              </td>
-              <td>
-                <b>
-                  {o.orderType === "parcel"
-                    ? "Parcel"
-                    : `Table ${tables.find((t) => t.id === o.tableId)?.number}`}
-                </b>
-                <small>{o.guestName}</small>
-              </td>
-              <td>{o.waiter}</td>
-              <td>{o.items.reduce((s, x) => s + x.qty, 0)} items</td>
-              <td>
-                <Status
-                  status={o.paymentStatus === "paid" ? "paid" : o.status}
-                />
-              </td>
-              <td>{elapsed(o.createdAt)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
 function Status({ status }) {
   return (
     <span className={`status ${status}`}>
-      {status === "chef" ? "Chef" : status}
+      {status === "chef" ? "Chef" : String(status ?? "").replaceAll("_", " ")}
     </span>
   );
 }
@@ -2937,7 +2929,7 @@ function Stock({ data, refresh, toast, user }) {
   const stockRequests = data.stockRequests || [];
   async function updateRequest(request, status) {
     try { await api(`/stock-requests/${request.id}/status`, { method:"PATCH", body:JSON.stringify({status}) }); await refresh(); toast(`${request.itemName} request marked ${status}`); }
-    catch (error) { toast(error.message); }
+    catch (error) { toast(error.message, "error"); }
   }
   const exportMovements = () =>
     exportCsv(`knockout-stock-${new Date().toISOString().slice(0, 10)}.csv`, [
@@ -3100,7 +3092,7 @@ function Stock({ data, refresh, toast, user }) {
             <button className="secondary" onClick={exportMovements}><FileDown size={14}/> Export CSV</button>
           </div>
           <div className="table-scroll">
-            <table>
+            <DataTable search="Search stock rows">
               <thead>
                 <tr>
                   <th>Date</th>
@@ -3144,7 +3136,7 @@ function Stock({ data, refresh, toast, user }) {
                   );
                 })}
               </tbody>
-            </table>
+            </DataTable>
           </div>
           {!filteredTransactions.length ? (
             <div className="empty-state">
@@ -3157,7 +3149,7 @@ function Stock({ data, refresh, toast, user }) {
         <div className="stock-planning-grid">
           <section className="panel">
             <PanelHead title="Smart reorder plan" sub="Items below minimum level or with seven days of estimated cover" />
-            <div className="table-scroll"><table><thead><tr><th>Item</th><th>On hand</th><th>30-day usage</th><th>Days cover</th><th>Suggested order</th><th>Estimated cost</th><th></th></tr></thead><tbody>{reorderItems.map((item)=><tr key={item.id}><td><b>{item.name}</b><small>{item.category}</small></td><td className={item.quantity<=item.min?"amount-out":""}>{item.quantity} {item.unit}</td><td>{item.consumed.toFixed(2)} {item.unit}</td><td>{item.daysCover===null?"No usage data":`${Math.max(0,item.daysCover).toFixed(1)} days`}</td><td><b>{item.reorderQty.toFixed(2)} {item.unit}</b></td><td>{money(item.reorderCost)}</td><td><button className="mini-action" onClick={()=>setMoving(item)}>Add stock</button></td></tr>)}</tbody></table></div>
+            <div className="table-scroll"><DataTable search="Search stock rows"><thead><tr><th>Item</th><th>On hand</th><th>30-day usage</th><th>Days cover</th><th>Suggested order</th><th>Estimated cost</th><th></th></tr></thead><tbody>{reorderItems.map((item)=><tr key={item.id}><td><b>{item.name}</b><small>{item.category}</small></td><td className={item.quantity<=item.min?"amount-out":""}>{item.quantity} {item.unit}</td><td>{item.consumed.toFixed(2)} {item.unit}</td><td>{item.daysCover===null?"No usage data":`${Math.max(0,item.daysCover).toFixed(1)} days`}</td><td><b>{item.reorderQty.toFixed(2)} {item.unit}</b></td><td>{money(item.reorderCost)}</td><td><button className="mini-action" onClick={()=>setMoving(item)}>Add stock</button></td></tr>)}</tbody></DataTable></div>
             {!reorderItems.length?<div className="empty-state"><CheckCircle2/><h3>Stock levels are healthy</h3><p>No item currently needs a suggested reorder.</p></div>:null}
           </section>
           <aside className="panel stock-risk-summary"><PanelHead title="Inventory health" sub="Operational signals from the last 30 days"/><div><span>Current stock value <b className="bill-amount">{money(value)}</b></span><span>Suggested reorder <b className="bill-amount">{money(reorderCost)}</b></span><span>Kitchen consumption <b className="bill-amount">{money(usageCost)}</b></span><span>Waste cost <b className="amount-out">{money(wasteCost)}</b></span><span>Waste / consumption <b>{usageCost?`${((wasteCost/usageCost)*100).toFixed(1)}%`:"—"}</b></span></div></aside>
@@ -3397,13 +3389,13 @@ function Finance({ data, refresh, toast, user }) {
       .reduce((s, x) => s + x.amount, 0),
     net = sales + income - expenses;
   async function remove(entry) {
-    if (!confirm(`Delete ${entry.description}?`)) return;
+    if (!(await confirmAction({title:"Delete this finance entry?",message:`“${entry.description}” (${money(entry.amount)}) will be removed from the ledger.`,confirmLabel:"Delete entry"}))) return;
     try {
       await api(`/finance/${entry.id}`, { method: "DELETE" });
       await refresh();
       toast("Finance entry deleted");
     } catch (e) {
-      toast(e.message);
+      toast(e.message, "error");
     }
   }
   return (
@@ -3452,7 +3444,7 @@ function Finance({ data, refresh, toast, user }) {
             sub="Manual income and expense entries"
           />
           <div className="table-scroll">
-            <table>
+            <DataTable search="Search finance entries">
               <thead>
                 <tr>
                   <th>Date</th>
@@ -3491,7 +3483,7 @@ function Finance({ data, refresh, toast, user }) {
                     </td>
                     <td>
                       <button
-                        className="icon-delete"
+                        className="icon-delete" aria-label={`Delete ${entry.description}`}
                         onClick={() => remove(entry)}
                       >
                         <Trash2 size={14} />
@@ -3500,7 +3492,7 @@ function Finance({ data, refresh, toast, user }) {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </DataTable>
           </div>
           {!entries.length ? (
             <div className="empty-state">
@@ -3746,7 +3738,7 @@ function FinanceCalendar({ data, selectDate }) {
             </h2>
           </div>
           <div>
-            <button onClick={() => setMonth(new Date(year, monthIndex - 1, 1))}>
+            <button aria-label="Previous month" onClick={() => setMonth(new Date(year, monthIndex - 1, 1))}>
               <ChevronLeft size={18} />
             </button>
             <button
@@ -3757,7 +3749,7 @@ function FinanceCalendar({ data, selectDate }) {
             >
               Today
             </button>
-            <button onClick={() => setMonth(new Date(year, monthIndex + 1, 1))}>
+            <button aria-label="Next month" onClick={() => setMonth(new Date(year, monthIndex + 1, 1))}>
               <ChevronRight size={18} />
             </button>
           </div>
@@ -3782,7 +3774,7 @@ function FinanceCalendar({ data, selectDate }) {
                 onClick={() => selectDate(key)}
               >
                 <header>
-                  <b>{day}</b>
+                  <b>{day}</b><span className="mobile-calendar-weekday">{new Date(year, monthIndex, day).toLocaleDateString("en-IN", {weekday:"short"})}</span>
                   <em>{item.activity ? "REC" : weekend ? "W/E" : "OPEN"}</em>
                 </header>
                 {item.activity ? (
@@ -3921,13 +3913,13 @@ function DailyFinanceDetails({
     return { ...p, paid, due: Math.max(0, p.totalAmount - paid) };
   });
   async function removePurchase(purchase) {
-    if (!confirm(`Delete purchase from ${purchase.supplierName}?`)) return;
+    if (!(await confirmAction({title:"Delete this purchase?",message:`The ${money(purchase.totalAmount)} purchase from ${purchase.supplierName} will be removed.`,confirmLabel:"Delete purchase"}))) return;
     try {
       await api(`/supplier-purchases/${purchase.id}`, { method: "DELETE" });
       await refresh();
       toast("Supplier purchase deleted");
     } catch (e) {
-      toast(e.message);
+      toast(e.message, "error");
     }
   }
   function exportDailyReport(){
@@ -4034,7 +4026,7 @@ function DailyFinanceDetails({
                 sub={`${dailyBills.length} bills completed on ${new Date(date + "T00:00:00").toLocaleDateString("en-IN", { dateStyle: "long" })}`}
               />
               <div className="table-scroll">
-                <table>
+                <DataTable search="Search this table">
                   <thead>
                     <tr>
                       <th>Bill</th>
@@ -4068,7 +4060,7 @@ function DailyFinanceDetails({
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </DataTable>
               </div>
               {!dailyBills.length ? (
                 <div className="mini-empty">
@@ -4134,7 +4126,7 @@ function DailyFinanceDetails({
           </div>
           <section className="panel">
             <div className="table-scroll">
-              <table>
+              <DataTable search="Search this table">
                 <thead>
                   <tr>
                     <th>Date / Invoice</th>
@@ -4174,7 +4166,7 @@ function DailyFinanceDetails({
                               Pay dealer
                             </button>
                           ) : null}
-                          <button onClick={() => removePurchase(p)}>
+                          <button aria-label={`Delete purchase from ${p.supplierName}`} onClick={() => removePurchase(p)}>
                             <Trash2 size={13} />
                           </button>
                         </div>
@@ -4182,7 +4174,7 @@ function DailyFinanceDetails({
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </DataTable>
             </div>
             {!purchases.length ? (
               <div className="empty-state">
@@ -4204,7 +4196,7 @@ function DailyFinanceDetails({
           </div>
           <section className="panel">
             <div className="table-scroll">
-              <table>
+              <DataTable search="Search this table">
                 <thead>
                   <tr>
                     <th>Date</th>
@@ -4241,7 +4233,7 @@ function DailyFinanceDetails({
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </DataTable>
             </div>
           </section>
         </>
@@ -4580,7 +4572,7 @@ function StaffRequests({ requests = [], admin = false, refresh, toast }) {
 }
 function StaffManagement({ data, refresh, toast }) {
   const [editor, setEditor] = useState(null),
-    [tab, setTab] = useState("team");
+    [tab, setTab] = useState("team"), [query, setQuery] = useState("");
   const shifts = data.attendance || [],
     active = (userId) => shifts.find((s) => s.userId === userId && !s.checkOut),
     today = shifts.filter(
@@ -4661,9 +4653,10 @@ function StaffManagement({ data, refresh, toast }) {
           Working Time History
         </button>
       </div>
+      {tab === "team" && data.users.length > 4 ? <div className="list-toolbar"><SearchField value={query} onChange={setQuery} label="Search staff by name, role or phone"/></div> : null}
       {tab === "team" ? (
         <div className="staff-work-grid">
-          {data.users.filter(staff=>!staff.approvalStatus||staff.approvalStatus==="approved").map((staff) => {
+          {data.users.filter(staff=>!staff.approvalStatus||staff.approvalStatus==="approved").filter(staff=>`${staff.name} ${staff.role} ${staff.phone||""}`.toLowerCase().includes(query.trim().toLowerCase())).map((staff) => {
             const shift = active(staff.id);
             return (
               <article
@@ -4738,7 +4731,7 @@ function StaffManagement({ data, refresh, toast }) {
       ) : (
         <section className="panel">
           <div className="table-scroll">
-            <table>
+            <DataTable search="Search working time">
               <thead>
                 <tr>
                   <th>Staff</th>
@@ -4773,7 +4766,7 @@ function StaffManagement({ data, refresh, toast }) {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </DataTable>
           </div>
         </section>
       )}
@@ -4812,12 +4805,13 @@ function KitchenMemberCard({ member, edit, remove }) {
 function AdminKitchenTeam({ staff, refresh, toast }) {
   const [editor, setEditor] = useState(null);
   async function remove(member) {
+    if (!(await confirmAction({title:`Remove ${member.name}?`,message:"They will no longer appear in the kitchen team.",confirmLabel:"Remove"}))) return;
     try {
       await api(`/kitchen-staff/${member.id}`, { method: "DELETE" });
       await refresh();
       toast(`${member.name} removed from the kitchen team`);
     } catch (error) {
-      toast(error.message);
+      toast(error.message, "error");
     }
   }
   return (
@@ -4836,6 +4830,7 @@ function AdminKitchenTeam({ staff, refresh, toast }) {
   );
 }
 function StaffEditor({ staff, users, close, refresh, toast }) {
+  const [saving, setSaving] = useState(false), saveLock = useRef(false);
   const [form, setForm] = useState({
       name: staff?.name || "",
       role: staff?.role || "waiter",
@@ -4852,6 +4847,8 @@ function StaffEditor({ staff, users, close, refresh, toast }) {
     users.some((user) => user.role === role && user.id !== staff?.id);
   async function save(e) {
     e.preventDefault();
+    if (saveLock.current) return;
+    saveLock.current = true; setSaving(true);
     setError("");
     try {
       const result = await api(staff ? `/staff/${staff.id}` : "/staff", {
@@ -4863,7 +4860,7 @@ function StaffEditor({ staff, users, close, refresh, toast }) {
       close();
     } catch (e) {
       setError(e.message);
-    }
+    } finally { saveLock.current = false; setSaving(false); }
   }
   async function removeStaff() {
     setDeleting(true);
@@ -4960,8 +4957,8 @@ function StaffEditor({ staff, users, close, refresh, toast }) {
           </label>
         )}
         {error && <div className="form-error">{error}</div>}
-        <button className="primary wide">
-          {staff ? "Save staff changes" : "Create staff login"}
+        <button className="primary wide" disabled={saving}>
+          {saving ? "Saving…" : staff ? "Save staff changes" : "Create staff login"}
         </button>
         {staff && staff.role !== "admin" && !deleteArmed && <button type="button" className="staff-delete-button" onClick={() => setDeleteArmed(true)}><Trash2 size={15}/> Delete staff</button>}
         {staff && staff.role !== "admin" && deleteArmed && <div className="staff-delete-confirm"><b>Delete {staff.name}?</b><p>The login will be removed and its PIN can be reused. Attendance history will be preserved.</p><div><button type="button" className="secondary" onClick={() => setDeleteArmed(false)}>Cancel</button><button type="button" className="danger" disabled={deleting} onClick={removeStaff}>{deleting ? "Deleting…" : "Confirm delete"}</button></div></div>}
@@ -5065,62 +5062,17 @@ function SettingsPanel({ data, refresh, toast }) {
   );
 }
 
-function RoleOverview({ role, data, user, setPage }) {
-  const firstName = String(user?.name || role).trim().split(/\s+/)[0];
-  const today = dateKey(new Date());
-  const todayOrders = data.orders.filter((order) => dateKey(order.createdAt) === today);
-  const mine = role === "waiter"
-    ? todayOrders.filter((order) => order.orderType !== "parcel" && String(order.waiter || "").toLowerCase().includes(firstName.toLowerCase()))
-    : productionOrders(data, role);
-  const ready = mine.filter((order) => order.status === "ready").length;
-  const preparing = mine.filter((order) => order.status === "preparing").length;
-  const fresh = mine.filter((order) => order.status === "new").length;
-  const occupied = data.tables.filter((table) => table.status === "occupied").length;
-  const availableMenu = role === "juicer"
-    ? data.menu.filter((item) => isJuiceItem(item) && item.available)
-    : data.menu.filter((item) => !isJuiceItem(item) && !item.isCombo && item.available);
-  const config = role === "waiter" ? {
-    kicker: "SERVICE PULSE", title: `Welcome back, ${firstName}`, sub: "Your floor, guest requests, and kitchen handoffs in one live view.",
-    metrics: [
-      [Armchair, "Occupied tables", `${occupied}/${data.tables.length}`, `${data.tables.filter(t => t.status === "available").length} ready for guests`, "gold"],
-      [ReceiptText, "My orders today", mine.length, `${mine.filter(o => o.paymentStatus === "paid").length} paid`, "blue"],
-      [CheckCircle2, "Ready to serve", mine.filter(o => o.status === "ready").length, "Awaiting Chef handoff", "green"],
-      [Clock3, "Awaiting progress", mine.filter(o => ["new", "preparing"].includes(o.status)).length, "Live kitchen status", "orange"],
-    ],
-    primary: ["floor", "Open floor", "Take orders and manage tables", Armchair], secondary: ["orders", "My order history", "Review today's service", ReceiptText],
-  } : role === "chef" ? {
-    kicker: "KITCHEN INTELLIGENCE", title: `Good service, Chef ${firstName}`, sub: "Prioritize tickets, balance dine-in and parcel demand, and keep service moving.",
-    metrics: [[ReceiptText,"New tickets",fresh,"Waiting to be started","orange"],[ChefHat,"In preparation",preparing,"Currently cooking","blue"],[CheckCircle2,"Ready",ready,"Awaiting handoff","green"],[UtensilsCrossed,"Available dishes",availableMenu.length,`${data.menu.filter(i=>!isJuiceItem(i)&&!i.isCombo&&!i.available).length} unavailable`,"gold"]],
-    primary: ["kitchen", "Open table orders", "Prioritize table tickets", ChefHat], secondary: ["parcels", "Open parcel queue", "Manage takeaway demand", Package],
-  } : {
-    kicker: "BEVERAGE STATION", title: `Fresh start, ${firstName}`, sub: "See every juice ticket, preparation state, and menu availability at a glance.",
-    metrics: [[ReceiptText,"New juice tickets",fresh,"Waiting to start","orange"],[CupSoda,"Being prepared",preparing,"Active drinks","blue"],[CheckCircle2,"Ready juices",ready,"Ready for pickup","green"],[Gauge,"Available juices",availableMenu.length,`${data.menu.filter(i=>isJuiceItem(i)&&!i.available).length} unavailable`,"gold"]],
-    primary: ["queue", "Open table orders", "Prepare table drinks", Armchair], secondary: ["parcel-queue", "Open parcel queue", "Prepare parcel drinks", Package],
-  };
-  const recent = [...mine].sort((a,b) => new Date(b.createdAt)-new Date(a.createdAt)).slice(0,4);
-  return <div className={`portal-overview ${role}-overview`}>
-    <section className="overview-hero glass-card">
-      <div><span className="eyebrow">{config.kicker}</span><h1>{config.title}</h1><p>{config.sub}</p><div className="overview-live"><i/> Live operations · {new Date().toLocaleTimeString("en-IN",{hour:"numeric",minute:"2-digit"})}</div></div>
-      <div className="overview-hero-orb"><span>{role === "waiter" ? occupied : mine.length}</span><small>{role === "waiter" ? "tables in service" : "active tickets"}</small></div>
-    </section>
-    <div className="overview-metrics">{config.metrics.map(([Icon,label,value,note,tone])=><article className={`overview-metric glass-card ${tone}`} key={label}><span><Icon size={19}/></span><div><small>{label}</small><strong>{value}</strong><p>{note}</p></div></article>)}</div>
-    <div className="overview-workspace">
-      <section className="glass-card overview-priority"><PanelHead title="Live priority" sub="The newest operational updates"/><div className="overview-feed">{recent.length?recent.map(order=><div key={order.id}><span className={`priority-dot ${order.status}`}/><div><b>{order.orderType === "parcel" ? `Parcel #${billNumber(order)}` : `Table ${data.tables.find(t=>t.id===order.tableId)?.number || "—"}`}</b><small>{order.items.reduce((sum,item)=>sum+item.qty,0)} items · {elapsed(order.createdAt)}</small></div><Status status={order.status}/></div>):<div className="overview-clear"><CheckCircle2/><b>Everything is clear</b><small>No active work needs attention.</small></div>}</div></section>
-      <aside className="overview-actions"><button className="glass-card primary-action" onClick={()=>setPage(config.primary[0])}>{(() => { const Icon=config.primary[3]; return <Icon/>; })()}<span><b>{config.primary[1]}</b><small>{config.primary[2]}</small></span><ArrowRight/></button><button className="glass-card" onClick={()=>setPage(config.secondary[0])}>{(() => { const Icon=config.secondary[3]; return <Icon/>; })()}<span><b>{config.secondary[1]}</b><small>{config.secondary[2]}</small></span><ArrowRight/></button>{/* Attendance shortcut temporarily disabled; retain for later. */}</aside>
-    </div>
-  </div>;
-}
-
 function Waiter({ data, refresh, user, logout, toast }) {
   const [page, setPage] = useState("overview"),
     [selected, setSelected] = useState(null),
     [statusFilter, setStatusFilter] = useState("all"),
+    [tableQuery, setTableQuery] = useState(""),
     [dismissedAlerts, setDismissedAlerts] = useState([]);
   const table = data.tables.find((t) => t.id === selected);
   const filteredTables = useMemo(() => {
-    if (!statusFilter || statusFilter === "all") return data.tables;
-    return data.tables.filter((t) => t.status === statusFilter);
-  }, [data.tables, statusFilter]);
+    const needle = tableQuery.trim().toLowerCase();
+    return data.tables.filter((t) => (!statusFilter || statusFilter === "all" || t.status === statusFilter) && (!needle || `${t.number} t${String(t.number).padStart(2, "0")} table ${t.number} ${t.area} ${t.guestName || ""}`.toLowerCase().includes(needle)));
+  }, [data.tables, statusFilter, tableQuery]);
   const dismissAlert = (alert) => {
     setDismissedAlerts((prev) => [...prev, `${alert.orderId}-${alert.menuId}`]);
   };
@@ -5148,15 +5100,21 @@ function Waiter({ data, refresh, user, logout, toast }) {
     });
     return list;
   }, [data.orders, data.menu, data.tables]);
+  const readyRounds = data.orders.filter((o) => o.status === "ready" && o.orderType !== "parcel");
+  const notices = [
+    readyRounds.length && { title: `${readyRounds.length} order${readyRounds.length === 1 ? "" : "s"} ready to serve`, detail: readyRounds.slice(0, 3).map((o) => `Table ${data.tables.find((t) => t.id === o.tableId)?.number ?? "—"}`).join(", "), page: "floor" },
+    unavailableAlerts.length && { title: `${unavailableAlerts.length} dish${unavailableAlerts.length === 1 ? "" : "es"} out of stock`, detail: "Tell the guests before preparation starts", page: "floor" },
+  ].filter(Boolean);
   return (
     <Shell
+      notices={notices}
       role="waiter"
       user={user}
       page={page}
       setPage={setPage}
       logout={logout}
     >
-      {page === "overview" && <RoleOverview role="waiter" data={data} user={user} setPage={setPage} />}{" "}
+      {page === "overview" && <StationDashboard role="waiter" data={data} user={user} setPage={setPage} />}{" "}
       {/* Temporarily disabled; retain for later:
       {page === "attendance" && <AttendancePanel user={user} toast={toast} />}
       */}{" "}
@@ -5172,6 +5130,7 @@ function Waiter({ data, refresh, user, logout, toast }) {
             activeFilter={statusFilter}
             onFilterChange={setStatusFilter}
           />
+          <div className="list-toolbar"><SearchField value={tableQuery} onChange={setTableQuery} label="Find table, guest or area"/></div>
           {unavailableAlerts.filter((a) => !dismissedAlerts.includes(`${a.orderId}-${a.menuId}`)).length > 0 ? (
             <div className="waiter-kitchen-alerts">
               {unavailableAlerts
@@ -5201,6 +5160,7 @@ function Waiter({ data, refresh, user, logout, toast }) {
                 ))}
             </div>
           ) : null}
+          {!filteredTables.length ? <div className="empty-state"><Armchair/><h3>No tables match</h3><p>Change the search or choose another status.</p></div> : null}
           <div className="table-grid waiter-grid">
             {filteredTables.map((t) => (
               <TableCard
@@ -5248,9 +5208,9 @@ function Bookings({ data, open, refresh, toast }) {
   const keyFor = (day) => `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
     selectedBookings = selectedDate ? bookings.filter((booking) => booking.bookingDate === selectedDate) : [];
   async function cancelBooking(id) {
-    if (!confirm("Cancel this table booking?")) return;
+    if (!(await confirmAction({title:"Cancel this booking?",message:"The table and time slot become available to other guests.",confirmLabel:"Cancel booking",cancelLabel:"Keep booking"}))) return;
     try { await api(`/bookings/${id}`, { method: "DELETE" }); await refresh(); toast("Booking cancelled and the time slot released"); }
-    catch (error) { toast(error.message); }
+    catch (error) { toast(error.message, "error"); }
   }
   if (selectedDate) return <>
     <PageHead
@@ -5265,7 +5225,7 @@ function Bookings({ data, open, refresh, toast }) {
         <div><b>Table {booking.tableNumber}</b><small>{booking.seats} seats · {booking.area} · {booking.customerPhone}</small></div>
         <div className="booking-slot"><strong>{bookingTimeLabel(booking.bookingTime)}</strong><small>{booking.durationMinutes} minutes</small></div>
         <span className={`sms-delivery ${booking.notificationStatus}`}><Bell size={12}/>{booking.notificationStatus === "sent" ? "SMS sent" : booking.notificationStatus === "failed" ? "SMS failed" : "SMS queued"}</span>
-        <button className="booking-cancel" onClick={() => cancelBooking(booking.id)}><Trash2 size={14}/></button>
+        <button className="booking-cancel" aria-label={`Cancel booking for table ${booking.tableNumber}`} onClick={() => cancelBooking(booking.id)}><Trash2 size={14}/></button>
       </div>)}</div> : <div className="empty-state"><CalendarDays/><h3>No bookings for this date</h3><p>Select Add booking to lock a table and time.</p></div>}
     </section>
   </>;
@@ -5273,16 +5233,16 @@ function Bookings({ data, open, refresh, toast }) {
     <PageHead kicker="RESERVATION CALENDAR" title="Choose a booking date" sub="Select a date to view its reservations or lock a new table time." action={<button className="primary" onClick={() => open(dateKey(today))}><Plus size={15}/> Add booking</button>}/>
     <section className="finance-calendar booking-calendar">
       <header><div><span>TABLE RESERVATIONS</span><h2>{month.toLocaleDateString("en-IN", { month: "long", year: "numeric" })}</h2></div><div>
-        <button onClick={() => setMonth(new Date(year, monthIndex - 1, 1))}><ChevronLeft size={18}/></button>
+        <button aria-label="Previous month" onClick={() => setMonth(new Date(year, monthIndex - 1, 1))}><ChevronLeft size={18}/></button>
         <button className="calendar-today" onClick={() => setMonth(new Date(today.getFullYear(), today.getMonth(), 1))}>Today</button>
-        <button onClick={() => setMonth(new Date(year, monthIndex + 1, 1))}><ChevronRight size={18}/></button>
+        <button aria-label="Next month" onClick={() => setMonth(new Date(year, monthIndex + 1, 1))}><ChevronRight size={18}/></button>
       </div></header>
       <div className="finance-weekdays">{["SUN","MON","TUE","WED","THU","FRI","SAT"].map((day) => <span key={day}>{day}</span>)}</div>
       <div className="finance-month-grid">{cells.map((day,index) => {
         if (!day) return <span className="calendar-blank" key={`blank-${index}`}/>;
         const key=keyFor(day), daily=bookings.filter((booking) => booking.bookingDate === key), isToday=key===dateKey(today), weekend=index%7===0||index%7===6;
         return <button key={key} className={`${daily.length ? "has-activity" : ""} ${isToday ? "is-today" : ""} ${weekend ? "weekend" : ""}`} onClick={() => setSelectedDate(key)}>
-          <header><b>{day}</b><em>{daily.length ? `${daily.length} BOOKED` : weekend ? "W/E" : "OPEN"}</em></header>
+          <header><b>{day}</b><span className="mobile-calendar-weekday">{new Date(year, monthIndex, day).toLocaleDateString("en-IN", {weekday:"short"})}</span><em>{daily.length ? `${daily.length} BOOKED` : weekend ? "W/E" : "OPEN"}</em></header>
           {daily.length ? <div className="booking-day-data"><strong>{daily.length} reservation{daily.length===1?"":"s"}</strong>{daily.slice(0,2).map((booking) => <small key={booking.id}>T{booking.tableNumber} · {bookingTimeLabel(booking.bookingTime)}</small>)}{daily.length>2?<small>+{daily.length-2} more</small>:null}</div> : <div className="calendar-no-data"><CalendarDays size={19}/><small>No bookings</small></div>}
         </button>;
       })}</div>
@@ -5365,7 +5325,7 @@ function BookingModal({ data, close, refresh, toast, initialDate }) {
 }
 const dialogStack=[];
 let savedBodyOverflow='';
-function Modal({ close, children, wide = false, hideClose = false, closeLeft = false, className = "" }) {
+function Modal({ close, children, wide = false, hideClose = false, hideX = false, closeLeft = false, className = "", label = "Dialog" }) {
   const dialog=useRef(null),wrap=useRef(null),actions=useRef({close,hideClose});
   actions.current={close,hideClose};
   useEffect(()=>{
@@ -5409,9 +5369,9 @@ function Modal({ close, children, wide = false, hideClose = false, closeLeft = f
       ref={wrap} className="modal-wrap"
       onMouseDown={(e) => !hideClose && e.target === e.currentTarget && close()}
     >
-      <div ref={dialog} role="dialog" aria-modal="true" aria-label="Dialog" tabIndex={-1} style={{maxHeight:'100%'}} className={`modal ${wide ? "wide-modal" : ""} ${className}`.trim()}>
-        {!hideClose ? (
-          <button className={`modal-close ${closeLeft ? "left" : ""}`} aria-label="Close dialog" onClick={close}>
+      <div ref={dialog} role="dialog" aria-modal="true" aria-label={label} tabIndex={-1} style={{maxHeight:'100%'}} className={`modal ${wide ? "wide-modal" : ""} ${className}`.trim()}>
+        {!hideClose && !hideX ? (
+          <button type="button" className={`modal-close ${closeLeft ? "left" : ""}`} aria-label="Close dialog" onClick={close}>
             <X size={18} />
           </button>
         ) : null}
@@ -5465,19 +5425,19 @@ function TableOrderDrawer({ table, data, user, close, refresh, toast }) {
   useEffect(()=>{setMode(order?.items?.length?"history":"order");setTargetBatch(null);setCancellation(null)},[table.orderId]);
   function requestCancellation(item=null,batchNo=null){
     if(!order)return;
-    setCancelError("");setCancellation({orderId:order.id,item,batchNo,reason:""});
+    setCancelError("");setCancellation({orderId:order.id,item,batchNo,reason:"",emptyGroup:!item&&order.items.length===0});
   }
   async function confirmCancellation(){
     if(!cancellation||cancelLock.current)return;
     cancelLock.current=true;setCancelBusy(true);setCancelError("");
     try{
-      const {orderId,item,batchNo,reason}=cancellation;
-      const result=await api(item?`/orders/${orderId}/items/${item.menuId}?batchNo=${batchNo||item.batchNo||1}`:`/orders/${orderId}/cancel`,{method:item?"DELETE":"POST",body:JSON.stringify({reason})});
+      const {orderId,item,batchNo,reason,emptyGroup}=cancellation;
+      const result=await api(item?`/orders/${orderId}/items/${item.menuId}?batchNo=${batchNo||item.batchNo||1}`:`/orders/${orderId}/cancel`,{method:item?"DELETE":"POST",body:JSON.stringify({reason,...(emptyGroup?{emptyOnly:true}:{})})});
       if(result?.ok!==true||result.orderId!==orderId||!Number.isInteger(result.remainingCount))throw new Error("Cancellation response was invalid. Refresh the table to check its status before retrying.");
       setCancellation(null);
       if(result.remainingCount===0)close();
       await refresh();
-      toast(result.remainingCount===0?`Order #${orderId} cancelled`:`Item cancelled from Order #${orderId}`);
+      toast(result.remainingCount===0?`${emptyGroup?"Group":"Order"} #${orderId} cancelled`:`Item cancelled from Order #${orderId}`);
     }catch(error){setCancelError(error.message||"Unable to cancel. Please try again.")}
     finally{cancelLock.current=false;setCancelBusy(false)}
   }
@@ -5491,7 +5451,7 @@ function TableOrderDrawer({ table, data, user, close, refresh, toast }) {
       await refresh();
       toast(`Round ${batchNo} of order #${order.id} received at Table ${table.number}`);
     } catch (e) {
-      toast(e.message);
+      toast(e.message, "error");
     } finally {
       setHandoffBusy("");
     }
@@ -5532,8 +5492,9 @@ function TableOrderDrawer({ table, data, user, close, refresh, toast }) {
           </div>
         ) : null}
       </div>
-      {order && order.status==='new' && order.paymentStatus!=='paid' && order.items.every(item=>(item.itemStatus||'new')==='new'&&(item.handoffStatus||'pending')==='pending') && <button type="button" className="secondary" onClick={()=>requestCancellation()}>Cancel Order</button>}
-      {cancellation&&<Modal close={()=>!cancelBusy&&setCancellation(null)} hideClose={cancelBusy}><h2>{cancellation.item?'Cancel food item?':`Cancel Order #${cancellation.orderId}?`}</h2><p>{cancellation.item?'This removes the selected item from this round.':'This cancels all items in this order.'} Preparation must not have started. Cancellation history will be retained.</p><label>Reason (optional)<textarea maxLength={500} value={cancellation.reason} disabled={cancelBusy} onChange={e=>setCancellation({...cancellation,reason:e.target.value})}/></label>{cancelError&&<p className="form-error" role="alert">{cancelError}</p>}<div className="service-handoff-actions"><button type="button" className="secondary" disabled={cancelBusy} onClick={()=>setCancellation(null)}>Keep order</button><button type="button" className="primary" disabled={cancelBusy} onClick={confirmCancellation}>{cancelBusy?'Cancelling…':'Confirm cancellation'}</button></div></Modal>}
+      {order && order.status==='new' && order.paymentStatus!=='paid' && order.items.every(item=>(item.itemStatus||'new')==='new'&&(item.handoffStatus||'pending')==='pending') && <button type="button" className="secondary" onClick={()=>requestCancellation()}>{order.items.length===0?"Cancel empty group":"Cancel Order"}</button>}
+      {order?.items.length===0&&<p>No food has been ordered for this group. Created it by mistake? Cancel the empty group. The table becomes available when no other active groups or reservations remain.</p>}
+      {cancellation&&<Modal close={()=>!cancelBusy&&setCancellation(null)} hideClose={cancelBusy}><h2>{cancellation.item?'Cancel food item?':cancellation.emptyGroup?'Cancel empty group?':`Cancel Order #${cancellation.orderId}?`}</h2><p>{cancellation.emptyGroup?'This closes only this empty group. Other groups and reservations will remain unchanged.':cancellation.item?'This removes the selected item from this round.':'This cancels all items in this order.'} Preparation must not have started. Cancellation history will be retained.</p><label>Reason (optional)<textarea maxLength={500} value={cancellation.reason} disabled={cancelBusy} onChange={e=>setCancellation({...cancellation,reason:e.target.value})}/></label>{cancelError&&<p className="form-error" role="alert">{cancelError}</p>}<div className="service-handoff-actions"><button type="button" className="secondary" disabled={cancelBusy} onClick={()=>setCancellation(null)}>{cancellation.emptyGroup?"Keep group":"Keep order"}</button><button type="button" className="primary" disabled={cancelBusy} onClick={confirmCancellation}>{cancelBusy?'Cancelling…':'Confirm cancellation'}</button></div></Modal>}
       {reservation&&<ReservationPanel booking={reservation} table={table} user={user} refresh={refresh} toast={toast}/>}
       {!table.activeBookingId&&!(reservation?.status==='confirmed'&&reservation.checkInEligible)&&<TableStatusControls table={table} refresh={refresh} toast={toast} />}
       {(() => {
@@ -5760,7 +5721,7 @@ function TableStatusControls({ table, refresh, toast }) {
       await refresh();
       toast(`Table ${table.number} marked ${status}`);
     } catch (e) {
-      toast(e.message);
+      toast(e.message, "error");
     } finally {
       setBusy("");
     }
@@ -5790,6 +5751,8 @@ function TableStatusControls({ table, refresh, toast }) {
     </div>
   );
 }
+// In-memory only: cleared on reload, never sent anywhere until the waiter submits.
+const orderDrafts = new Map();
 function OrderBuilder({ table, data, user, existing, targetBatchNo = null, refresh, toast, close }) {
   const existingBatches = useMemo(() => {
     if (!existing?.items?.length) return [1];
@@ -5802,10 +5765,14 @@ function OrderBuilder({ table, data, user, existing, targetBatchNo = null, refre
   const defaultBatch = targetBatchNo || (!existing?.items?.length ? 1 : latestBatchIsNew ? latestBatch : nextNewBatch);
   const [chosenBatch, setChosenBatch] = useState(defaultBatch);
   const roundLocked = !!existing?.items?.some(item => (Number(item.batchNo) || 1) === chosenBatch && ((item.itemStatus || "new") !== "new" || (item.handoffStatus || "pending") !== "pending"));
-  const [cart, setCart] = useState([]),
+  // An unsent selection survives an accidental close, for this user and this group only.
+  const draftKey = `${user.companyDatabase || ""}:${user.id}:${table.id}:${existing?.id || "new"}`, sendLock = useRef(false), cartPanel = useRef(null);
+  const [cart, setCart] = useState(() => (orderDrafts.get(draftKey) || []).filter((line) => data.menu.some((m) => m.id === line.menuId && m.available))),
     [cat, setCat] = useState("All"),
     [query, setQuery] = useState(""),
     [sending, setSending] = useState(false);
+  useEffect(() => { if (cart.length) orderDrafts.set(draftKey, cart); else orderDrafts.delete(draftKey); }, [cart, draftKey]);
+  const cartCount = cart.reduce((sum, line) => sum + line.qty, 0), cartTotal = cart.reduce((sum, line) => sum + (data.menu.find((m) => m.id === line.menuId)?.price || 0) * line.qty, 0);
   const categories = ["All", ...new Set(data.menu.map((m) => m.category))];
   const visibleMenu = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -5832,7 +5799,8 @@ function OrderBuilder({ table, data, user, existing, targetBatchNo = null, refre
     );
   }
   async function send() {
-    if (!cart.length || roundLocked) return;
+    if (!cart.length || roundLocked || sendLock.current) return;
+    sendLock.current = true;
     setSending(true);
     try {
       await api(existing ? `/orders/${existing.id}/items` : "/orders", {
@@ -5849,14 +5817,17 @@ function OrderBuilder({ table, data, user, existing, targetBatchNo = null, refre
               },
         ),
       });
+      orderDrafts.delete(draftKey);
+      setCart([]);
       await refresh();
       toast(
         existing ? `Items added to Round ${chosenBatch} for Table ${table.number}` : "Order sent to kitchen",
       );
       close();
     } catch (e) {
-      toast(e.message);
+      toast(e.message, "error");
     } finally {
+      sendLock.current = false;
       setSending(false);
     }
   }
@@ -5927,7 +5898,7 @@ function OrderBuilder({ table, data, user, existing, targetBatchNo = null, refre
           )}
         </div>
       </div>
-      <aside className="order-cart">
+      <aside className="order-cart" ref={cartPanel}>
         <h3>{existing ? `Add items to Round ${chosenBatch}` : "New order"}</h3>
         {roundLocked ? <p role="status">Preparation has started. Select a new round to add items.</p> : null}
         <p>
@@ -5990,11 +5961,11 @@ function OrderBuilder({ table, data, user, existing, targetBatchNo = null, refre
                     </small>
                   </div>
                   <span>
-                    <button onClick={() => qty(i.menuId, -1)}>
+                    <button type="button" aria-label={`Remove one ${m.name}`} onClick={() => qty(i.menuId, -1)}>
                       <Minus size={12} />
                     </button>
                     {i.qty}
-                    <button onClick={() => qty(i.menuId, 1)}>
+                    <button type="button" aria-label={`Add one ${m.name}`} onClick={() => qty(i.menuId, 1)}>
                       <Plus size={12} />
                     </button>
                   </span>
@@ -6038,6 +6009,10 @@ function OrderBuilder({ table, data, user, existing, targetBatchNo = null, refre
           <ChefHat size={16} />
         </button>
       </aside>
+      {cart.length ? <div className="order-sticky-bar">
+        <button type="button" className="order-sticky-review" onClick={() => cartPanel.current?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion:reduce)").matches ? "auto" : "smooth", block: "start" })}><span>{cartCount} item{cartCount === 1 ? "" : "s"} · Review</span><b>{money(cartTotal)}</b></button>
+        <button type="button" className="primary" aria-label="Submit this order" disabled={sending || roundLocked} onClick={send}>{sending ? "Sending…" : "Send"} <ChefHat size={16}/></button>
+      </div> : null}
     </div>
   );
 }
@@ -6054,8 +6029,10 @@ function calculateBill(order, data) {
     tax = 0,
     cgst = 0,
     // service = (subtotal * data.settings.serviceCharge) / 100,
-    service = 0;
-  return { items, subtotal, tax, cgst, service, total: subtotal };
+    service = 0,
+    // Parcel orders only; dine-in bills never carry it.
+    parcelCharges = order.orderType === "parcel" ? Number(order.parcelCharges) || 0 : 0;
+  return { items, subtotal, tax, cgst, service, parcelCharges, total: Math.round((subtotal + parcelCharges) * 100) / 100 };
 }
 function billNumber(order) {
   return order?.billNumber ?? order?.dailyNumber ?? order?.id;
@@ -6083,7 +6060,7 @@ function Bill({ table, order, data, refresh, toast, close }) {
       toast(`Bill for Table ${table.number} sent to Admin`);
       close();
     } catch (e) {
-      toast(e.message);
+      toast(e.message, "error");
     } finally {
       setSending(false);
     }
@@ -6147,7 +6124,7 @@ function AdminBillPopup({ order, table, data, refresh, toast, close }) {
       toast(`Group #${order.id} payment completed by ${method}`);
       close();
     } catch (e) {
-      toast(e.message);
+      toast(e.message, "error");
     } finally {
       setPaying(false);
     }
@@ -6232,10 +6209,18 @@ function productionOrders(data, role, history = false) {
     .filter((order) => history ? ["collected","received"].includes(order.handoffStatus) : !["collected","received"].includes(order.handoffStatus));
 }
 
+// Live queues show the longest-waiting ticket first; history keeps newest first.
+const byService = (orders, history) => history ? orders : [...orders].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
 function Chef({ data, refresh, user, logout, toast }) {
   const [page, setPage] = useState("overview");
   const active = productionOrders(data, "chef");
   const history = productionOrders(data, "chef", true);
+  const waiting = active.filter((order) => order.status === "new"), collectable = active.filter((order) => order.status === "ready");
+  const notices = [
+    waiting.length && { title: `${waiting.length} new order${waiting.length === 1 ? "" : "s"}`, detail: "Waiting to be started", page: waiting.some((o) => o.orderType !== "parcel") ? "kitchen" : "parcels" },
+    collectable.length && { title: `${collectable.length} ready to collect`, detail: "Prepared and awaiting handoff", page: "ready" },
+  ].filter(Boolean);
   const navBadges = {
     kitchen: active.filter((order) => order.orderType !== "parcel").length,
     parcels: active.filter((order) => order.orderType === "parcel").length,
@@ -6248,7 +6233,7 @@ function Chef({ data, refresh, user, logout, toast }) {
         : active;
   const shown =
     page === "preparation-history" ? history : page === "ready" ? orders.filter((o) => o.status === "ready") : orders;
-  if (page === "overview") return <Shell role="chef" user={user} page={page} setPage={setPage} logout={logout} navBadges={navBadges}><RoleOverview role="chef" data={data} user={user} setPage={setPage}/></Shell>;
+  if (page === "overview") return <Shell role="chef" user={user} page={page} setPage={setPage} logout={logout} navBadges={navBadges} notices={notices}><StationDashboard role="chef" data={data} user={user} setPage={setPage} tickets={active}/></Shell>;
   /* Temporarily disabled; retain the Chef attendance screen for later.
   if (page === "attendance")
     return (
@@ -6258,7 +6243,7 @@ function Chef({ data, refresh, user, logout, toast }) {
         page={page}
         setPage={setPage}
         logout={logout}
-        navBadges={navBadges}
+        navBadges={navBadges} notices={notices}
       >
         <AttendancePanel user={user} toast={toast} />
       </Shell>
@@ -6272,7 +6257,7 @@ function Chef({ data, refresh, user, logout, toast }) {
         page={page}
         setPage={setPage}
         logout={logout}
-        navBadges={navBadges}
+        navBadges={navBadges} notices={notices}
       >
         <ChefManagement
           data={data}
@@ -6283,10 +6268,10 @@ function Chef({ data, refresh, user, logout, toast }) {
       </Shell>
     );
   if (page === "stock-booking")
-    return <Shell role="chef" user={user} page={page} setPage={setPage} logout={logout} navBadges={navBadges}><ChefStockBooking data={data} refresh={refresh} user={user} toast={toast}/></Shell>;
+    return <Shell role="chef" user={user} page={page} setPage={setPage} logout={logout} navBadges={navBadges} notices={notices}><ChefStockBooking data={data} refresh={refresh} user={user} toast={toast}/></Shell>;
   if (page === "dishes")
     return (
-      <Shell role="chef" user={user} page={page} setPage={setPage} logout={logout} navBadges={navBadges}>
+      <Shell role="chef" user={user} page={page} setPage={setPage} logout={logout} navBadges={navBadges} notices={notices}>
         <ChefDishes data={data} refresh={refresh} toast={toast} />
       </Shell>
     );
@@ -6307,7 +6292,7 @@ function Chef({ data, refresh, user, logout, toast }) {
       await refresh();
       toast(`Round ${batchNo} of order #${id} collected from the kitchen`);
     } catch (error) {
-      toast(error.message);
+      toast(error.message, "error");
     }
   }
   return (
@@ -6317,7 +6302,7 @@ function Chef({ data, refresh, user, logout, toast }) {
       page={page}
       setPage={setPage}
       logout={logout}
-      navBadges={navBadges}
+      navBadges={navBadges} notices={notices}
     >
       <PageHead
         kicker="LIVE KITCHEN DISPLAY"
@@ -6346,7 +6331,7 @@ function Chef({ data, refresh, user, logout, toast }) {
         </span>
       </div>
       <div className="kitchen-grid">
-        {shown.map((o) => (
+        {byService(shown, page === "preparation-history").map((o) => (
           <KitchenTicket key={o.batchKey} order={o} data={data} status={status} collect={collect} refresh={refresh} toast={toast} />
         ))}
       </div>
@@ -6384,14 +6369,19 @@ function Juicer({ data, refresh, user, logout, toast }) {
   const [page, setPage] = useState("overview");
   const active = productionOrders(data, "juicer");
   const history = productionOrders(data, "juicer", true);
+  const waiting = active.filter((order) => order.status === "new"), collectable = active.filter((order) => order.status === "ready");
+  const notices = [
+    waiting.length && { title: `${waiting.length} new juice order${waiting.length === 1 ? "" : "s"}`, detail: "Waiting to be started", page: waiting.some((o) => o.orderType !== "parcel") ? "queue" : "parcel-queue" },
+    collectable.length && { title: `${collectable.length} ready to collect`, detail: "Prepared and awaiting handoff", page: "ready" },
+  ].filter(Boolean);
   const navBadges = {
     queue: active.filter((order) => order.orderType !== "parcel").length,
     "parcel-queue": active.filter((order) => order.orderType === "parcel").length,
   };
-  if (page === "overview") return <Shell role="juicer" user={user} page={page} setPage={setPage} logout={logout} navBadges={navBadges}><RoleOverview role="juicer" data={data} user={user} setPage={setPage}/></Shell>;
+  if (page === "overview") return <Shell role="juicer" user={user} page={page} setPage={setPage} logout={logout} navBadges={navBadges} notices={notices}><StationDashboard role="juicer" data={data} user={user} setPage={setPage} tickets={active}/></Shell>;
   // Temporarily disabled; retain the Juicer attendance screen for later:
   // if (page === "attendance") return <Shell role="juicer" user={user} page={page} setPage={setPage} logout={logout}><AttendancePanel user={user} toast={toast}/></Shell>;
-  if (page === "juices") return <Shell role="juicer" user={user} page={page} setPage={setPage} logout={logout} navBadges={navBadges}><ChefDishes data={{...data,menu:data.menu.filter(item=>isJuiceItem(item))}} refresh={refresh} toast={toast} juicer/></Shell>;
+  if (page === "juices") return <Shell role="juicer" user={user} page={page} setPage={setPage} logout={logout} navBadges={navBadges} notices={notices}><ChefDishes data={{...data,menu:data.menu.filter(item=>isJuiceItem(item))}} refresh={refresh} toast={toast} juicer/></Shell>;
   const orders = page === "preparation-history" ? history : page === "ready"
     ? active.filter(order => order.status === "ready")
     : page === "parcel-queue"
@@ -6402,10 +6392,10 @@ function Juicer({ data, refresh, user, logout, toast }) {
     await refresh();
     toast(`Juice order #${id} marked ${next}`);
   }
-  return <Shell role="juicer" user={user} page={page} setPage={setPage} logout={logout} navBadges={navBadges}>
+  return <Shell role="juicer" user={user} page={page} setPage={setPage} logout={logout} navBadges={navBadges} notices={notices}>
     <PageHead kicker="LIVE JUICE STATION" title={page === "preparation-history" ? "Preparation History" : page === "ready" ? "Ready Juices" : page === "parcel-queue" ? "Parcel Queue" : "Table Orders"} sub={`${orders.length} live juice tickets · tracked separately for tables and parcels.`}/>
     <div className="kitchen-summary"><span><i className="new"/><b>{active.filter(o=>o.status==="new").length}</b> New</span><span><i className="preparing"/><b>{active.filter(o=>o.status==="preparing").length}</b> Preparing</span><span><i className="ready"/><b>{active.filter(o=>o.status==="ready").length}</b> Ready</span></div>
-    <div className="kitchen-grid">{orders.map(order=><KitchenTicket key={order.batchKey} order={order} data={data} status={status} departmentLabel="juice items" refresh={refresh} toast={toast}/>)}</div>
+    <div className="kitchen-grid">{byService(orders, page === "preparation-history").map(order=><KitchenTicket key={order.batchKey} order={order} data={data} status={status} departmentLabel="juice items" refresh={refresh} toast={toast}/>)}</div>
     {!orders.length?<div className="empty-state"><CupSoda/><h3>Juice station is clear</h3><p>No juice items in this queue right now.</p></div>:null}
   </Shell>;
 }
@@ -6434,15 +6424,16 @@ function ChefManagement({ data, refresh, user, toast }) {
     [juicer, setJuicer] = useState(undefined),
     [juicerEditor, setJuicerEditor] = useState(false),
     staff = (data.kitchenStaff || []).filter(x=>x.approvalStatus==="approved"||!x.approvalStatus);
-  const loadJuicer = useCallback(() => api("/juicer-login").then(setJuicer).catch((error) => toast(error.message)), [toast]);
+  const loadJuicer = useCallback(() => api("/juicer-login").then(setJuicer).catch((error) => toast(error.message, "error")), [toast]);
   useEffect(() => { loadJuicer(); }, [loadJuicer]);
   async function remove(id) {
+    if (!(await confirmAction({title:`Remove ${staff.find((member) => member.id === id)?.name || "this team member"}?`,message:"They will no longer appear in the kitchen team.",confirmLabel:"Remove"}))) return;
     try {
       await api(`/kitchen-staff/${id}`, { method: "DELETE" });
       await refresh();
       toast("Chef removed");
     } catch (e) {
-      toast(e.message);
+      toast(e.message, "error");
     }
   }
   return (
@@ -6498,10 +6489,11 @@ function ChefManagement({ data, refresh, user, toast }) {
 }
 function JuicerLoginEditor({ close, done, toast }) {
   const [form,setForm]=useState({name:"",phone:"",payType:"monthly",payRate:0}),[busy,setBusy]=useState(false);
-  async function save(event){event.preventDefault();setBusy(true);try{const result=await api("/juicer-login",{method:"POST",body:JSON.stringify(form)});toast(result.message);await done()}catch(error){toast(error.message)}finally{setBusy(false)}}
+  async function save(event){event.preventDefault();setBusy(true);try{const result=await api("/juicer-login",{method:"POST",body:JSON.stringify(form)});toast(result.message);await done()}catch(error){toast(error.message, "error")}finally{setBusy(false)}}
   return <Modal close={close}><span className="eyebrow">JUICE STATION LOGIN</span><h2>Create Juicer login</h2><p>Admin approval is required before this account can sign in.</p><form className="modal-form" onSubmit={save}><label>Full name<input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></label><div className="database-preview"><Settings size={17}/><span>Login PIN</span><code>Available to Admin after approval</code></div><div className="form-grid"><label>Phone<input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})}/></label><label>Salary basis<select value={form.payType} onChange={e=>setForm({...form,payType:e.target.value})}><option value="daily">Daily</option><option value="monthly">Monthly</option></select></label><label>Salary amount<input type="number" min="0" value={form.payRate} onChange={e=>setForm({...form,payRate:e.target.value})}/></label></div><button className="primary wide" disabled={busy||!form.name.trim()}>{busy?"Creating…":"Create Juicer login"}</button></form></Modal>;
 }
 function KitchenStaffEditor({ member, user, close, refresh, toast }) {
+  const [saving, setSaving] = useState(false), saveLock = useRef(false);
   const [form, setForm] = useState({
       name: member?.name || "",
       designation: member?.designation || "Chef",
@@ -6517,6 +6509,8 @@ function KitchenStaffEditor({ member, user, close, refresh, toast }) {
     [error, setError] = useState("");
   async function save(e) {
     e.preventDefault();
+    if (saveLock.current) return;
+    saveLock.current = true; setSaving(true);
     setError("");
     try {
       await api(member ? `/kitchen-staff/${member.id}` : "/kitchen-staff", {
@@ -6528,7 +6522,7 @@ function KitchenStaffEditor({ member, user, close, refresh, toast }) {
       close();
     } catch (e) {
       setError(e.message);
-    }
+    } finally { saveLock.current = false; setSaving(false); }
   }
   return (
     <Modal close={close}>
@@ -6605,8 +6599,8 @@ function KitchenStaffEditor({ member, user, close, refresh, toast }) {
         </label>
         {member && <label className="toggle-field"><input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Active kitchen employee</label>}
         {error && <div className="form-error">{error}</div>}
-        <button className="primary wide">
-          {member ? "Save changes" : "Add chef"}
+        <button className="primary wide" disabled={saving}>
+          {saving ? "Saving…" : member ? "Save changes" : "Add chef"}
         </button>
       </form>
     </Modal>
@@ -6617,10 +6611,13 @@ function KitchenTicket({ order, data, status, collect, departmentLabel = "food i
     isParcel = order.orderType === "parcel",
     [expanded, setExpanded] = useState(false),
     [busyItemId, setBusyItemId] = useState(null),
+    actionLock = useRef(false), now = useNow(), waited = Math.max(0, Math.floor((now - new Date(order.createdAt)) / 60000)),
+    live = ["new", "preparing"].includes(order.status), urgency = !live ? "" : waited >= 20 ? "late" : waited >= 10 ? "due" : "",
+    nextStep = order.status === "new" ? ["preparing", "Start preparing"] : order.status === "preparing" ? ["ready", "Mark ready"] : order.productionStatus === "ready" && order.handoffStatus === "pending" ? ["collected", "Mark collected"] : null,
     [actionBusy, setActionBusy] = useState(false), [actionError, setActionError] = useState("");
   async function advance(next, menuId) {
-    if(actionBusy)return;setActionBusy(true);setActionError("");
-    try {await api(next === "collected" ? `/orders/${order.id}/batches/${order.batchNo}/handoff` : `/orders/${order.id}/items/status`, {method:"PATCH",body:JSON.stringify({status:next,batchNo:order.batchNo,...(menuId ? {menuId}: {})})});await refresh();toast(next === "collected" ? "Items collected" : `Items marked ${next}`);}catch(error){setActionError(error.message)}finally{setActionBusy(false)}
+    if(actionLock.current)return;actionLock.current=true;setActionBusy(true);setActionError("");
+    try {await api(next === "collected" ? `/orders/${order.id}/batches/${order.batchNo}/handoff` : `/orders/${order.id}/items/status`, {method:"PATCH",body:JSON.stringify({status:next,batchNo:order.batchNo,...(menuId ? {menuId}: {})})});await refresh();toast(next === "collected" ? "Items collected" : `Items marked ${next}`);}catch(error){setActionError(error.message)}finally{actionLock.current=false;setActionBusy(false)}
   }
 
   async function markUnavailable(menuItem, item) {
@@ -6642,7 +6639,7 @@ function KitchenTicket({ order, data, status, collect, departmentLabel = "food i
         if (refresh) await refresh();
         if (toast) toast(`${menuItem.name} marked Out of Stock`);
       } catch (e2) {
-        if (toast) toast(e2.message || err.message);
+        if (toast) toast(e2.message || err.message, "error");
       }
     } finally {
       setBusyItemId(null);
@@ -6651,13 +6648,20 @@ function KitchenTicket({ order, data, status, collect, departmentLabel = "food i
 
   return (
     <>
-      <button className={`chef-order-summary ${order.status} ${isParcel ? "parcel" : ""}`} onClick={() => setExpanded(true)}>
-        <span className="chef-summary-table">{isParcel ? "PARCEL" : "TABLE"}<b>{isParcel ? `#${order.id}` : table?.number}</b></span>
-        <span><small>GROUP / ROUND</small><b>#{order.id} · {order.batchNo}</b><small>{order.guestName} · {order.guestCount||1} guests</small></span>
-        <span><small>TIME</small><b><Clock3 size={13}/>{elapsed(order.createdAt)}</b></span>
-        <Status status={order.status}/>
-        <ChevronRight size={18}/>
-      </button>
+      <article className={`kds-ticket ${order.status} ${urgency} ${isParcel ? "parcel" : ""}`}>
+        <button type="button" className={`chef-order-summary ${order.status} ${isParcel ? "parcel" : ""}`} onClick={() => setExpanded(true)}>
+          <span className="chef-summary-table">{isParcel ? "PARCEL" : "TABLE"}<b>{isParcel ? `#${order.id}` : table?.number}</b></span>
+          <span className="kds-who"><b>#{order.id} · Round {order.batchNo}</b><small>{order.guestName}{isParcel ? "" : ` · ${order.guestCount||1} guest${(order.guestCount||1)===1?"":"s"}`}</small></span>
+          <span className="kds-timer"><Clock3 size={15}/>{waited < 1 ? "Now" : `${waited} min`}{urgency === "late" ? <em>Late</em> : null}</span>
+          <Status status={order.status}/>
+        </button>
+        <ul className="kds-items">{order.items.map((line, index) => {
+          const dish = data.menu.find((m) => m.id === line.menuId);
+          return <li key={`${line.menuId}-${index}`} className={line.itemStatus || "new"}><b>{line.qty}</b><span>{dish?.name || "Menu item"}{dish?.isCombo ? <small>{dish.components.map((c) => `${c.quantity}× ${c.name}`).join(" + ")}</small> : null}{line.note ? <small className="kds-note">{line.note}</small> : null}</span>{line.itemStatus === "ready" ? <CheckCircle2 size={18} aria-label="Ready"/> : null}</li>;
+        })}</ul>
+        {actionError && !expanded ? <p className="form-error" role="alert">{actionError}</p> : null}
+        <footer>{nextStep ? <button type="button" className={`kds-action ${nextStep[0]}`} disabled={actionBusy} aria-label={`${nextStep[1]}: order ${order.id} round ${order.batchNo}`} onClick={() => advance(nextStep[0])}>{actionBusy ? "Updating…" : nextStep[1]}</button> : null}<button type="button" className="kds-details" aria-label={`Open details for order ${order.id} round ${order.batchNo}`} onClick={() => setExpanded(true)}>Details</button></footer>
+      </article>
       {expanded ? (
         <Modal close={() => setExpanded(false)} closeLeft className="chef-ticket-modal">
           <div className="chef-detail-head">

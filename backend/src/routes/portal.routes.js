@@ -63,11 +63,13 @@ export function createRoleRouter(portalRole, { onMutation = async () => {} } = {
   // Parcels
   router.post('/api/parcels', asyncRoute(tenantController.createParcel));
   router.post('/api/orders/:id/mark-paid', asyncRoute(tenantController.markOrderPaid));
+  router.put('/api/orders/:id/parcel-charge', asyncRoute(tenantController.setParcelCharge));
 
   // Tables
   router.post('/api/tables/:id/sessions', asyncRoute(createTableSession));
   router.patch('/api/tables/:id/status', asyncRoute(tenantController.updateTableStatus));
   router.post('/api/tables', asyncRoute(tenantController.createTable));
+  router.patch('/api/tables/:id', asyncRoute(tenantController.updateTable));
   router.delete('/api/tables/:id', asyncRoute(tenantController.deleteTable));
 
   // Inventory

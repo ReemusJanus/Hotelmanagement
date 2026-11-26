@@ -1,0 +1,6 @@
+PASS desktop create/select independent groups, no render errors/overflow
+PASS desktop admin pays selected group, other group stays active
+PASS mobile create/select independent groups, no render errors/overflow
+PASS mobile admin pays selected group, other group stays active
+PASS tablet create/select independent groups, no render errors/overflow
+PASS tablet admin pays selected group, other group stays active

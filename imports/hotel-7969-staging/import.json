@@ -1,0 +1,771 @@
+{
+  "hotelId": "7969",
+  "environment": "staging",
+  "status": "approved-staging-import",
+  "items": [
+    {
+      "name": "Pine Apple Juice",
+      "category": "Fresh Juice",
+      "price": "40.00",
+      "description": "",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/81767249cc/",
+      "license": "CC0-1.0",
+      "imageFile": "images/01.webp",
+      "available": true
+    },
+    {
+      "name": "Orange Juice",
+      "category": "Fresh Juice",
+      "price": "60.00",
+      "description": "",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/66a53da515/",
+      "license": "CC0-1.0",
+      "imageFile": "images/02.webp",
+      "available": true
+    },
+    {
+      "name": "Water Melon Juice",
+      "category": "Fresh Juice",
+      "price": "40.00",
+      "description": "",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/65665c53a4/",
+      "license": "CC0-1.0",
+      "imageFile": "images/03.webp",
+      "available": true
+    },
+    {
+      "name": "Shaman Juice",
+      "category": "Fresh Juice",
+      "price": "60.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/04.webp",
+      "available": true
+    },
+    {
+      "name": "Lime Juice",
+      "category": "Fresh Juice",
+      "price": "25.00",
+      "description": "",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/33168e4e16/",
+      "license": "CC0-1.0",
+      "imageFile": "images/05.webp",
+      "available": true
+    },
+    {
+      "name": "Mint Lime Juice",
+      "category": "Fresh Juice",
+      "price": "30.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/06.webp",
+      "available": true
+    },
+    {
+      "name": "Pine Apple Lime Juice",
+      "category": "Fresh Juice",
+      "price": "40.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/07.webp",
+      "available": true
+    },
+    {
+      "name": "Ginger Lime",
+      "category": "Fresh Juice",
+      "price": "30.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/08.webp",
+      "available": true
+    },
+    {
+      "name": "Lime Soda",
+      "category": "Fresh Juice",
+      "price": "40.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/09.webp",
+      "available": true
+    },
+    {
+      "name": "Normal Falooda",
+      "category": "Falooda",
+      "price": "90.00",
+      "description": "",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/5976a16e3a/",
+      "license": "CC0-1.0",
+      "imageFile": "images/10.webp",
+      "available": true
+    },
+    {
+      "name": "Master Falooda",
+      "category": "Falooda",
+      "price": "140.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/11.webp",
+      "available": true
+    },
+    {
+      "name": "Green Apple Mojito",
+      "category": "Beverages",
+      "price": "60.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/12.webp",
+      "available": true
+    },
+    {
+      "name": "Mango Mojito",
+      "category": "Beverages",
+      "price": "60.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/13.webp",
+      "available": true
+    },
+    {
+      "name": "Blue Berry Mojito",
+      "category": "Beverages",
+      "price": "80.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/14.webp",
+      "available": true
+    },
+    {
+      "name": "Kiwi Mojito",
+      "category": "Beverages",
+      "price": "60.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/15.webp",
+      "available": true
+    },
+    {
+      "name": "Orange Mojito",
+      "category": "Beverages",
+      "price": "60.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/16.webp",
+      "available": true
+    },
+    {
+      "name": "Mint Mojito",
+      "category": "Beverages",
+      "price": "60.00",
+      "description": "",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/463697a13b/",
+      "license": "CC0-1.0",
+      "imageFile": "images/17.webp",
+      "available": true
+    },
+    {
+      "name": "Lichi Mojito",
+      "category": "Beverages",
+      "price": "60.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/18.webp",
+      "available": true
+    },
+    {
+      "name": "Black Current",
+      "category": "Beverages",
+      "price": "80.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/19.webp",
+      "available": true
+    },
+    {
+      "name": "Blue Curoko",
+      "category": "Beverages",
+      "price": "60.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/20.webp",
+      "available": true
+    },
+    {
+      "name": "French Fries",
+      "category": "Starter",
+      "price": "80.00",
+      "description": "",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/7236ad2260/",
+      "license": "CC0-1.0",
+      "imageFile": "images/21.webp",
+      "available": true
+    },
+    {
+      "name": "Chicken Momos",
+      "category": "Starter",
+      "price": "80.00",
+      "description": "",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/4006a53d9c/",
+      "license": "CC0-1.0",
+      "imageFile": "images/22.webp",
+      "available": true
+    },
+    {
+      "name": "Veg Momos",
+      "category": "Starter",
+      "price": "70.00",
+      "description": "",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/6386a2adbb/",
+      "license": "CC0-1.0",
+      "imageFile": "images/23.webp",
+      "available": true
+    },
+    {
+      "name": "Chicken Popcorn",
+      "category": "Starter",
+      "price": "100.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/24.webp",
+      "available": true
+    },
+    {
+      "name": "Normal Sharja Shake",
+      "category": "Sharja Shake",
+      "price": "50.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/25.webp",
+      "available": true
+    },
+    {
+      "name": "Chocolate Sharja Shake",
+      "category": "Sharja Shake",
+      "price": "60.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/26.webp",
+      "available": true
+    },
+    {
+      "name": "Butterscotch Sharja",
+      "category": "Sharja Shake",
+      "price": "60.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/27.webp",
+      "available": true
+    },
+    {
+      "name": "Pistha Sharja Shake",
+      "category": "Sharja Shake",
+      "price": "60.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/28.webp",
+      "available": true
+    },
+    {
+      "name": "Stawberry Sharja Shake",
+      "category": "Sharja Shake",
+      "price": "60.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/29.webp",
+      "available": true
+    },
+    {
+      "name": "Vennila Sharja Shake",
+      "category": "Sharja Shake",
+      "price": "60.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/30.webp",
+      "available": true
+    },
+    {
+      "name": "Chicken Sandwich",
+      "category": "Sandwich",
+      "price": "80.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/31.webp",
+      "available": true
+    },
+    {
+      "name": "Veg Sandwich",
+      "category": "Sandwich",
+      "price": "70.00",
+      "description": "",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/1146a0852b/",
+      "license": "CC0-1.0",
+      "imageFile": "images/32.webp",
+      "available": true
+    },
+    {
+      "name": "Bread Omelette",
+      "category": "Sandwich",
+      "price": "50.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/33.webp",
+      "available": true
+    },
+    {
+      "name": "Chicken Burger",
+      "category": "Burger",
+      "price": "100.00",
+      "description": "",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/3536a1313c/",
+      "license": "CC0-1.0",
+      "imageFile": "images/34.webp",
+      "available": true
+    },
+    {
+      "name": "Loaded Fries",
+      "category": "Burger",
+      "price": "160.00",
+      "description": "",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/52269f722f/",
+      "license": "CC0-1.0",
+      "imageFile": "images/35.webp",
+      "available": true
+    },
+    {
+      "name": "Broasted Chicken (Full)",
+      "category": "Broasted Chicken",
+      "price": "400.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/36.webp",
+      "available": true
+    },
+    {
+      "name": "Broasted Chicken (Half)",
+      "category": "Broasted Chicken",
+      "price": "200.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/37.webp",
+      "available": true
+    },
+    {
+      "name": "Shawaya Chicken (Full)",
+      "category": "Shawaya Chicken",
+      "price": "450.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/38.webp",
+      "available": true
+    },
+    {
+      "name": "Shawaya Chicken (Half)",
+      "category": "Shawaya Chicken",
+      "price": "230.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/39.webp",
+      "available": true
+    },
+    {
+      "name": "Shawaya Chicken (Quarter)",
+      "category": "Shawaya Chicken",
+      "price": "120.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/40.webp",
+      "available": true
+    },
+    {
+      "name": "Parotta",
+      "category": "Parotta",
+      "price": "10.00",
+      "description": "",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/9486a08606/",
+      "license": "CC0-1.0",
+      "imageFile": "images/41.webp",
+      "available": true
+    },
+    {
+      "name": "Kothu Parotta",
+      "category": "Parotta",
+      "price": "120.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/42.webp",
+      "available": true
+    },
+    {
+      "name": "Nool Parotta",
+      "category": "Parotta",
+      "price": "20.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/43.webp",
+      "available": true
+    },
+    {
+      "name": "Full BBQ",
+      "category": "Alfaham BBQ",
+      "price": "390.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/44.webp",
+      "available": true
+    },
+    {
+      "name": "Half BBQ",
+      "category": "Alfaham BBQ",
+      "price": "200.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/45.webp",
+      "available": true
+    },
+    {
+      "name": "Quarter BBQ",
+      "category": "Alfaham BBQ",
+      "price": "100.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/46.webp",
+      "available": true
+    },
+    {
+      "name": "Honey Full BBQ",
+      "category": "Alfaham BBQ",
+      "price": "420.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/47.webp",
+      "available": true
+    },
+    {
+      "name": "Honey Half BBQ",
+      "category": "Alfaham BBQ",
+      "price": "230.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/48.webp",
+      "available": true
+    },
+    {
+      "name": "Honey Quarter",
+      "category": "Alfaham BBQ",
+      "price": "130.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/49.webp",
+      "available": true
+    },
+    {
+      "name": "Chicken Fried Rice",
+      "category": "Rice & Noodles",
+      "price": "120.00",
+      "description": "",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/429680fd3b/",
+      "license": "CC0-1.0",
+      "imageFile": "images/50.webp",
+      "available": true
+    },
+    {
+      "name": "Egg Fried Rice",
+      "category": "Rice & Noodles",
+      "price": "100.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/51.webp",
+      "available": true
+    },
+    {
+      "name": "Veg Fried Rice",
+      "category": "Rice & Noodles",
+      "price": "100.00",
+      "description": "",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/655681f3f0/",
+      "license": "CC0-1.0",
+      "imageFile": "images/52.webp",
+      "available": true
+    },
+    {
+      "name": "Chicken Noodles",
+      "category": "Rice & Noodles",
+      "price": "120.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/53.webp",
+      "available": true
+    },
+    {
+      "name": "Chicken Gravy",
+      "category": "Gravy",
+      "price": "100.00",
+      "description": "",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/5176a4616c/",
+      "license": "CC0-1.0",
+      "imageFile": "images/54.webp",
+      "available": true
+    },
+    {
+      "name": "Normal Shawarma",
+      "category": "Shawarma",
+      "price": "70.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/55.webp",
+      "available": true
+    },
+    {
+      "name": "Plate Shawarma",
+      "category": "Shawarma",
+      "price": "110.00",
+      "description": "",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/13769f707e/",
+      "license": "CC0-1.0",
+      "imageFile": "images/56.webp",
+      "available": true
+    },
+    {
+      "name": "Peri Peri Shawarma",
+      "category": "Shawarma",
+      "price": "80.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/57.webp",
+      "available": true
+    },
+    {
+      "name": "Peri Peri Plate Shawarma",
+      "category": "Shawarma",
+      "price": "120.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/58.webp",
+      "available": true
+    },
+    {
+      "name": "Parotta Roll Shawarma",
+      "category": "Shawarma",
+      "price": "80.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/59.webp",
+      "available": true
+    },
+    {
+      "name": "Parotta Plate Shawarma",
+      "category": "Shawarma",
+      "price": "120.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/60.webp",
+      "available": true
+    },
+    {
+      "name": "Parotta Peri Peri Roll",
+      "category": "Shawarma",
+      "price": "90.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/61.webp",
+      "available": true
+    },
+    {
+      "name": "Parotta Peri Peri Plate",
+      "category": "Shawarma",
+      "price": "130.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/62.webp",
+      "available": true
+    },
+    {
+      "name": "Karikkushake",
+      "category": "Karikku Shakes",
+      "price": "80.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/63.webp",
+      "available": true
+    },
+    {
+      "name": "KarikkinBoost",
+      "category": "Karikku Shakes",
+      "price": "90.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/64.webp",
+      "available": true
+    },
+    {
+      "name": "KarikkinHorlicks",
+      "category": "Karikku Shakes",
+      "price": "90.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/65.webp",
+      "available": true
+    },
+    {
+      "name": "KarikkinDates",
+      "category": "Karikku Shakes",
+      "price": "90.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/66.webp",
+      "available": true
+    },
+    {
+      "name": "KarikkinPista",
+      "category": "Karikku Shakes",
+      "price": "90.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/67.webp",
+      "available": true
+    },
+    {
+      "name": "KarikkinButterScotch",
+      "category": "Karikku Shakes",
+      "price": "90.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/68.webp",
+      "available": true
+    },
+    {
+      "name": "KarikkinVanilla",
+      "category": "Karikku Shakes",
+      "price": "90.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/69.webp",
+      "available": true
+    },
+    {
+      "name": "KarikkinChocolate",
+      "category": "Karikku Shakes",
+      "price": "90.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/70.webp",
+      "available": true
+    },
+    {
+      "name": "Karikkinpapaya",
+      "category": "Karikku Shakes",
+      "price": "100.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/71.webp",
+      "available": true
+    },
+    {
+      "name": "Karikkinmango",
+      "category": "Karikku Shakes",
+      "price": "100.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/72.webp",
+      "available": true
+    },
+    {
+      "name": "Karikkinavocado",
+      "category": "Karikku Shakes",
+      "price": "100.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/73.webp",
+      "available": true
+    },
+    {
+      "name": "Karikkinchikku",
+      "category": "Karikku Shakes",
+      "price": "100.00",
+      "description": "",
+      "imageKind": "placeholder",
+      "reviewReason": "Accurate representative photo not verified; replace with restaurant-approved photo.",
+      "imageFile": "images/74.webp",
+      "available": true
+    }
+  ],
+  "drinkCategories": [
+    "Fresh Juice",
+    "Falooda",
+    "Beverages",
+    "Sharja Shake",
+    "Karikku Shakes"
+  ]
+}

@@ -1,0 +1,610 @@
+{
+  "hotelId": "7969",
+  "items": [
+    {
+      "id": 1,
+      "name": "Pine Apple Juice",
+      "category": "Fresh Juice",
+      "price": "40.00",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/81767249cc/"
+    },
+    {
+      "id": 2,
+      "name": "Orange Juice",
+      "category": "Fresh Juice",
+      "price": "60.00",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/66a53da515/"
+    },
+    {
+      "id": 3,
+      "name": "Water Melon Juice",
+      "category": "Fresh Juice",
+      "price": "40.00",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/65665c53a4/"
+    },
+    {
+      "id": 4,
+      "name": "Shaman Juice",
+      "category": "Fresh Juice",
+      "price": "60.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 5,
+      "name": "Lime Juice",
+      "category": "Fresh Juice",
+      "price": "25.00",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/33168e4e16/"
+    },
+    {
+      "id": 6,
+      "name": "Mint Lime Juice",
+      "category": "Fresh Juice",
+      "price": "30.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 7,
+      "name": "Pine Apple Lime Juice",
+      "category": "Fresh Juice",
+      "price": "40.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 8,
+      "name": "Ginger Lime",
+      "category": "Fresh Juice",
+      "price": "30.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 9,
+      "name": "Lime Soda",
+      "category": "Fresh Juice",
+      "price": "40.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 10,
+      "name": "Normal Falooda",
+      "category": "Falooda",
+      "price": "90.00",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/5976a16e3a/"
+    },
+    {
+      "id": 11,
+      "name": "Master Falooda",
+      "category": "Falooda",
+      "price": "140.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 12,
+      "name": "Green Apple Mojito",
+      "category": "Beverages",
+      "price": "60.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 13,
+      "name": "Mango Mojito",
+      "category": "Beverages",
+      "price": "60.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 14,
+      "name": "Blue Berry Mojito",
+      "category": "Beverages",
+      "price": "80.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 15,
+      "name": "Kiwi Mojito",
+      "category": "Beverages",
+      "price": "60.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 16,
+      "name": "Orange Mojito",
+      "category": "Beverages",
+      "price": "60.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 17,
+      "name": "Mint Mojito",
+      "category": "Beverages",
+      "price": "60.00",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/463697a13b/"
+    },
+    {
+      "id": 18,
+      "name": "Lichi Mojito",
+      "category": "Beverages",
+      "price": "60.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 19,
+      "name": "Black Current",
+      "category": "Beverages",
+      "price": "80.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 20,
+      "name": "Blue Curoko",
+      "category": "Beverages",
+      "price": "60.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 21,
+      "name": "French Fries",
+      "category": "Starter",
+      "price": "80.00",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/7236ad2260/"
+    },
+    {
+      "id": 22,
+      "name": "Chicken Momos",
+      "category": "Starter",
+      "price": "80.00",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/4006a53d9c/"
+    },
+    {
+      "id": 23,
+      "name": "Veg Momos",
+      "category": "Starter",
+      "price": "70.00",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/6386a2adbb/"
+    },
+    {
+      "id": 24,
+      "name": "Chicken Popcorn",
+      "category": "Starter",
+      "price": "100.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 25,
+      "name": "Normal Sharja Shake",
+      "category": "Sharja Shake",
+      "price": "50.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 26,
+      "name": "Chocolate Sharja Shake",
+      "category": "Sharja Shake",
+      "price": "60.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 27,
+      "name": "Butterscotch Sharja",
+      "category": "Sharja Shake",
+      "price": "60.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 28,
+      "name": "Pistha Sharja Shake",
+      "category": "Sharja Shake",
+      "price": "60.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 29,
+      "name": "Stawberry Sharja Shake",
+      "category": "Sharja Shake",
+      "price": "60.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 30,
+      "name": "Vennila Sharja Shake",
+      "category": "Sharja Shake",
+      "price": "60.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 31,
+      "name": "Chicken Sandwich",
+      "category": "Sandwich",
+      "price": "80.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 32,
+      "name": "Veg Sandwich",
+      "category": "Sandwich",
+      "price": "70.00",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/1146a0852b/"
+    },
+    {
+      "id": 33,
+      "name": "Bread Omelette",
+      "category": "Sandwich",
+      "price": "50.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 34,
+      "name": "Chicken Burger",
+      "category": "Burger",
+      "price": "100.00",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/3536a1313c/"
+    },
+    {
+      "id": 35,
+      "name": "Loaded Fries",
+      "category": "Burger",
+      "price": "160.00",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/52269f722f/"
+    },
+    {
+      "id": 36,
+      "name": "Broasted Chicken (Full)",
+      "category": "Broasted Chicken",
+      "price": "400.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 37,
+      "name": "Broasted Chicken (Half)",
+      "category": "Broasted Chicken",
+      "price": "200.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 38,
+      "name": "Shawaya Chicken (Full)",
+      "category": "Shawaya Chicken",
+      "price": "450.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 39,
+      "name": "Shawaya Chicken (Half)",
+      "category": "Shawaya Chicken",
+      "price": "230.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 40,
+      "name": "Shawaya Chicken (Quarter)",
+      "category": "Shawaya Chicken",
+      "price": "120.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 41,
+      "name": "Parotta",
+      "category": "Parotta",
+      "price": "10.00",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/9486a08606/"
+    },
+    {
+      "id": 42,
+      "name": "Kothu Parotta",
+      "category": "Parotta",
+      "price": "120.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 43,
+      "name": "Nool Parotta",
+      "category": "Parotta",
+      "price": "20.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 44,
+      "name": "Full BBQ",
+      "category": "Alfaham BBQ",
+      "price": "390.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 45,
+      "name": "Half BBQ",
+      "category": "Alfaham BBQ",
+      "price": "200.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 46,
+      "name": "Quarter BBQ",
+      "category": "Alfaham BBQ",
+      "price": "100.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 47,
+      "name": "Honey Full BBQ",
+      "category": "Alfaham BBQ",
+      "price": "420.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 48,
+      "name": "Honey Half BBQ",
+      "category": "Alfaham BBQ",
+      "price": "230.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 49,
+      "name": "Honey Quarter",
+      "category": "Alfaham BBQ",
+      "price": "130.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 50,
+      "name": "Chicken Fried Rice",
+      "category": "Rice & Noodles",
+      "price": "120.00",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/429680fd3b/"
+    },
+    {
+      "id": 51,
+      "name": "Egg Fried Rice",
+      "category": "Rice & Noodles",
+      "price": "100.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 52,
+      "name": "Veg Fried Rice",
+      "category": "Rice & Noodles",
+      "price": "100.00",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/655681f3f0/"
+    },
+    {
+      "id": 53,
+      "name": "Chicken Noodles",
+      "category": "Rice & Noodles",
+      "price": "120.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 54,
+      "name": "Chicken Gravy",
+      "category": "Gravy",
+      "price": "100.00",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/5176a4616c/"
+    },
+    {
+      "id": 55,
+      "name": "Normal Shawarma",
+      "category": "Shawarma",
+      "price": "70.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 56,
+      "name": "Plate Shawarma",
+      "category": "Shawarma",
+      "price": "110.00",
+      "imageKind": "representative-photo",
+      "photoSource": "https://wordpress.org/photos/photo/13769f707e/"
+    },
+    {
+      "id": 57,
+      "name": "Peri Peri Shawarma",
+      "category": "Shawarma",
+      "price": "80.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 58,
+      "name": "Peri Peri Plate Shawarma",
+      "category": "Shawarma",
+      "price": "120.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 59,
+      "name": "Parotta Roll Shawarma",
+      "category": "Shawarma",
+      "price": "80.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 60,
+      "name": "Parotta Plate Shawarma",
+      "category": "Shawarma",
+      "price": "120.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 61,
+      "name": "Parotta Peri Peri Roll",
+      "category": "Shawarma",
+      "price": "90.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 62,
+      "name": "Parotta Peri Peri Plate",
+      "category": "Shawarma",
+      "price": "130.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 63,
+      "name": "Karikkushake",
+      "category": "Karikku Shakes",
+      "price": "80.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 64,
+      "name": "KarikkinBoost",
+      "category": "Karikku Shakes",
+      "price": "90.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 65,
+      "name": "KarikkinHorlicks",
+      "category": "Karikku Shakes",
+      "price": "90.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 66,
+      "name": "KarikkinDates",
+      "category": "Karikku Shakes",
+      "price": "90.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 67,
+      "name": "KarikkinPista",
+      "category": "Karikku Shakes",
+      "price": "90.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 68,
+      "name": "KarikkinButterScotch",
+      "category": "Karikku Shakes",
+      "price": "90.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 69,
+      "name": "KarikkinVanilla",
+      "category": "Karikku Shakes",
+      "price": "90.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 70,
+      "name": "KarikkinChocolate",
+      "category": "Karikku Shakes",
+      "price": "90.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 71,
+      "name": "Karikkinpapaya",
+      "category": "Karikku Shakes",
+      "price": "100.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 72,
+      "name": "Karikkinmango",
+      "category": "Karikku Shakes",
+      "price": "100.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 73,
+      "name": "Karikkinavocado",
+      "category": "Karikku Shakes",
+      "price": "100.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    },
+    {
+      "id": 74,
+      "name": "Karikkinchikku",
+      "category": "Karikku Shakes",
+      "price": "100.00",
+      "imageKind": "placeholder",
+      "photoSource": null
+    }
+  ],
+  "created": 74,
+  "uploaded": 74,
+  "validation": {
+    "items": 74,
+    "categories": 15,
+    "pricesMatched": 74,
+    "available": 74,
+    "imagesLoaded": 74,
+    "duplicates": 0,
+    "juicer": 38,
+    "kitchen": 36,
+    "otherTenantsUnchanged": true
+  }
+}

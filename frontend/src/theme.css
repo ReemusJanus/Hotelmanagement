@@ -1,5 +1,48 @@
 /* Byteberrytech UI tokens. Screen styles only: receipts retain their original rules. */
 :root {
+  /* Brand */
+  --color-primary: #C5A572; --color-primary-hover: #B8955E; --color-primary-dark: #A5834C;
+  --color-primary-soft: #F6F0E4; --color-primary-text: #775620; --color-primary-border: #DFCDAC;
+  --color-border-accent: #C5A572; --color-on-primary: #151719; --color-bright-blue: var(--color-primary);
+  --color-ink: #151719; --color-ink-soft: #24272A; --color-ink-line: #34383C;
+  --color-on-ink: #F8F7F4; --color-on-ink-muted: #B3B6BA;
+  --color-ivory: #F8F7F4; --color-cream: #F1EEE7; --color-charcoal-text: #151719;
+  /* Surfaces and text */
+  --color-background: #F8F7F4; --color-surface: #FFFFFF; --color-surface-elevated: #FBFAF8;
+  --color-hover: #F3F1EC; --color-navy: #FFFFFF; --color-deep-navy: #F3F1EC;
+  --color-text-primary: #151719; --color-text-secondary: #565B64; --color-muted: #656B75;
+  --color-text-muted: #656B75; --color-label: #3D4148; --color-disabled: #8B9099;
+  --color-border: #E6E2D9; --color-input-border: #CFC9BC;
+  /* Status */
+  --color-success: #1F7A57; --color-dark-emerald: #1A6548; --color-success-soft: #E9F3EE; --color-success-text: #17603F; --color-success-border: #BCDACB;
+  --color-warning: #C98217; --color-warning-soft: #FCF3E2; --color-warning-text: #85500A; --color-warning-border: #EBD3A4;
+  --color-error: #B4232E; --color-error-soft: #FBECEC; --color-error-text: #A11D28; --color-error-border: #EBC4C6;
+  --color-reserved: #4A5F8F; --color-reserved-soft: #ECEFF6; --color-reserved-text: #3B4E79; --color-reserved-border: #C6CFE2;
+  --color-served: #2C7A7B; --color-served-soft: #E6F2F2; --color-served-text: #1F5F60;
+  --color-info: #3B6EA5; --color-danger-button: #B4232E; --color-on-danger: #FFFFFF;
+  /* Application chrome */
+  --color-sidebar: #151719; --color-sidebar-text: #B3B6BA; --color-sidebar-divider: #2A2E31;
+  --color-overlay: rgb(21 23 25 / 52%);
+  --focus-ring: 0 0 0 3px rgb(197 165 114 / 38%);
+  --shadow-card: 0 1px 2px rgb(21 23 25 / 4%);
+  --shadow-raised: 0 4px 14px rgb(21 23 25 / 7%);
+  --shadow-popover: 0 18px 48px rgb(21 23 25 / 18%);
+  --font-sans: 'Manrope', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --sidebar-width: 248px; --topbar-height: 68px; --tabbar-height: 64px; --touch: 44px;
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+  --space-6: 24px; --space-8: 32px; --space-12: 48px;
+  --radius-control: 8px; --radius-card: 12px; --radius-modal: 14px;
+  /* Compatibility aliases for established components. */
+  --green: var(--color-primary); --green2: var(--color-primary-hover);
+  --gold: var(--color-primary); --red: var(--color-error);
+  --cream: var(--color-background); --line: var(--color-border);
+  --muted: var(--color-muted); --shadow: var(--shadow-card);
+  --ko-glass: var(--color-surface);
+  font-family: var(--font-sans);
+  color-scheme: light;
+}
+/* The public marketing site keeps its existing dark identity. */
+.lux-site {
   --color-primary-dark: #A88B32;
   --color-surface-elevated: #27272A;
   --color-text-muted: #A1A1AA;
@@ -10,7 +53,6 @@
   --color-charcoal-text: #18181B;
   --color-on-danger: #FFFFFF;
   --color-danger-button: #B91C1C;
-  --font-sans: 'Inter', system-ui, sans-serif;
   --color-navy: #18181B;
   --color-deep-navy: #27272A;
   --color-primary: #C9A227;
@@ -57,16 +99,6 @@
   --focus-ring: 0 0 0 3px rgb(201 162 39 / 24%);
   --shadow-card: 0 8px 24px rgb(0 0 0 / 18%), inset 0 1px rgb(255 255 255 / 3%);
   --shadow-popover: 0 24px 72px rgb(0 0 0 / 48%);
-  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
-  --space-6: 24px; --space-8: 32px; --space-12: 48px;
-  --radius-control: 8px; --radius-card: 12px; --radius-modal: 14px;
-  /* Compatibility aliases for established components. */
-  --green: var(--color-primary); --green2: var(--color-primary-hover);
-  --gold: var(--color-primary); --red: var(--color-error);
-  --cream: var(--color-background); --line: var(--color-border);
-  --muted: var(--color-muted); --shadow: var(--shadow-card);
-  --ko-glass: var(--color-surface);
-  font-family: var(--font-sans);
   color-scheme: dark;
 }
 @media screen {

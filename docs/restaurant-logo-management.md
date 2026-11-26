@@ -30,7 +30,7 @@ The native Expo app has payment views but no equivalent printer integration; thi
 - Browser fixtures exercise settings upload/save, sidebar refresh/reload, receipt branding and responsive layout at 390/768/1440 px; these do not replace a live storage smoke test.
 - Full application release certification remains separate; the previously recorded origin-policy integration failure is not addressed by this feature.
 
-Deployment has not been performed for this feature. Deploy the backend/migration before the frontend.
+Deployed to staging on 9 November 2026, backend before frontend. Verified API/Redis health, all four tenant/default settings schemas and served frontend layout checks with synthetic API fixtures. Live tenant logo uploads and physical printer output remain unverified. Both deployment scripts now install dependencies in isolated temporary source directories to avoid iCloud/shared node_modules cleanup failures.
 
 ## Files changed for this feature
 Frontend: `frontend/src/App.jsx`, `frontend/src/responsive.css`.

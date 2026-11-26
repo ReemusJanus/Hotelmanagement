@@ -1,14 +1,5 @@
 import { pool } from '../database.js';
-
-async function billFor(orderId, conn = pool) {
-  const [items] = await conn.query(
-    'SELECT oi.menu_id "menuId",oi.quantity qty,oi.note,oi.price,m.name,m.icon,m.image_url "imageUrl" FROM order_items oi JOIN menu_items m ON m.id=oi.menu_id WHERE oi.order_id=?',
-    [orderId]
-  );
-  const subtotal = items.reduce((s, i) => s + Number(i.price) * i.qty, 0);
-  const tax = 0, cgst = 0, service = 0;
-  return { items: items.map(i => ({ ...i, price: Number(i.price) })), subtotal, tax, cgst, service, total: subtotal };
-}
+import { billFor } from './tenant.controller.js';
 
 export const createParcel = async (req, res) => {
   const { portalRole } = req;

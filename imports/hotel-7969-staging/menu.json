@@ -1,0 +1,599 @@
+{
+  "hotelId": "7969",
+  "environment": "staging",
+  "status": "preview-only",
+  "items": [
+    {
+      "name": "Pine Apple Juice",
+      "category": "Fresh Juice",
+      "price": "40.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Orange Juice",
+      "category": "Fresh Juice",
+      "price": "60.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Water Melon Juice",
+      "category": "Fresh Juice",
+      "price": "40.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Shaman Juice",
+      "category": "Fresh Juice",
+      "price": "60.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Lime Juice",
+      "category": "Fresh Juice",
+      "price": "25.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Mint Lime Juice",
+      "category": "Fresh Juice",
+      "price": "30.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Pine Apple Lime Juice",
+      "category": "Fresh Juice",
+      "price": "40.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Ginger Lime",
+      "category": "Fresh Juice",
+      "price": "30.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Lime Soda",
+      "category": "Fresh Juice",
+      "price": "40.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Normal Falooda",
+      "category": "Falooda",
+      "price": "90.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Master Falooda",
+      "category": "Falooda",
+      "price": "140.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Green Apple Mojito",
+      "category": "Beverages",
+      "price": "60.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Mango Mojito",
+      "category": "Beverages",
+      "price": "60.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Blue Berry Mojito",
+      "category": "Beverages",
+      "price": "80.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Kiwi Mojito",
+      "category": "Beverages",
+      "price": "60.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Orange Mojito",
+      "category": "Beverages",
+      "price": "60.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Mint Mojito",
+      "category": "Beverages",
+      "price": "60.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Lichi Mojito",
+      "category": "Beverages",
+      "price": "60.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Black Current",
+      "category": "Beverages",
+      "price": "80.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Blue Curoko",
+      "category": "Beverages",
+      "price": "60.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "French Fries",
+      "category": "Starter",
+      "price": "80.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Chicken Momos",
+      "category": "Starter",
+      "price": "80.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Veg Momos",
+      "category": "Starter",
+      "price": "70.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Chicken Popcorn",
+      "category": "Starter",
+      "price": "100.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Normal Sharja Shake",
+      "category": "Sharja Shake",
+      "price": "50.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Chocolate Sharja Shake",
+      "category": "Sharja Shake",
+      "price": "60.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Butterscotch Sharja",
+      "category": "Sharja Shake",
+      "price": "60.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Pistha Sharja Shake",
+      "category": "Sharja Shake",
+      "price": "60.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Stawberry Sharja Shake",
+      "category": "Sharja Shake",
+      "price": "60.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Vennila Sharja Shake",
+      "category": "Sharja Shake",
+      "price": "60.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Chicken Sandwich",
+      "category": "Sandwich",
+      "price": "80.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Veg Sandwich",
+      "category": "Sandwich",
+      "price": "70.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Bread Omelette",
+      "category": "Sandwich",
+      "price": "50.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Chicken Burger",
+      "category": "Burger",
+      "price": "100.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Loaded Fries",
+      "category": "Burger",
+      "price": "160.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Broasted Chicken (Full)",
+      "category": "Broasted Chicken",
+      "price": "400.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Broasted Chicken (Half)",
+      "category": "Broasted Chicken",
+      "price": "200.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Shawaya Chicken (Full)",
+      "category": "Shawaya Chicken",
+      "price": "450.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Shawaya Chicken (Half)",
+      "category": "Shawaya Chicken",
+      "price": "230.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Shawaya Chicken (Quarter)",
+      "category": "Shawaya Chicken",
+      "price": "120.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Parotta",
+      "category": "Parotta",
+      "price": "10.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Kothu Parotta",
+      "category": "Parotta",
+      "price": "120.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Nool Parotta",
+      "category": "Parotta",
+      "price": "20.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Full BBQ",
+      "category": "Alfaham BBQ",
+      "price": "390.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Half BBQ",
+      "category": "Alfaham BBQ",
+      "price": "200.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Quarter BBQ",
+      "category": "Alfaham BBQ",
+      "price": "100.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Honey Full BBQ",
+      "category": "Alfaham BBQ",
+      "price": "420.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Honey Half BBQ",
+      "category": "Alfaham BBQ",
+      "price": "230.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Honey Quarter",
+      "category": "Alfaham BBQ",
+      "price": "130.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Chicken Fried Rice",
+      "category": "Rice & Noodles",
+      "price": "120.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Egg Fried Rice",
+      "category": "Rice & Noodles",
+      "price": "100.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Veg Fried Rice",
+      "category": "Rice & Noodles",
+      "price": "100.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Chicken Noodles",
+      "category": "Rice & Noodles",
+      "price": "120.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Chicken Gravy",
+      "category": "Gravy",
+      "price": "100.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Normal Shawarma",
+      "category": "Shawarma",
+      "price": "70.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Plate Shawarma",
+      "category": "Shawarma",
+      "price": "110.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Peri Peri Shawarma",
+      "category": "Shawarma",
+      "price": "80.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Peri Peri Plate Shawarma",
+      "category": "Shawarma",
+      "price": "120.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Parotta Roll Shawarma",
+      "category": "Shawarma",
+      "price": "80.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Parotta Plate Shawarma",
+      "category": "Shawarma",
+      "price": "120.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Parotta Peri Peri Roll",
+      "category": "Shawarma",
+      "price": "90.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Parotta Peri Peri Plate",
+      "category": "Shawarma",
+      "price": "130.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Karikkushake",
+      "category": "Karikku Shakes",
+      "price": "80.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "KarikkinBoost",
+      "category": "Karikku Shakes",
+      "price": "90.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "KarikkinHorlicks",
+      "category": "Karikku Shakes",
+      "price": "90.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "KarikkinDates",
+      "category": "Karikku Shakes",
+      "price": "90.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "KarikkinPista",
+      "category": "Karikku Shakes",
+      "price": "90.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "KarikkinButterScotch",
+      "category": "Karikku Shakes",
+      "price": "90.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "KarikkinVanilla",
+      "category": "Karikku Shakes",
+      "price": "90.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "KarikkinChocolate",
+      "category": "Karikku Shakes",
+      "price": "90.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Karikkinpapaya",
+      "category": "Karikku Shakes",
+      "price": "100.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Karikkinmango",
+      "category": "Karikku Shakes",
+      "price": "100.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Karikkinavocado",
+      "category": "Karikku Shakes",
+      "price": "100.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    },
+    {
+      "name": "Karikkinchikku",
+      "category": "Karikku Shakes",
+      "price": "100.00",
+      "description": "",
+      "imageUrl": null,
+      "availability": "pending confirmation"
+    }
+  ]
+}

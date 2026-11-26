@@ -57,9 +57,47 @@ export async function generatePortalPin() {
 export async function billFor(orderId, conn = pool) {
   const [[settings]] = await conn.query('SELECT tax_rate "taxRate",cgst_rate "cgstRate",service_charge "serviceCharge" FROM settings WHERE id=1');
   const [items] = await conn.query('SELECT oi.menu_id "menuId",oi.quantity qty,oi.note,oi.price,m.name,m.icon,m.image_url "imageUrl" FROM order_items oi JOIN menu_items m ON m.id=oi.menu_id WHERE oi.order_id=?', [orderId]);
+  const [[order]] = await conn.query("SELECT CASE WHEN order_type='parcel' THEN parcel_charge ELSE 0 END \"parcelCharges\" FROM orders WHERE id=?", [orderId]);
   const subtotal = items.reduce((s, i) => s + Number(i.price) * i.qty, 0);
-  const tax = 0, cgst = 0, service = 0;
-  return { items: items.map(i => ({ ...i, price: Number(i.price) })), subtotal, tax, cgst, service, total: subtotal };
+  const tax = 0, cgst = 0, service = 0, parcelCharges = Number(order?.parcelCharges || 0);
+  // One stored value per order, so retries and reprints can never add the charge twice.
+  return { items: items.map(i => ({ ...i, price: Number(i.price) })), subtotal, tax, cgst, service, parcelCharges, total: Math.round((subtotal + parcelCharges) * 100) / 100 };
+}
+
+/** Parcel charge in rupees: optional, non-negative, at most 2 decimals. Returns null when absent. */
+export function parcelChargeInput(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const charge = Number(value);
+  if (!Number.isFinite(charge) || charge < 0 || charge > 100000 || Math.round(charge * 100) !== charge * 100) throw Object.assign(new Error('Parcel charge must be between ₹0 and ₹1,00,000 with at most 2 decimals'), { status: 400 });
+  return charge;
+}
+/** Sets the charge on an unpaid parcel inside the caller's transaction (row already locked). */
+async function applyParcelCharge(conn, order, charge) {
+  if (charge === null) return;
+  const current = Number(order.parcel_charge || 0);
+  if (order.order_type !== 'parcel') { if (charge !== 0) throw Object.assign(new Error('Parcel charge applies only to parcel orders'), { status: 400 }); return; }
+  if (order.payment_status === 'paid' || ['completed', 'cancelled'].includes(order.status)) {
+    if (charge !== current) throw Object.assign(new Error('The parcel charge cannot be changed after payment'), { status: 409 });
+    return;
+  }
+  if (charge !== current) await conn.query('UPDATE orders SET parcel_charge=? WHERE id=?', [charge, order.id]);
+}
+
+export async function setParcelCharge(req, res) {
+  if (req.portalSession.role !== 'admin') return res.status(403).json({ message: 'Only Admin can set the parcel charge' });
+  const charge = parcelChargeInput(req.body?.parcelCharge);
+  if (charge === null) return res.status(400).json({ message: 'Enter a parcel charge (0 for none)' });
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[order]] = await conn.query('SELECT id,order_type,status,payment_status,parcel_charge FROM orders WHERE id=? FOR UPDATE', [req.params.id]);
+    if (!order) throw Object.assign(new Error('Order not found'), { status: 404 });
+    if (order.order_type !== 'parcel') throw Object.assign(new Error('Parcel charge applies only to parcel orders'), { status: 400 });
+    await applyParcelCharge(conn, order, charge);
+    const bill = await billFor(order.id, conn);
+    await conn.commit();
+    res.json({ id: order.id, parcelCharges: bill.parcelCharges, bill });
+  } catch (e) { await conn.rollback(); throw e; } finally { conn.release(); }
 }
 
 
@@ -426,13 +464,15 @@ export async function finalizeOrder(req, res) {
     if(target?.table_id)await conn.query('SELECT id FROM restaurant_tables WHERE id=? FOR UPDATE',[target.table_id]);
     const [[order]] = await conn.query('SELECT * FROM orders WHERE id=? FOR UPDATE', [req.params.id]);
     if (!order) throw Object.assign(new Error('Order not found'), {status:404});
-    const bill=await billFor(req.params.id,conn);
+    let bill=await billFor(req.params.id,conn);
     if(!bill.items.length)throw Object.assign(new Error('An empty group cannot be billed. Cancel the session instead.'),{status:409});
     if (order.status === 'cancelled') throw Object.assign(new Error('Cancelled orders cannot be billed'), {status:409});
+    await applyParcelCharge(conn, order, parcelChargeInput(req.body?.parcelCharge));
     if (order.status === 'completed') {
       await conn.commit();
       return res.json({id:order.id, paymentStatus:order.payment_status, paymentMethod:order.payment_method, billNumber:order.bill_number, billDate:order.bill_date, bill});
     }
+    bill = await billFor(order.id, conn);
     const alreadyPaid = order.payment_status === 'paid', paymentMethod = alreadyPaid ? order.payment_method : (req.body.paymentMethod || null);
     if (!paymentMethod) throw Object.assign(new Error('Record Cash or Card / UPI payment before completing this order'), {status:400});
     const numbering = await assignDailyBillNumber(conn, order.id);
@@ -463,6 +503,8 @@ export async function createParcel(req, res) {
       if (!menu) throw new Error('Menu item unavailable');
       await conn.query('INSERT INTO order_items (order_id,menu_id,quantity,note,price) VALUES (?,?,?,?,?)', [result.insertId, item.menuId, item.qty, item.note || '', menu.price]);
     }
+    const charge = parcelChargeInput(req.body.parcelCharge);
+    if (charge) await conn.query('UPDATE orders SET parcel_charge=? WHERE id=?', [charge, result.insertId]);
     const bill = await billFor(result.insertId, conn);
     if (paymentMethod) await conn.query('UPDATE orders SET subtotal=?,tax=?,service_charge=?,total=? WHERE id=?', [bill.subtotal, bill.tax, bill.service, bill.total, result.insertId]);
     await conn.commit();
@@ -481,10 +523,13 @@ export async function markOrderPaid(req, res) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [[order]] = await conn.query('SELECT id,order_type,status,payment_status FROM orders WHERE id=? FOR UPDATE', [req.params.id]);
-    if (!order) return res.status(404).json({ message: 'Order not found' });
-    if (order.order_type !== 'parcel') return res.status(400).json({ message: 'Advance payment is only available for parcel orders' });
-    if (['completed','cancelled'].includes(order.status)) return res.status(409).json({ message: 'Parcel is already completed' });
+    const [[order]] = await conn.query('SELECT id,order_type,status,payment_status,payment_method,parcel_charge FROM orders WHERE id=? FOR UPDATE', [req.params.id]);
+    if (!order) { await conn.rollback(); return res.status(404).json({ message: 'Order not found' }); }
+    if (order.order_type !== 'parcel') { await conn.rollback(); return res.status(400).json({ message: 'Advance payment is only available for parcel orders' }); }
+    if (['completed','cancelled'].includes(order.status)) { await conn.rollback(); return res.status(409).json({ message: 'Parcel is already completed' }); }
+    await applyParcelCharge(conn, order, parcelChargeInput(req.body?.parcelCharge));
+    // A retried request after payment returns the recorded payment instead of charging again.
+    if (order.payment_status === 'paid') { const bill = await billFor(order.id, conn); await conn.commit(); return res.json({ id: order.id, paymentStatus: 'paid', paymentMethod: order.payment_method, bill }); }
     const bill = await billFor(order.id, conn);
     await conn.query("UPDATE orders SET payment_status='paid',payment_method=?,subtotal=?,tax=?,service_charge=?,total=? WHERE id=?", [req.body.paymentMethod, bill.subtotal, bill.tax, bill.service, bill.total, order.id]);
     await conn.commit();
@@ -538,6 +583,23 @@ export async function createTable(req, res) {
   }
   const [result] = await pool.query("INSERT INTO restaurant_tables (table_number,seats,area,status,active) VALUES (?,?,?,'available',TRUE)", [number, seats, area]);
   res.status(201).json({ id: result.insertId });
+}
+
+export async function updateTable(req, res) {
+  if (req.portalSession.role !== 'admin') return res.status(403).json({message:'Admin access required'});
+  const id=Number(req.params.id), number=Number(req.body.number), seats=Number(req.body.seats), area=typeof req.body.area==='string'?req.body.area.trim():'';
+  if(!Number.isSafeInteger(id)||id<1||!Number.isInteger(number)||number<1||number>2147483647||!Number.isInteger(seats)||seats<1||seats>2147483647||!area||area.length>80) return res.status(400).json({message:'Enter a positive whole table number and seat count, and a service area of up to 80 characters'});
+  const conn=await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[table]]=await conn.query('SELECT id,table_number,seats,area FROM restaurant_tables WHERE id=? AND active=TRUE FOR UPDATE',[id]);
+    if(!table){await conn.rollback();return res.status(404).json({message:'Table not found'})}
+    const previous=req.body.previous;
+    if(previous&&(Number(previous.number)!==table.table_number||Number(previous.seats)!==table.seats||previous.area!==table.area)){await conn.rollback();return res.status(409).json({message:'Table details changed. Close and reopen the editor before saving'})}
+    // Update metadata only: never reset orders, reservations or occupancy.
+    await conn.query('UPDATE restaurant_tables SET table_number=?,seats=?,area=? WHERE id=?',[number,seats,area,id]);
+    await conn.commit();res.json({ok:true,id,number,seats,area});
+  }catch(error){await conn.rollback();if(error.code==='23505')return res.status(409).json({message:`Table ${number} already exists (including archived tables)`});throw error}finally{conn.release()}
 }
 
 export async function deleteTable(req, res) {
