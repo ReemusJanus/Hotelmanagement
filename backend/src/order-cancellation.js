@@ -39,7 +39,14 @@ async function cancel(req,res,wholeOrder){
   if(fullyCancelled){
    status='cancelled';
    await conn.query("UPDATE orders SET status='cancelled',cancelled_at=NOW() WHERE id=?",[id]);
-   if(order.table_id)await syncTableSessions(conn,order.table_id);
+   if(order.table_id){
+    // Last group of a seated reservation cancelled before cooking: release the reservation so the table is not stuck.
+    const [[table]]=await conn.query('SELECT active_booking_id FROM restaurant_tables WHERE id=?',[order.table_id]);
+    const [[others]]=await conn.query("SELECT COUNT(*)::int n FROM orders WHERE table_id=? AND id<>? AND status NOT IN ('completed','cancelled')",[order.table_id,id]);
+    const release=!!order.booking_id&&Number(table?.active_booking_id)===Number(order.booking_id)&&!Number(others?.n);
+    if(release)await conn.query("UPDATE bookings SET status='cancelled' WHERE id=? AND status='seated'",[order.booking_id]);
+    await syncTableSessions(conn,order.table_id,release?{releaseReservation:true}:{});
+   }
   }else{
    const ids=selected.map(x=>x.id);
    await conn.query(`DELETE FROM order_items WHERE order_id=? AND id IN (${ids.map(()=>'?').join(',')})`,[id,...ids]);

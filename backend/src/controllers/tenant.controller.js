@@ -247,6 +247,9 @@ export async function createBooking(req, res) {
     if (timeCheck.inPast) throw Object.assign(new Error('Choose a future booking date and time'), { status: 400 });
     const [[conflict]] = await conn.query("SELECT id,booking_time \"bookingTime\",duration_minutes \"durationMinutes\" FROM bookings WHERE table_id=? AND (status='confirmed' OR (status='seated' AND EXISTS(SELECT 1 FROM restaurant_tables rt WHERE rt.active_booking_id=bookings.id))) AND (booking_date::date + booking_time::time) < ((?::date + ?::time) + (?)::double precision * INTERVAL '1 minute') AND ((booking_date::date + booking_time::time) + (duration_minutes)::double precision * INTERVAL '1 minute') > (?::date + ?::time) LIMIT 1 FOR UPDATE", [tableId, bookingDate, bookingTime, durationMinutes, bookingDate, bookingTime]);
     if (conflict) throw Object.assign(new Error(`Table ${table.number} is already locked at that time`), { status: 409 });
+    // Guests seated now keep the table; a booking may only start an hour or more from now on an occupied table.
+    const [[busyNow]] = await conn.query("SELECT ((?::date + ?::time) < NOW() + INTERVAL '60 minutes') AND (EXISTS(SELECT 1 FROM orders WHERE table_id=? AND status NOT IN ('completed','cancelled')) OR EXISTS(SELECT 1 FROM restaurant_tables WHERE id=? AND active_booking_id IS NOT NULL)) \"busy\"", [bookingDate, bookingTime, tableId, tableId]);
+    if (busyNow?.busy) throw Object.assign(new Error(`Table ${table.number} is occupied now. Choose another table or a time at least 60 minutes from now.`), { status: 409 });
     message = `KnockOUT booking confirmed: Table ${table.number} on ${bookingDate.split('-').reverse().join('-')} at ${bookingTime}, reserved for ${durationMinutes} minutes.`;
     const [result] = await conn.query("INSERT INTO bookings (table_id,guest_name,customer_phone,booking_date,booking_time,duration_minutes,status,notification_status,notification_message,guest_count,notes) VALUES (?,?,?,?,?,?,'confirmed','queued',?,?,?)", [tableId, guestName, customerPhone, bookingDate, bookingTime, durationMinutes, message,guestCount,notes]);
     bookingId = result.insertId;
@@ -449,6 +452,24 @@ export async function requestBill(req,res){
  }catch(e){await conn.rollback();throw e}finally{conn.release()}
 }
 
+const PAY_METHODS = ['Cash', 'Card / UPI'];
+/** Reads one payment method or a Cash + Card / UPI split; a split must add up to the bill exactly. */
+function paymentInput(body, total) {
+  const bad = message => Object.assign(new Error(message), {status:400});
+  if (Array.isArray(body?.payments) && body.payments.length) {
+    const parts = body.payments.map(p => ({method:p?.method, amount:Number(p?.amount)}));
+    if (parts.length !== 2 || new Set(parts.map(p => p.method)).size !== 2 || !parts.every(p => PAY_METHODS.includes(p.method))) throw bad('Split payment needs one Cash amount and one Card / UPI amount');
+    if (!parts.every(p => Number.isFinite(p.amount) && p.amount > 0 && Math.abs(Math.round(p.amount * 100) - p.amount * 100) < 1e-6)) throw bad('Each split amount must be more than ₹0, with up to 2 decimals');
+    const cents = parts.reduce((sum, p) => sum + Math.round(p.amount * 100), 0);
+    if (cents !== Math.round(Number(total) * 100)) throw bad(`Split amounts must add up to the bill total ₹${Number(total).toFixed(2)}`);
+    parts.sort((a, b) => PAY_METHODS.indexOf(a.method) - PAY_METHODS.indexOf(b.method));
+    return {method:'Split', split:JSON.stringify(parts.map(p => ({method:p.method, amount:Math.round(p.amount * 100) / 100})))};
+  }
+  if (!body?.paymentMethod) return null;
+  if (!PAY_METHODS.includes(body.paymentMethod)) throw bad('Choose Cash, Card / UPI or a split payment');
+  return {method:body.paymentMethod, split:null};
+}
+
 export async function getOrderBill(req, res) {
   const [[order]] = await pool.query('SELECT o.*,(SELECT COUNT(*) FROM orders daily WHERE DATE(daily.created_at)=DATE(o.created_at) AND daily.id<=o.id) "dailyNumber" FROM orders o WHERE o.id=?', [req.params.id]);
   if (!order) return res.status(404).json({ message: 'Order not found' });
@@ -470,16 +491,16 @@ export async function finalizeOrder(req, res) {
     await applyParcelCharge(conn, order, parcelChargeInput(req.body?.parcelCharge));
     if (order.status === 'completed') {
       await conn.commit();
-      return res.json({id:order.id, paymentStatus:order.payment_status, paymentMethod:order.payment_method, billNumber:order.bill_number, billDate:order.bill_date, bill});
+      return res.json({id:order.id, paymentStatus:order.payment_status, paymentMethod:order.payment_method, paymentSplit:order.payment_split, billNumber:order.bill_number, billDate:order.bill_date, bill});
     }
     bill = await billFor(order.id, conn);
-    const alreadyPaid = order.payment_status === 'paid', paymentMethod = alreadyPaid ? order.payment_method : (req.body.paymentMethod || null);
-    if (!paymentMethod) throw Object.assign(new Error('Record Cash or Card / UPI payment before completing this order'), {status:400});
+    const alreadyPaid = order.payment_status === 'paid', payment = alreadyPaid ? {method:order.payment_method, split:order.payment_split == null ? null : JSON.stringify(order.payment_split)} : paymentInput(req.body, bill.total);
+    if (!payment?.method) throw Object.assign(new Error('Record Cash or Card / UPI payment before completing this order'), {status:400});
     const numbering = await assignDailyBillNumber(conn, order.id);
-    await conn.query("UPDATE orders SET status='completed',payment_status='paid',payment_method=?,subtotal=?,tax=?,service_charge=?,total=?,completed_at=NOW() WHERE id=?", [paymentMethod, bill.subtotal, bill.tax, bill.service, bill.total, order.id]);
-    if (order.table_id) await syncTableSessions(conn,order.table_id,{releaseReservation:true,emptyStatus:order.session_key?'available':'cleaning'});
+    await conn.query("UPDATE orders SET status='completed',payment_status='paid',payment_method=?,payment_split=?::jsonb,subtotal=?,tax=?,service_charge=?,total=?,completed_at=NOW() WHERE id=?", [payment.method, payment.split, bill.subtotal, bill.tax, bill.service, bill.total, order.id]);
+    if (order.table_id) await syncTableSessions(conn,order.table_id,{releaseReservation:true,afterDining:true});
     await conn.commit();
-    res.json({ id: order.id, paymentStatus: 'paid', paymentMethod, ...numbering, bill });
+    res.json({ id: order.id, paymentStatus: 'paid', paymentMethod: payment.method, paymentSplit: payment.split && JSON.parse(payment.split), ...numbering, bill });
   } catch (e) {
     await conn.rollback();
     throw e;
@@ -497,12 +518,13 @@ export async function createParcel(req, res) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [result] = await conn.query("INSERT INTO orders (table_id,order_type,guest_name,customer_phone,waiter,status,payment_status,payment_method,created_at) VALUES (NULL,'parcel',?,?,?,'new',?,?,NOW())", [req.body.customerName || 'Parcel Customer', req.body.customerPhone || '', req.body.adminName || 'Admin', paymentMethod ? 'paid' : 'unpaid', paymentMethod]);
+    const [result] = await conn.query("INSERT INTO orders (table_id,order_type,guest_name,customer_phone,waiter,status,payment_status,payment_method,created_at) VALUES (NULL,'parcel',?,?,?,'new',?,?,NOW())", [String(req.body.customerName || '').trim().slice(0, 120) || 'Parcel Customer', req.body.customerPhone || '', req.body.adminName || 'Admin', paymentMethod ? 'paid' : 'unpaid', paymentMethod]);
     for (const item of req.body.items) {
       const [[menu]] = await conn.query('SELECT price FROM menu_items WHERE id=? AND available=TRUE', [item.menuId]);
       if (!menu) throw new Error('Menu item unavailable');
       await conn.query('INSERT INTO order_items (order_id,menu_id,quantity,note,price) VALUES (?,?,?,?,?)', [result.insertId, item.menuId, item.qty, item.note || '', menu.price]);
     }
+    if (!String(req.body.customerName || '').trim()) await conn.query('UPDATE orders SET guest_name=? WHERE id=?', [`Parcel #${result.insertId}`, result.insertId]);
     const charge = parcelChargeInput(req.body.parcelCharge);
     if (charge) await conn.query('UPDATE orders SET parcel_charge=? WHERE id=?', [charge, result.insertId]);
     const bill = await billFor(result.insertId, conn);
@@ -519,21 +541,21 @@ export async function createParcel(req, res) {
 
 export async function markOrderPaid(req, res) {
   if (req.portalSession.role !== 'admin') return res.status(403).json({ message: 'Only Admin can record parcel payments' });
-  if (!['Cash', 'Card / UPI'].includes(req.body.paymentMethod)) return res.status(400).json({ message: 'Choose Cash or Card / UPI' });
+  if (!PAY_METHODS.includes(req.body.paymentMethod) && !(Array.isArray(req.body.payments) && req.body.payments.length)) return res.status(400).json({ message: 'Choose Cash or Card / UPI' });
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [[order]] = await conn.query('SELECT id,order_type,status,payment_status,payment_method,parcel_charge FROM orders WHERE id=? FOR UPDATE', [req.params.id]);
+    const [[order]] = await conn.query('SELECT id,order_type,status,payment_status,payment_method,payment_split,parcel_charge FROM orders WHERE id=? FOR UPDATE', [req.params.id]);
     if (!order) { await conn.rollback(); return res.status(404).json({ message: 'Order not found' }); }
     if (order.order_type !== 'parcel') { await conn.rollback(); return res.status(400).json({ message: 'Advance payment is only available for parcel orders' }); }
     if (['completed','cancelled'].includes(order.status)) { await conn.rollback(); return res.status(409).json({ message: 'Parcel is already completed' }); }
     await applyParcelCharge(conn, order, parcelChargeInput(req.body?.parcelCharge));
     // A retried request after payment returns the recorded payment instead of charging again.
-    if (order.payment_status === 'paid') { const bill = await billFor(order.id, conn); await conn.commit(); return res.json({ id: order.id, paymentStatus: 'paid', paymentMethod: order.payment_method, bill }); }
-    const bill = await billFor(order.id, conn);
-    await conn.query("UPDATE orders SET payment_status='paid',payment_method=?,subtotal=?,tax=?,service_charge=?,total=? WHERE id=?", [req.body.paymentMethod, bill.subtotal, bill.tax, bill.service, bill.total, order.id]);
+    if (order.payment_status === 'paid') { const bill = await billFor(order.id, conn); await conn.commit(); return res.json({ id: order.id, paymentStatus: 'paid', paymentMethod: order.payment_method, paymentSplit: order.payment_split, bill }); }
+    const bill = await billFor(order.id, conn), payment = paymentInput(req.body, bill.total);
+    await conn.query("UPDATE orders SET payment_status='paid',payment_method=?,payment_split=?::jsonb,subtotal=?,tax=?,service_charge=?,total=? WHERE id=?", [payment.method, payment.split, bill.subtotal, bill.tax, bill.service, bill.total, order.id]);
     await conn.commit();
-    res.json({ id: order.id, paymentStatus: 'paid', paymentMethod: req.body.paymentMethod, bill });
+    res.json({ id: order.id, paymentStatus: 'paid', paymentMethod: payment.method, paymentSplit: payment.split && JSON.parse(payment.split), bill });
   } catch (e) {
     await conn.rollback();
     throw e;

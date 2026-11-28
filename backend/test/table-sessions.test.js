@@ -31,7 +31,9 @@ test('independent table groups through HTTP and PostgreSQL',{skip:!process.env.P
  assert.equal((await add(B,1,1,2)).code,201);assert.equal((await call(`/orders/${A}/items`,'POST','waiter',{items:[{menuId:1,qty:1}]})).code,409);
  await ready(B,'juicer',1);await ready(B,'chef',2);assert.equal((await call(`/orders/${B}/request-bill`)).code,200);
  const paidB=await call(`/orders/${B}/finalize`,'POST','admin',{paymentMethod:'Card / UPI'});assert.equal(paidB.code,200);assert.equal(paidB.body.bill.total,200);assert.notEqual(paidA.body.billNumber,paidB.body.billNumber);
- table=(await db.query('SELECT * FROM restaurant_tables WHERE id=1'))[0][0];assert.equal(table.status,'available');assert.equal(table.order_id,null);
+ table=(await db.query('SELECT * FROM restaurant_tables WHERE id=1'))[0][0];assert.equal(table.status,'cleaning','last group paid: table waits for cleaning');assert.equal(table.order_id,null);
+ assert.equal((await call('/tables/1/sessions','POST','waiter',{guestCount:1,guestName:'Too soon',requestKey:crypto.randomUUID()})).code,409,'nobody is seated before cleaning');
+ assert.equal((await call('/tables/1/status','PATCH','waiter',{status:'available'})).code,200);assert.equal((await db.query('SELECT status FROM restaurant_tables WHERE id=1'))[0][0].status,'available');
  const state=await call('/state','GET','admin');assert.equal(state.body.orders.find(o=>o.id===A).guestCount,2);assert.equal(state.body.orders.find(o=>o.id===B).guestCount,3);assert.equal(state.body.orders.find(o=>o.id===A).total,100);assert.equal(state.body.orders.find(o=>o.id===B).total,200);
  const repeat=await call(`/orders/${A}/finalize`,'POST','admin',{paymentMethod:'Cash'});assert.equal(repeat.body.billNumber,paidA.body.billNumber);assert.equal(repeat.body.bill.total,100);
  });
@@ -67,6 +69,6 @@ test('independent table groups through HTTP and PostgreSQL',{skip:!process.env.P
  assert.equal((await db.query('SELECT status FROM restaurant_tables WHERE id=1'))[0][0].status,'available');
  assert.equal((await db.query('SELECT * FROM order_cancellations WHERE order_id=?',[empty.body.id]))[0].length,1);
  });
- await t.test('closing sessions concurrently does not strand or release a live table early',async()=>{const a=await session('One',1),b=await session('Two',1);await add(a.body.id,1);await add(b.body.id,2);const paid=await Promise.all([call(`/orders/${a.body.id}/finalize`,'POST','admin',{paymentMethod:'Cash'}),call(`/orders/${b.body.id}/finalize`,'POST','admin',{paymentMethod:'Cash'})]);assert(paid.every(x=>x.code===200));assert.notEqual(paid[0].body.billNumber,paid[1].body.billNumber);assert.equal((await db.query('SELECT status FROM restaurant_tables WHERE id=1'))[0][0].status,'available')});
+ await t.test('closing sessions concurrently does not strand or release a live table early',async()=>{const a=await session('One',1),b=await session('Two',1);await add(a.body.id,1);await add(b.body.id,2);const paid=await Promise.all([call(`/orders/${a.body.id}/finalize`,'POST','admin',{paymentMethod:'Cash'}),call(`/orders/${b.body.id}/finalize`,'POST','admin',{paymentMethod:'Cash'})]);assert(paid.every(x=>x.code===200));assert.notEqual(paid[0].body.billNumber,paid[1].body.billNumber);assert.equal((await db.query('SELECT status FROM restaurant_tables WHERE id=1'))[0][0].status,'cleaning')});
  }finally{if(server)await new Promise(r=>server.close(r));await closePools();await db.end();for(const name of[schema,other])await control.query(`DROP SCHEMA IF EXISTS "${name}" CASCADE`);await control.end()}
 });

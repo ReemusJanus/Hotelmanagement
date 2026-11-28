@@ -59,6 +59,22 @@ test('parcel charge: validation, totals, locking, retries, dine-in untouched',{s
    const [{sum}]=await q("SELECT SUM(total)::float sum FROM knockout.orders WHERE payment_status='paid' AND order_type='parcel'");assert.equal(sum,170+162.5+170);
    const state=(await call(admin,'/state')).body;const p=state.orders.find(o=>o.orderType==='parcel'&&Number(o.parcelCharges)===20);assert(p,'state exposes parcelCharges');
   });
+  await t.test('split payment: Cash + Card / UPI must add up to the bill; reports see each part',async()=>{
+   const id=await parcel({parcelCharge:20});await q("UPDATE knockout.orders SET status='ready' WHERE id=$1",[id]);
+   const fin=(body)=>call(admin,`/orders/${id}/finalize`,'POST',body);
+   for(const payments of[[{method:'Cash',amount:100},{method:'Card / UPI',amount:50}],[{method:'Cash',amount:170},{method:'Card / UPI',amount:0}],[{method:'Cash',amount:100},{method:'Cash',amount:70}],[{method:'Cash',amount:100.123},{method:'Card / UPI',amount:69.877}],[{method:'Bitcoin',amount:100},{method:'Cash',amount:70}],[{method:'Cash',amount:170}]])assert.equal((await fin({payments})).code,400,JSON.stringify(payments));
+   assert.equal((await fin({paymentMethod:'Cheque'})).code,400,'unknown single method rejected');
+   assert.equal((await q('SELECT payment_status FROM knockout.orders WHERE id=$1',[id]))[0].payment_status,'unpaid','rejected splits record nothing');
+   const ok=await fin({payments:[{method:'Card / UPI',amount:69.5},{method:'Cash',amount:100.5}]});assert.equal(ok.code,200,JSON.stringify(ok.body));
+   assert.equal(ok.body.paymentMethod,'Split');assert.deepEqual(ok.body.paymentSplit,[{method:'Cash',amount:100.5},{method:'Card / UPI',amount:69.5}]);assert.ok(ok.body.billNumber);
+   const again=await fin({payments:[{method:'Cash',amount:1},{method:'Card / UPI',amount:169}]});assert.equal(again.code,200);assert.equal(again.body.billNumber,ok.body.billNumber,'retry keeps the bill number');assert.deepEqual(again.body.paymentSplit,ok.body.paymentSplit,'retry keeps the recorded split');
+   const r=await row(id);assert.equal(Number(r.total),170);assert.equal(r.payment_status,'paid');
+   const st=(await call(admin,'/state')).body.orders.find(o=>o.id==id);assert.equal(st.paymentMethod,'Split');assert.equal(st.paymentSplit.reduce((s,p)=>s+p.amount,0),170);
+   const adv=await parcel();const mp=await call(admin,`/orders/${adv}/mark-paid`,'POST',{payments:[{method:'Cash',amount:75},{method:'Card / UPI',amount:75}]});assert.equal(mp.code,200,JSON.stringify(mp.body));assert.equal(mp.body.paymentMethod,'Split');
+   assert.equal((await call(admin,`/orders/${adv}/mark-paid`,'POST',{payments:[{method:'Cash',amount:10},{method:'Card / UPI',amount:10}]})).body.paymentSplit[0].amount,75,'advance split retry unchanged');
+   assert.equal((await call(waiter,`/orders/${adv}/finalize`,'POST',{payments:[{method:'Cash',amount:75},{method:'Card / UPI',amount:75}]})).code,403,'waiter cannot record payments');
+  });
+  await t.test('split migration SQL is repeatable',async()=>{for(let i=0;i<2;i++)await client.query(await readFile(new URL('../../migrations/staging/10-split-payment.sql',import.meta.url),'utf8'))});
   await t.test('migration SQL is repeatable',async()=>{for(let i=0;i<2;i++)await client.query(await readFile(new URL('../../migrations/staging/09-parcel-charge.sql',import.meta.url),'utf8'));assert.equal((await q("SELECT COUNT(*)::int n FROM information_schema.columns WHERE column_name='parcel_charge'"))[0].n>0,true)});
  }finally{if(process.env.SHOW_LOGS)console.log(logs.slice(-2500));await stop();await client?.end();await control.query(`DROP DATABASE IF EXISTS "${db}" WITH (FORCE)`);await control.end()}
 });

@@ -59,6 +59,7 @@ export async function ensureSchema(connection, schema, statements) {
     await connection.query('ALTER TABLE restaurant_tables ADD COLUMN IF NOT EXISTS active_booking_id BIGINT REFERENCES bookings(id)');
     await connection.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS booking_id BIGINT REFERENCES bookings(id), ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ');
     await connection.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS parcel_charge DECIMAL(10,2) NOT NULL DEFAULT 0 CHECK (parcel_charge >= 0)');
+    await connection.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_split JSONB NULL');
     await connection.query(`DO $$ BEGIN IF NOT EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid='orders'::regclass AND conname='orders_status_check' AND pg_get_constraintdef(oid) LIKE '%cancelled%') THEN ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_status_check; ALTER TABLE orders ADD CONSTRAINT orders_status_check CHECK(status IN ('new','preparing','ready','collected','received','served','billing_requested','completed','cancelled')); END IF; END $$`);
     await connection.query(`DO $$ BEGIN IF EXISTS(SELECT 1 FROM pg_indexes WHERE schemaname=current_schema() AND indexname='orders_booking_active_unique' AND indexdef NOT LIKE '%cancelled%') THEN DROP INDEX orders_booking_active_unique; END IF; END $$`);
     await connection.query("CREATE UNIQUE INDEX IF NOT EXISTS orders_booking_active_unique ON orders(booking_id) WHERE booking_id IS NOT NULL AND status NOT IN ('completed','cancelled')");

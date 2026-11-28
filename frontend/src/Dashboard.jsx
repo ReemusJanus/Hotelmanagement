@@ -55,19 +55,19 @@ function FloorMap({ data, open }) {
   const counts = ["available", "occupied", "reserved", "cleaning"].map((status) => [status, data.tables.filter((table) => table.status === status).length]);
   if (!data.tables.length) return <Clear icon={Armchair} title="No tables yet">Add tables to see the floor here.</Clear>;
   return <>
-    <div className="dash-floor">{[...data.tables].sort((a, b) => a.number - b.number).slice(0, 40).map((table) => <button type="button" key={table.id} className={table.status} onClick={open} aria-label={`Table ${table.number}, ${table.status}, ${table.seats} seats`} title={`Table ${table.number} · ${table.status} · ${table.seats} seats`}>{table.number}</button>)}</div>
+    <div className="dash-floor">{[...data.tables].sort((a, b) => a.number - b.number).slice(0, 40).map((table) => <button type="button" key={table.id} className={table.status} onClick={() => open(table.id)} aria-label={`Table ${table.number}, ${table.status}, ${table.seats} seats`} title={`Table ${table.number} · ${table.status} · ${table.seats} seats`}>{table.number}</button>)}</div>
     <ul className="dash-legend">{counts.map(([status, count]) => <li key={status}><i className={status}/><span>{status}</span><b>{count}</b></li>)}</ul>
   </>;
 }
-function OrderRows({ orders, data, open, now }) {
+function OrderRows({ orders, data, open, now, action }) {
   return <ul className="dash-orders">{orders.map((order) => {
     const parcel = order.orderType === "parcel", count = order.items.reduce((sum, line) => sum + Number(line.qty), 0);
-    return <li key={order.batchKey || order.id}><button type="button" onClick={open}>
+    return <li key={order.batchKey || order.id}><button type="button" onClick={() => open(order)}>
       <span className="dash-order-place">{parcel ? <Package size={18} aria-label="Parcel"/> : data.tables.find((table) => table.id === order.tableId)?.number ?? "—"}</span>
       <span className="dash-order-who"><b>{order.guestName || "Walk-in Guest"}</b><small>{parcel ? "Parcel" : "Table"} · #{order.id} · {plural(count, "item")}</small></span>
       <span className="dash-order-time"><Clock3 size={14} aria-hidden="true"/>{waited(minutes(now, order.createdAt))}</span>
       <Badge status={order.paymentStatus === "paid" ? "paid" : order.status}/>
-    </button></li>;
+    </button>{action?.(order)}</li>;
   })}</ul>;
 }
 
@@ -103,13 +103,13 @@ export function AdminDashboard({ data, user, setPage, notices }) {
         {active.length ? <OrderRows now={now} data={data} open={() => setPage("orders")} orders={[...active].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)).slice(0, 6)}/> : <Clear icon={ReceiptText} title="No active orders">New dine-in and parcel orders appear here.</Clear>}
       </Card>}
     side={<div className="dash-stack">
-        <Card title="Needs attention">{notices.length ? <ul className="dash-notices">{notices.map((notice) => <li key={notice.title}><button type="button" onClick={() => setPage(notice.page)}><AlertTriangle size={17} aria-hidden="true"/><span><b>{notice.title}</b><small>{notice.detail}</small></span><ArrowRight size={16} aria-hidden="true"/></button></li>)}</ul> : <Clear title="All caught up">Nothing needs your attention.</Clear>}</Card>
+        <Card title="Needs attention">{notices.length ? <ul className="dash-notices">{notices.map((notice) => <li key={notice.title}><button type="button" onClick={() => notice.action ? notice.action() : setPage(notice.page)}><AlertTriangle size={17} aria-hidden="true"/><span><b>{notice.title}</b><small>{notice.detail}</small></span><ArrowRight size={16} aria-hidden="true"/></button></li>)}</ul> : <Clear title="All caught up">Nothing needs your attention.</Clear>}</Card>
         {can("tables") ? <Card title="Today’s reservations" action={<More onClick={() => setPage("bookings")}>Bookings</More>}>{bookings.length ? <ul className="dash-bookings">{bookings.slice(0, 4).map((booking) => <li key={booking.id}><b>{booking.bookingTime}</b><span>{booking.guestName || "Guest"}<small>Table {booking.tableNumber} · {plural(booking.guestCount || booking.seats, "guest")}</small></span></li>)}</ul> : <Clear icon={CalendarDays} title="No reservations today">Upcoming bookings appear here.</Clear>}</Card> : null}
       </div>}/>;
 }
 
 /** Waiter, chef and juicer. `tickets` are this role's live station tickets (chef/juicer only). */
-export function StationDashboard({ role, data, user, setPage, tickets = [] }) {
+export function StationDashboard({ role, data, user, setPage, tickets = [], openTable, rowAction }) {
   const now = useNow(), firstName = String(user?.name || role).trim().split(/\s+/)[0], waiter = role === "waiter", can = (module) => user.modules?.[module] !== false;
   const base = { kicker: new Intl.DateTimeFormat("en-IN", { weekday: "long", day: "numeric", month: "long" }).format(now), title: `${greet()}, ${firstName}` };
   if (waiter) {
@@ -129,8 +129,8 @@ export function StationDashboard({ role, data, user, setPage, tickets = [] }) {
         { icon: Armchair, label: "Occupied tables", value: `${occupied} / ${data.tables.length}`, note: `${free} available`, meter: data.tables.length ? occupied / data.tables.length * 100 : 0, go: canFloor ? floor : null },
         { icon: ReceiptText, label: "My orders today", value: todays.length, note: `${todays.filter((order) => order.paymentStatus === "paid").length} paid`, go: can("billing") ? () => setPage("orders") : null },
       ]}/>}
-    work={<Card title="My live orders" sub="Ready to serve first" action={canFloor ? <More onClick={floor}>Tables</More> : null}>{live.length ? <OrderRows now={now} data={data} open={floor} orders={[...live].sort((a, b) => rank(a) - rank(b) || new Date(a.createdAt) - new Date(b.createdAt)).slice(0, 7)}/> : <Clear title="Everything is clear">Select a free table to start an order.</Clear>}</Card>}
-    floor={<Card title="Floor" sub="Tap a table to open the floor"><FloorMap data={data} open={floor}/></Card>}/>;
+    work={<Card title="My live orders" sub="Ready to serve first" action={canFloor ? <More onClick={floor}>Tables</More> : null}>{live.length ? <OrderRows now={now} data={data} action={rowAction} open={(order) => openTable && order?.tableId ? openTable(order.tableId) : floor()} orders={[...live].sort((a, b) => rank(a) - rank(b) || new Date(a.createdAt) - new Date(b.createdAt)).slice(0, 7)}/> : <Clear title="Everything is clear">Select a free table to start an order.</Clear>}</Card>}
+    floor={<Card title="Floor" sub="Tap a table to open the floor"><FloorMap data={data} open={(id) => openTable ? openTable(id) : floor()}/></Card>}/>;
   }
   const chef = role === "chef", Icon = chef ? ChefHat : CupSoda, queue = chef ? "kitchen" : "queue", parcelPage = chef ? "parcels" : "parcel-queue", menuPage = chef ? "dishes" : "juices";
   const byAge = [...tickets].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)), of = (status) => tickets.filter((ticket) => ticket.status === status).length;

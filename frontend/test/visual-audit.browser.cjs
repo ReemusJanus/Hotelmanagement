@@ -48,7 +48,7 @@ const extra={
  'admin/Tables':[['detail',click('.table-card-main',3)],['edit',click('.table-card-actions button')]],
  'admin/Table Bookings':[['new',click('.page-head .primary')],['day',click('.finance-month-grid .is-today')]],
  'admin/Orders & Billing':[['day',click('.finance-month-grid .is-today')]],
- 'admin/Parcel Orders':[['day',click('.finance-month-grid .is-today')],['new',async p=>{await click('.finance-month-grid .is-today')(p);await click('.page-head .primary')(p)}]],
+ 'admin/Parcel Orders':[['calendar',click('.page-head .secondary')],['new',click('.page-head .primary')]],
  'admin/Food & Photos':[['new',click('.page-head .primary')]],
  'admin/Stock Management':[['new',click('.page-head .primary')]],
  'admin/Finance Management':[['day',click('.finance-month-grid .is-today')]],

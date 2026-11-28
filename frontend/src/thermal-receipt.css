@@ -1,3 +1,60 @@
 @import "./thermal-base.css";
 .thermal-receipt.receipt{margin:0 auto;padding:12px;box-sizing:content-box;border-radius:0;box-shadow:none;max-width:calc(100% - 24px);background:white;color:black;position:static;min-height:0;}
 .thermal-settings{margin-top:12px;font:12px/1.4 Arial,sans-serif}.thermal-settings label{display:block;margin:8px 0}.thermal-settings input{width:70px;margin-left:8px;color:black;background:white}.thermal-receipt .print{margin:12px 0;color:black;background:#eee;width:100%}
+
+/* Premium on-screen bill preview. Screen only: printing clones the markup into an isolated
+   shadow root styled solely by thermal-base.css, so 80 mm output is unchanged. */
+@media screen{
+:is(html[data-template],html) .receipt.thermal-receipt{
+ --r-ink:#15171c;--r-muted:#6b7280;--r-rule:#e3e5e9;--r-soft:rgba(240,242,245,.72);
+ position:relative;box-sizing:content-box;width:var(--printable-width,72mm);max-width:calc(100% - 48px);
+ margin:6px auto 26px;padding:28px 24px 22px;background:#fff!important;color:var(--r-ink)!important;
+ font:13px/1.45 var(--font-sans,Inter,system-ui,sans-serif);letter-spacing:0;
+ border:1px solid rgba(17,24,39,.07);border-bottom:0;border-radius:16px 16px 0 0;
+ box-shadow:0 22px 44px -22px rgba(17,24,39,.42),0 3px 10px rgba(17,24,39,.07);
+}
+/* Torn-paper bottom edge */
+:is(html[data-template],html) .receipt.thermal-receipt::after{content:"";position:absolute;left:-1px;right:-1px;bottom:-11px;height:12px;
+ background:radial-gradient(circle at 50% 100%,transparent 5.5px,#fff 6px) -6px 0/12px 12px repeat-x;filter:drop-shadow(0 5px 4px rgba(17,24,39,.10));pointer-events:none}
+:is(html[data-template],html) .receipt.thermal-receipt .thermal-logo{max-width:30mm;max-height:16mm;margin:0 auto 10px;filter:none}
+:is(html[data-template],html) .receipt.thermal-receipt h2{font:700 21px/1.2 var(--font-sans,Inter,system-ui,sans-serif);letter-spacing:-.01em;margin:0 0 6px;color:var(--r-ink)!important}
+:is(html[data-template],html) .receipt.thermal-receipt .thermal-title{display:flex;align-items:center;gap:10px;margin:0 0 16px;font-size:10px;font-weight:700;letter-spacing:.24em;color:var(--r-muted)!important}
+:is(html[data-template],html) .receipt.thermal-receipt .thermal-title::before,:is(html[data-template],html) .receipt.thermal-receipt .thermal-title::after{content:"";flex:1;height:1px;background:var(--r-rule)}
+:is(html[data-template],html) .receipt.thermal-receipt .thermal-meta{display:grid;grid-template-columns:1fr 1fr;gap:5px 14px;padding:12px 14px;margin:0 0 14px;border:0;border-radius:12px;background:var(--r-soft)}
+:is(html[data-template],html) .receipt.thermal-receipt .thermal-meta p{margin:0;font-size:11.5px;line-height:1.35;color:#3f4450!important;min-width:0}
+:is(html[data-template],html) .receipt.thermal-receipt .thermal-meta p:nth-child(n+5){grid-column:1/-1}
+:is(html[data-template],html) .receipt.thermal-receipt .thermal-items{width:100%!important;min-width:0!important;margin:0;background:transparent!important;border:0!important;table-layout:fixed}
+:is(html[data-template],html) .receipt.thermal-receipt .thermal-items :is(thead,tbody,tr){background:transparent!important;border:0!important;box-shadow:none!important}
+:is(html[data-template],html) .receipt.thermal-receipt .thermal-items th{padding:0 0 8px!important;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--r-muted)!important;border:0!important;border-bottom:1px solid var(--r-rule)!important;background:transparent!important}
+:is(html[data-template],html) .receipt.thermal-receipt .thermal-items td{padding:10px 0!important;font-size:13px;font-weight:600;color:var(--r-ink)!important;background:transparent!important;border:0!important;border-bottom:1px dashed var(--r-rule)!important}
+:is(html[data-template],html) .receipt.thermal-receipt .thermal-items tr:hover td{background:transparent!important}
+:is(html[data-template],html) .receipt.thermal-receipt .thermal-items td.quantity{font-weight:500;color:var(--r-muted)!important}
+:is(html[data-template],html) .receipt.thermal-receipt .thermal-unit{margin-top:2px;font-size:11px;font-weight:500;color:var(--r-muted)!important}
+:is(html[data-template],html) .receipt.thermal-receipt .thermal-totals{border:0;margin:12px 0 0;padding:0}
+:is(html[data-template],html) .receipt.thermal-receipt .thermal-totals p{margin:0 0 6px;font-size:12.5px}
+:is(html[data-template],html) .receipt.thermal-receipt .thermal-totals p span{color:var(--r-muted)!important}
+:is(html[data-template],html) .receipt.thermal-receipt .thermal-totals p b{font-weight:600;color:var(--r-ink)!important}
+:is(html[data-template],html) .receipt.thermal-receipt .thermal-totals .thermal-total{align-items:baseline;margin:12px 0 0;padding:14px 16px;border:0;border-radius:12px;background:#15171c}
+:is(html[data-template],html) .receipt.thermal-receipt .thermal-totals .thermal-total span{font-size:11px;font-weight:700;letter-spacing:.2em;color:rgba(255,255,255,.72)!important}
+:is(html[data-template],html) .receipt.thermal-receipt .thermal-totals .thermal-total b{font-size:22px;font-weight:800;letter-spacing:-.01em;color:#fff!important}
+:is(html[data-template],html) .receipt.thermal-receipt .thermal-footer{border:0;margin:18px 0 0;padding:0}
+:is(html[data-template],html) .receipt.thermal-receipt .thermal-footer p{font-size:10.5px;font-weight:700;letter-spacing:.24em;color:var(--r-muted)!important;line-height:1.7}
+:is(html[data-template],html) .receipt.thermal-receipt .thermal-footer p:first-child{color:var(--r-ink)!important}
+:is(html[data-template],html) .receipt.thermal-receipt .print{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:44px;margin:20px 0 0;border:0;border-radius:12px;background:#15171c;color:#fff;font:700 13px/1 var(--font-sans,Inter,system-ui,sans-serif);cursor:pointer;transition:transform .15s ease,box-shadow .15s ease}
+:is(html[data-template],html) .receipt.thermal-receipt .print:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 8px 18px -8px rgba(17,24,39,.55)}
+:is(html[data-template],html) .receipt.thermal-receipt .print:focus-visible{outline:2px solid #15171c;outline-offset:3px}
+:is(html[data-template],html) .receipt.thermal-receipt .print:disabled{opacity:.5;cursor:not-allowed}
+:is(html[data-template],html) .receipt.thermal-receipt .thermal-settings{margin-top:12px;color:var(--r-muted)}
+:is(html[data-template],html) .receipt.thermal-receipt .thermal-settings>summary{min-height:36px;display:flex;align-items:center;justify-content:center;gap:6px;font-size:12px;font-weight:600;color:var(--r-muted);cursor:pointer;list-style:none}
+:is(html[data-template],html) .receipt.thermal-receipt .thermal-settings>summary::-webkit-details-marker{display:none}
+:is(html[data-template],html) .receipt.thermal-receipt .thermal-settings>summary::before{content:"⚙";font-size:13px}
+:is(html[data-template],html) .receipt.thermal-receipt .thermal-settings :is(label,p){color:#3f4450!important;font-size:12px}
+@media (prefers-reduced-motion:reduce){:is(html[data-template],html) .receipt.thermal-receipt .print{transition:none}}
+}
+@media screen{
+:is(html[data-template],html) .receipt.thermal-receipt[data-layout=narrow] .thermal-meta{grid-template-columns:1fr}
+:is(html[data-template],html) .receipt.thermal-receipt[data-layout=narrow] .thermal-items :is(th,td){border-bottom:0!important}
+:is(html[data-template],html) .receipt.thermal-receipt[data-layout=narrow] .thermal-items thead tr{border-bottom:1px solid var(--r-rule)!important}
+:is(html[data-template],html) .receipt.thermal-receipt[data-layout=narrow] .thermal-items tbody tr{border-bottom:1px dashed var(--r-rule)!important}
+:is(html[data-template],html) .receipt.thermal-receipt[data-layout=narrow] .thermal-totals .thermal-total b{font-size:18px}
+}

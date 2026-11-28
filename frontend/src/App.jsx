@@ -47,6 +47,7 @@ import {
   PanelLeftOpen,
   Sparkles,
   Pencil,
+  Split,
 } from "lucide-react";
 import { api, apiForm, resolvePortalLogin, submitCompanyRegistration, getOnboardingStatus, completeCompanyRegistration, saveReport } from "./api";
 import AttendancePanel from "./AttendancePanel";
@@ -1267,11 +1268,11 @@ function Admin({ data, refresh, user, logout, toast }) {
   const [page, setPage] = useState("overview"), [booking, setBooking] = useState(false);
   const pendingStockRequests = (data.stockRequests || []).filter((request) => request.status !== "resolved"), lowStock = (data.inventory || []).filter((item) => item.quantity <= item.min);
   const pendingStaff = (data.staffRequests || []).filter((r) => r.approvalStatus === "pending"), billing = data.orders.filter((o) => o.status === "billing_requested");
-  const [settingsTab, setSettingsTab] = useState("business");
+  const [settingsTab, setSettingsTab] = useState("business"), [payIntent, setPayIntent] = useState(null);
   const openPage = (next) => { if (next === "appearance") { setSettingsTab("appearance"); setPage("settings"); } else setPage(next); };
   const notices = [
     user.templateNotice && { title: `Template request ${user.templateNotice.status}`, detail: `${user.templateNotice.templateName} · open Appearance`, page: "appearance" },
-    billing.length && { title: `${billing.length} table${billing.length === 1 ? "" : "s"} waiting to pay`, detail: "Open Tables to take payment", page: "tables" },
+    billing.length && { title: `${billing.length} table${billing.length === 1 ? "" : "s"} waiting to pay`, detail: billing.length === 1 ? "Take payment now" : "Take payment, oldest first", page: "tables", action: () => { setPayIntent([...billing].sort((a, b) => a.id - b.id)[0].id); setPage("tables"); } },
     pendingStaff.length && { title: `${pendingStaff.length} pending staff approval${pendingStaff.length === 1 ? "" : "s"}`, detail: "Review chef requests", page: "staff" },
     pendingStockRequests.length && { title: `${pendingStockRequests.length} kitchen stock request${pendingStockRequests.length === 1 ? "" : "s"}`, detail: "Chef requested replenishment", page: "stock" },
     lowStock.length && { title: `${lowStock.length} low-stock item${lowStock.length === 1 ? "" : "s"}`, detail: "At or below minimum level", page: "stock" },
@@ -1289,7 +1290,7 @@ function Admin({ data, refresh, user, logout, toast }) {
       >
         {page === "overview" && <AdminDashboard data={data} setPage={openPage} user={user} notices={notices} />}{" "}
         {page === "tables" && (
-          <AdminTables data={data} refresh={refresh} toast={toast} user={user} />
+          <AdminTables data={data} refresh={refresh} toast={toast} user={user} payIntent={payIntent} clearPayIntent={() => setPayIntent(null)} />
         )}{" "}
         {page === "bookings" && <Bookings data={data} refresh={refresh} toast={toast} open={(date) => setBooking(date || true)} />}{" "}
         {page === "orders" && <AdminOrders data={data} />}{" "}
@@ -1365,7 +1366,7 @@ function orderDepartmentProgress(order, data, wantsJuice) {
     names,
   };
 }
-function AdminTables({ data, refresh, toast, user }) {
+function AdminTables({ data, refresh, toast, user, payIntent, clearPayIntent }) {
   const [selected, setSelected] = useState(null),
     [creating, setCreating] = useState(false),
     [editing, setEditing] = useState(null),
@@ -1374,6 +1375,12 @@ function AdminTables({ data, refresh, toast, user }) {
     [statusFilter, setStatusFilter] = useState("all"),
     table = data.tables.find((t) => t.id === selected);
   const filteredTables = statusFilter === "all" ? data.tables : data.tables.filter((t) => t.status === statusFilter);
+  useEffect(() => {
+    if (!payIntent) return;
+    const due = data.orders.find((o) => o.id === payIntent && o.status === "billing_requested" && o.paymentStatus !== "paid");
+    if (due) setPayOrder(due);
+    clearPayIntent?.();
+  }, [payIntent]);
   return (
     <>
       <PageHead
@@ -1396,6 +1403,7 @@ function AdminTables({ data, refresh, toast, user }) {
             data={data}
             onClick={() => setSelected(t.id)}
             onEdit={() => setEditing(t)}
+            onMarkClean={async (tbl) => { try { const message = await markTableClean(tbl); await refresh(); toast(message); } catch (e) { toast(e.message, "error"); } }}
             onBill={(order) => activeTableSessions(data,t.id).length>1?setSelected(t.id):setBillOrder(order)}
             onPay={(order) => activeTableSessions(data,t.id).length>1?setSelected(t.id):setPayOrder(order)}
           />
@@ -1503,7 +1511,7 @@ function TableSummary({ data, activeFilter = "all", onFilterChange }) {
     </div>
   );
 }
-function TableCard({ table, order, data, onClick, onBill, onPay, onEdit }) {
+function TableCard({ table, order, data, onClick, onBill, onPay, onEdit, onWaiterAction, onSeatGuests, onMarkClean }) {
   useNow();
   const idle =
       table.status === "cleaning" ? "Cleaning in progress" : "Clean & ready",
@@ -1522,7 +1530,14 @@ function TableCard({ table, order, data, onClick, onBill, onPay, onEdit }) {
           },
         }[order.status]
       : null,
-    visibleStatus = kitchenStatus || {
+    emptyGroup = !!order && !order.items?.length,
+    groups = activeTableSessions(data, table.id),
+    seats = tableSeats(data, table),
+    canSeatMore = !!onSeatGuests && groups.length > 0 && !table.activeBookingId && table.status !== "cleaning",
+    canMarkClean = !!onMarkClean && table.status === "cleaning" && !groups.length && !table.orderId,
+    upcoming = upcomingBooking(data, table.id),
+    nextStep = onWaiterAction && activeTableSessions(data, table.id).length === 1 ? waiterNextAction(order) : null,
+    visibleStatus = groups.length > 1 && !paymentRequested ? { key: "occupied", label: "Shared" } : emptyGroup ? { key: "occupied", label: "Seated" } : kitchenStatus || {
       key: table.status,
       label: table.status,
     },
@@ -1541,7 +1556,7 @@ function TableCard({ table, order, data, onClick, onBill, onPay, onEdit }) {
     <article
       className={`table-card ${table.status} ${kitchenStatus?.key || ""}`}
     >
-      <button className="table-card-main" onClick={onClick}>{activeTableSessions(data,table.id).length>1&&<strong>{activeTableSessions(data,table.id).length} separate groups · select to manage</strong>}
+      <button className="table-card-main" onClick={onClick}>
         <div>
           <span className="table-number">
             T{String(table.number).padStart(2, "0")}
@@ -1566,7 +1581,13 @@ function TableCard({ table, order, data, onClick, onBill, onPay, onEdit }) {
             <AlertTriangle size={13} /> Kitchen: Dish Out of Stock
           </div>
         ) : null}
-        {order && !paymentRequested ? (
+        {groups.length > 1 ? (
+          <span className="table-card-groups" aria-label={`${groups.length} groups at this table`}>
+            {groups.map((group) => <span key={group.id} className={`table-card-group ${group.status}`}><b>{group.guestName || "Walk-in Guest"} · #{group.id}</b><small>{group.guestCount || 1} guest{(group.guestCount || 1) === 1 ? "" : "s"} · {groupStatusLabel(group)}</small></span>)}
+          </span>
+        ) : null}
+        {groups.length <= 1 && emptyGroup ? <div className="table-empty-group"><UtensilsCrossed size={14}/> No items yet · tap to order</div> : null}
+        {groups.length <= 1 && order && !paymentRequested && !emptyGroup ? (
           <div className="table-production-monitor">
             <div className="table-production-head">
               <span>Live preparation</span>
@@ -1587,16 +1608,23 @@ function TableCard({ table, order, data, onClick, onBill, onPay, onEdit }) {
           </div>
         ) : null}
         <h3>
-          {table.status === "reserved"
+          {groups.length > 1 ? `${groups.length} groups` : table.status === "reserved"
             ? "Reserved table"
             : table.guestName ||
               (table.status === "cleaning" ? "Being cleaned" : "Ready for guests")}
         </h3>
         <p>
           <Users size={13} />
-          {table.seats} seats · {table.area}
+          <span className="table-card-capacity">{groups.length ? `${seats.taken} of ${table.seats} seats taken · ${seats.free ? `${seats.free} free` : seats.taken > table.seats ? "over capacity" : "full"}` : `${table.seats} seats`} · {table.area}</span>
         </p>
-        {order ? (
+        {upcoming && table.status !== "reserved" ? <p className="table-card-upcoming"><CalendarDays size={13}/><span>Booked {bookingTimeLabel(upcoming.bookingTime)} · {upcoming.guestName || "Guest"}{upcoming.guestCount ? ` · ${upcoming.guestCount}` : ""}</span></p> : null}
+        {groups.length > 1 ? (
+          <footer>
+            <Clock3 size={13} />
+            {elapsed([...groups].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))[0].createdAt)}
+            <b>{groups.length} bills</b>
+          </footer>
+        ) : order ? (
           <footer>
             <Clock3 size={13} />
             {elapsed(order.createdAt)}
@@ -1617,8 +1645,11 @@ function TableCard({ table, order, data, onClick, onBill, onPay, onEdit }) {
           </footer>
         )}
       </button>
-      {onEdit || (order && (onBill || (paymentRequested && onPay))) ? (
+      {onEdit || nextStep || canSeatMore || canMarkClean || (order && (onBill || (paymentRequested && onPay))) ? (
         <div className={`table-card-actions ${paymentRequested ? "urgent" : ""}`}>
+          {canMarkClean ? <button type="button" className="mark-clean" onClick={() => onMarkClean(table)}><CheckCircle2 size={14}/> Mark clean</button> : null}
+          {canSeatMore ? <button type="button" className="seat-more" onClick={() => onSeatGuests(table)}><Plus size={14}/> New group{seats.free ? ` · ${seats.free} free` : ""}</button> : null}
+          {nextStep ? <button type="button" className={nextStep.kind === "bill" ? "pay" : "deliver"} onClick={() => onWaiterAction(order, nextStep.kind)}>{nextStep.kind === "deliver" ? <CheckCircle2 size={14}/> : <ReceiptText size={14}/>} {nextStep.label}</button> : null}
           {onEdit ? <button type="button" className="table-edit" aria-label={`Edit Table ${table.number}`} onClick={onEdit}><Pencil size={14}/> Edit</button> : null}
           {order && onBill ? (
             <button onClick={() => onBill(order)}>
@@ -2300,11 +2331,54 @@ function ComboEditor({ item, dishes, close, refresh, toast }) {
     </Modal>
   );
 }
+const rupees = (n) => "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+/** "Cash ₹300 + Card / UPI ₹200" for a split, otherwise the single method. */
+const paymentLabel = (o) => o?.paymentMethod === "Split" && Array.isArray(o.paymentSplit) ? o.paymentSplit.map((p) => `${p.method} ${rupees(p.amount)}`).join(" + ") : o?.paymentMethod || "";
+/** [method, amount] pairs, so reports count each part of a split under its own method. */
+const paymentParts = (o) => o.paymentMethod === "Split" && Array.isArray(o.paymentSplit) ? o.paymentSplit.map((p) => [p.method, Number(p.amount)]) : [[o.paymentMethod || "Unspecified", Number(o.total || 0)]];
+/** Part Cash, part Card / UPI. Type either amount; the other fills in so the two always add up to the bill. */
+function SplitPayment({ total, disabled, busy, onPay }) {
+  const [open, setOpen] = useState(false), [side, setSide] = useState("cash"), [text, setText] = useState("");
+  const totalCents = Math.round(Number(total || 0) * 100), typed = Number(text);
+  const typedOk = text.trim() !== "" && Number.isFinite(typed) && Math.abs(Math.round(typed * 100) - typed * 100) < 1e-6;
+  const typedCents = typedOk ? Math.round(typed * 100) : NaN,
+    cashCents = side === "cash" ? typedCents : totalCents - typedCents,
+    valid = typedOk && cashCents > 0 && cashCents < totalCents,
+    cash = cashCents / 100, card = (totalCents - cashCents) / 100;
+  if (!open)
+    return (
+      <button className="pay-card split-pay" disabled={disabled || totalCents < 2} onClick={() => setOpen(true)}>
+        <Split />
+        <span>
+          <b>Split payment</b>
+          <small>Part Cash, part Card / UPI</small>
+        </span>
+        <ArrowRight />
+      </button>
+    );
+  const field = (key, label) => (
+    <label>
+      <span>{label}</span>
+      <input inputMode="decimal" aria-label={`${label} amount`} autoFocus={key === "cash"} value={side === key ? text : valid ? String(key === "cash" ? cash : card) : ""} onChange={(e) => { setSide(key); setText(e.target.value.replace(/[^0-9.]/g, "")); }} placeholder="0" />
+    </label>
+  );
+  return (
+    <div className="split-pay-box">
+      <div className="split-pay-head"><b>Split payment</b><small>Bill total {rupees(total)}</small></div>
+      <div className="split-pay-fields">{field("cash", "Cash")}{field("card", "Card / UPI")}</div>
+      {text.trim() !== "" && !valid && <p className="form-error">Enter an amount between ₹0 and {rupees(total)}, with up to 2 decimals.</p>}
+      <button className="primary wide" disabled={!valid || busy || disabled} aria-busy={busy} onClick={() => onPay([{ method: "Cash", amount: cash }, { method: "Card / UPI", amount: card }])}>
+        {busy ? "Recording…" : valid ? `Record Cash ${rupees(cash)} + Card / UPI ${rupees(card)}` : "Record split payment"}
+      </button>
+      <button className="ghost wide" disabled={busy} onClick={() => { setOpen(false); setText(""); }}>Back to single payment</button>
+    </div>
+  );
+}
 function ParcelPanel({ data, refresh, user, toast }) {
   const [creating, setCreating] = useState(false),
     [paying, setPaying] = useState(null),
     [prepaying, setPrepaying] = useState(null),
-    [selectedDate, setSelectedDate] = useState(null);
+    [selectedDate, setSelectedDate] = useState(() => dateKey(new Date()));
   const todayKey = dateKey(new Date()),
     canCreateParcel = selectedDate === todayKey,
     allParcels = data.orders.filter((o) => o.orderType === "parcel"),
@@ -2313,11 +2387,11 @@ function ParcelPanel({ data, refresh, user, toast }) {
     try {
       const result = await api(`/orders/${order.id}/finalize`, {
         method: "POST",
-        body: JSON.stringify({ paymentMethod: method, ...(parcelCharge === undefined ? {} : { parcelCharge }) }),
+        body: JSON.stringify({ ...(Array.isArray(method) ? { payments: method } : { paymentMethod: method }), ...(parcelCharge === undefined ? {} : { parcelCharge }) }),
       });
       await refresh();
       toast(
-        `Parcel #${order.id} completed${order.paymentStatus === "paid" ? " — already paid" : ` by ${method}`}`,
+        `Parcel #${order.id} completed${order.paymentStatus === "paid" ? " — already paid" : ` by ${Array.isArray(method) ? paymentLabel({ paymentMethod: "Split", paymentSplit: method }) : method}`}${result?.bill?.total !== undefined ? ` · ${money(result.bill.total)}` : ""}`,
       );
       return result;
     } catch (e) {
@@ -2392,7 +2466,7 @@ function ParcelPanel({ data, refresh, user, toast }) {
             </div>
             {o.paymentStatus === "paid" && o.status !== "completed" ? (
               <div className="parcel-paid-note">
-                <CheckCircle2 size={14} /> Already paid · {o.paymentMethod}
+                <CheckCircle2 size={14} /> Already paid · {paymentLabel(o)}
               </div>
             ) : null}
             {o.status !== "completed" && o.paymentStatus !== "paid" ? (
@@ -2411,7 +2485,7 @@ function ParcelPanel({ data, refresh, user, toast }) {
             {o.status === "completed" && (
               <>
                 <div className="parcel-done">
-                  <CheckCircle2 size={16} /> Parcel completed · {o.paymentMethod}
+                  <CheckCircle2 size={16} /> Parcel completed · {paymentLabel(o)}
                 </div>
                 <button
                   className="parcel-receipt-button"
@@ -2496,39 +2570,34 @@ function ParcelHandoffModal({ order: initialOrder, data, complete, close }) {
     return promise;
   }
 
-  async function finish() {
-    if (!alreadyPaid && !paymentMethod) return;
-    if (!(await saveCharge())) { setStep("bill"); return; }
-    setFinishing(true);
+  const finishLock = useRef(false);
+  // One tap on the payment received records it and completes the parcel; the server stays idempotent on retries.
+  async function finish(method) {
+    if (finishLock.current || (!alreadyPaid && !method)) return;
+    finishLock.current = true;
     try {
-      const result = await complete(order, alreadyPaid ? order.paymentMethod : paymentMethod, locked ? undefined : chargeValue);
-      // The final receipt shows the amounts the server recorded.
-      setFinalNumbering({billNumber: result.billNumber, billDate: result.billDate, status: "completed", paymentStatus: "paid", paymentMethod: result.paymentMethod, ...(result.bill ? {subtotal: result.bill.subtotal, parcelCharges: result.bill.parcelCharges, total: result.bill.total} : {})});
-      setStep("complete");
+      if (!(await saveCharge())) return;
+      setPaymentMethod(method);
+      setFinishing(true);
+      await complete(order, alreadyPaid ? order.paymentMethod : method, locked ? undefined : chargeValue);
+      close();
     } catch {
       // The parent displays the API error as an application toast.
     } finally {
+      finishLock.current = false;
       setFinishing(false);
     }
   }
 
   return (
-    <Modal close={close} wide>
+    <Modal close={close} wide hideClose={finishing}>
       <div className="parcel-handoff-head">
         <div>
           <span className="eyebrow">
             {step === "complete" ? "PARCEL COMPLETED" : "PARCEL HANDOFF"}
           </span>
-          <h2>
-            {step === "complete" ? "Final bill" : "Complete parcel"} #{billNumber(order)}
-          </h2>
-        </div>
-        <div className="parcel-stepper" aria-label="Parcel billing steps">
-          <span className={step === "bill" ? "active" : "done"}>1 Bill</span>
-          <span className={step === "payment" ? "active" : step === "complete" ? "done" : ""}>
-            2 Payment
-          </span>
-          <span className={step === "complete" ? "active" : ""}>3 Complete</span>
+          <h2>Parcel #{order.id}</h2>
+          {order.billNumber ? <p>Bill No #{order.billNumber} · {order.guestName}</p> : <p>{order.guestName}</p>}
         </div>
       </div>
 
@@ -2537,75 +2606,45 @@ function ParcelHandoffModal({ order: initialOrder, data, complete, close }) {
         <aside className="parcel-handoff-actions">
           {step === "bill" && (
             <>
-              <span className="parcel-step-label">STEP 1 · CHECK THE BILL</span>
+              <span className="parcel-step-label">CHECK BILL & COLLECT PAYMENT</span>
               <h3 className="bill-amount">{money(bill.total)}</h3>
-              <p>
-                Review the parcel invoice and print it before choosing how the
-                customer paid.
-              </p>
               <label className="parcel-charge-field">
                 <span>Parcel Charge (₹)</span>
-                <input type="number" inputMode="decimal" min="0" max="100000" step="0.01" value={chargeText} disabled={locked} aria-invalid={Boolean(chargeError) || !chargeValid} aria-describedby="parcel-charge-help" onChange={(event) => { setChargeText(event.target.value); setChargeError(""); }} onBlur={saveCharge}/>
+                <input type="number" inputMode="decimal" min="0" max="100000" step="0.01" value={chargeText} disabled={locked || finishing} aria-invalid={Boolean(chargeError) || !chargeValid} aria-describedby="parcel-charge-help" onChange={(event) => { setChargeText(event.target.value); setChargeError(""); }} onBlur={saveCharge}/>
                 <small id="parcel-charge-help" className={chargeError || !chargeValid ? "form-error" : ""}>{chargeError || (!chargeValid ? "Enter an amount of ₹0 or more, with up to 2 decimals." : locked ? "Locked after payment." : bill.parcelCharges ? `Food ${money(bill.subtotal)} + parcel charge ${money(bill.parcelCharges)}` : "Optional. Leave 0 for no parcel charge.")}</small>
               </label>
-              <button className="secondary wide" disabled={!chargeValid} onClick={async () => { if (await saveCharge()) openPrinter(); }}>
+              <button className="secondary wide" disabled={!chargeValid || finishing} onClick={async () => { if (await saveCharge()) openPrinter(); }}>
                 <Printer size={17} /> Print bill
               </button>
-              <button className="primary wide" disabled={!chargeValid} aria-busy={savingCharge} onClick={async () => { if (await saveCharge()) setStep("payment"); }}>
-                Continue to payment <ArrowRight size={16} />
-              </button>
-            </>
-          )}
-
-          {step === "payment" && (
-            <>
-              <span className="parcel-step-label">STEP 2 · PAYMENT MODE</span>
-              <h3 className="bill-amount">{money(bill.total)}</h3>
               {alreadyPaid ? (
-                <div className="already-paid">
-                  <CheckCircle2 size={25} />
-                  <div>
-                    <b>Already paid</b>
-                    <small>{order.paymentMethod} was recorded earlier.</small>
-                  </div>
-                </div>
-              ) : (
                 <>
-                  <button
-                    className={`pay-card ${paymentMethod === "Cash" ? "selected" : ""}`}
-                    onClick={() => setPaymentMethod("Cash")}
-                  >
-                    <Banknote />
-                    <span>
-                      <b>Cash</b>
-                      <small>Cash payment received</small>
-                    </span>
-                    {paymentMethod === "Cash" && <CheckCircle2 />}
-                  </button>
-                  <button
-                    className={`pay-card ${paymentMethod === "Card / UPI" ? "selected" : ""}`}
-                    onClick={() => setPaymentMethod("Card / UPI")}
-                  >
-                    <CreditCard />
-                    <span>
-                      <b>Card / UPI</b>
-                      <small>Digital payment received</small>
-                    </span>
-                    {paymentMethod === "Card / UPI" && <CheckCircle2 />}
+                  <div className="already-paid">
+                    <CheckCircle2 size={25} />
+                    <div>
+                      <b>Already paid</b>
+                      <small>{paymentLabel(order)} was recorded earlier.</small>
+                    </div>
+                  </div>
+                  <button className="primary wide parcel-complete-button" disabled={finishing} onClick={() => finish(order.paymentMethod)}>
+                    {finishing ? "Completing…" : "Hand over parcel"} {!finishing && <CheckCircle2 size={16} />}
                   </button>
                 </>
+              ) : (
+                <>
+                  <p className="parcel-pay-hint">Tap how the customer paid. This records the payment and completes the parcel.</p>
+                  {[["Cash", Banknote, "Cash received", "cash"], ["Card / UPI", CreditCard, "Card / UPI received", "digital payment"]].map(([method, Icon, label, kind]) => (
+                    <button key={method} className={`pay-card parcel-pay-now ${paymentMethod === method && finishing ? "selected" : ""}`} disabled={finishing || !chargeValid} aria-busy={finishing && paymentMethod === method} onClick={() => finish(method)}>
+                      <Icon />
+                      <span>
+                        <b>{finishing && paymentMethod === method ? "Completing…" : label}</b>
+                        <small>Record {money(bill.total)} {kind} and complete</small>
+                      </span>
+                      <ArrowRight />
+                    </button>
+                  ))}
+                  <SplitPayment total={bill.total} disabled={finishing || !chargeValid} busy={finishing && Array.isArray(paymentMethod)} onPay={finish} />
+                </>
               )}
-              <button
-                className="primary wide parcel-complete-button"
-                disabled={finishing || (!alreadyPaid && !paymentMethod)}
-                onClick={finish}
-              >
-                {finishing ? "Completing…" : "Complete parcel bill"}
-                {!finishing && <CheckCircle2 size={16} />}
-              </button>
-              <button className="link wide" onClick={() => setStep("bill")}>
-                Back to bill
-              </button>
             </>
           )}
 
@@ -2615,7 +2654,7 @@ function ParcelHandoffModal({ order: initialOrder, data, complete, close }) {
               <span>PAYMENT COMPLETE</span>
               <h3 className="bill-amount">{money(bill.total)}</h3>
               <p>
-                Parcel #{billNumber(order)} was completed by {paymentMethod || order.paymentMethod}.
+                Parcel #{order.id} · Bill No #{billNumber(order)} was completed by {Array.isArray(paymentMethod) ? paymentLabel({ paymentMethod: "Split", paymentSplit: paymentMethod }) : paymentLabel(order) || paymentMethod}.
               </p>
               <button className="primary wide" onClick={openPrinter}>
                 <Printer size={17} /> Print final bill
@@ -2683,7 +2722,7 @@ function ParcelBuilder({ data, user, close, refresh, toast }) {
   function add(id) {
     setCart((c) => {
       const found = c.find((i) => i.menuId === id);
-      return found ? c.filter((i) => i.menuId !== id) : [...c, { menuId: id, qty: 1, note: "" }];
+      return found ? c.map((i) => (i.menuId === id ? { ...i, qty: Math.min(i.qty + 1, 1000) } : i)) : [...c, { menuId: id, qty: 1, note: "" }];
     });
   }
   function change(id, delta) {
@@ -2724,12 +2763,14 @@ function ParcelBuilder({ data, user, close, refresh, toast }) {
       <h2>Take a parcel order</h2>
       <div className="parcel-customer">
         <input
-          placeholder="Customer name"
+          placeholder="Customer name (optional)"
+          aria-label="Customer name (optional)"
           value={customer}
           onChange={(e) => setCustomer(e.target.value)}
         />
         <input
-          placeholder="Phone number"
+          placeholder="Phone number (optional)"
+          aria-label="Phone number (optional)"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
         />
@@ -2777,7 +2818,7 @@ function ParcelBuilder({ data, user, close, refresh, toast }) {
                     <b>{m.name}</b>
                     <small>{m.category}</small>
                   </div>
-                  <strong>{!m.available ? "Unavailable" : cart.some((item) => item.menuId === m.id) ? <><CheckCircle2 size={14}/> Selected</> : money(m.price)}</strong>
+                  <strong>{!m.available ? "Unavailable" : cart.some((item) => item.menuId === m.id) ? <><CheckCircle2 size={14}/> ×{cart.find((item) => item.menuId === m.id).qty} · add</> : money(m.price)}</strong>
                 </button>
               ))
             ) : (
@@ -2859,7 +2900,7 @@ function ParcelBuilder({ data, user, close, refresh, toast }) {
           </div>
           <button
             className="primary wide"
-            disabled={!cart.length || !customer || sending}
+            disabled={!cart.length || sending}
             onClick={send}
           >
             {sending ? "Sending…" : "Send parcel to kitchen"} <ChefHat size={15} />
@@ -3832,7 +3873,7 @@ function MonthlyRevenueReport({ data, year, monthIndex }) {
         total = rows.reduce((sum, order) => sum + Number(order.total || 0), 0);
       return { key, bills: rows.length, total };
     }),
-    paymentMix = Object.entries(orders.reduce((result, order) => { const method = order.paymentMethod || "Unspecified"; result[method] = (result[method] || 0) + Number(order.total || 0); return result; }, {})),
+    paymentMix = Object.entries(orders.reduce((result, order) => { for (const [method, amount] of paymentParts(order)) result[method] = (result[method] || 0) + amount; return result; }, {})),
     maxRevenue = Math.max(1, ...daily.map((day) => day.total));
   const exportMonth = () => exportCsv(`knockout-revenue-${prefix}.csv`, [
     ["Byteberrytech monthly revenue report", prefix], ["Metric", "Amount"], ["Bill revenue", revenue], ["Other income", income], ["Operating expenses", expenses], ["Dealer payments", dealerPayments], ["Net cash", net], ["Paid bills", orders.length], [], ["Date", "Bills", "Revenue"], ...daily.map((day) => [day.key, day.bills, day.total]), [], ["Payment method", "Revenue"], ...paymentMix,
@@ -3902,7 +3943,7 @@ function DailyFinanceDetails({
     reportExpense = reportEntries.filter((x)=>x.entryType==="expense").reduce((s,x)=>s+x.amount,0),
     reportDealerPaid = reportPayments.reduce((s,x)=>s+x.amount,0),
     reportNet = reportSales+reportIncome-reportExpense-reportDealerPaid,
-    paymentMix = Object.entries(reportOrders.reduce((acc,o)=>{const key=o.paymentMethod||"Unspecified";acc[key]=(acc[key]||0)+Number(o.total||0);return acc},{})).sort((a,b)=>b[1]-a[1]),
+    paymentMix = Object.entries(reportOrders.reduce((acc,o)=>{for(const [key,amount] of paymentParts(o))acc[key]=(acc[key]||0)+amount;return acc},{})).sort((a,b)=>b[1]-a[1]),
     expenseMix = Object.entries(reportEntries.filter((x)=>x.entryType==="expense").reduce((acc,x)=>{acc[x.category]=(acc[x.category]||0)+x.amount;return acc},{})).sort((a,b)=>b[1]-a[1]),
     dailyTrend = Array.from({length:30},(_,index)=>{const d=new Date(reportStart.getTime()+index*86400000),key=dateKey(d),sales=reportOrders.filter((o)=>dateKey(o.completedAt)===key).reduce((s,o)=>s+Number(o.total||0),0),expense=reportEntries.filter((x)=>dateKey(x.entryDate)===key&&x.entryType==="expense").reduce((s,x)=>s+x.amount,0)+reportPayments.filter((x)=>dateKey(x.paymentDate)===key).reduce((s,x)=>s+x.amount,0);return{key,sales,expense,net:sales-expense}}),
     maxTrend=Math.max(1,...dailyTrend.map((x)=>Math.max(x.sales,x.expense)));
@@ -4049,7 +4090,7 @@ function DailyFinanceDetails({
                             : `Table ${data.tables.find((t) => t.id === order.tableId)?.number || "—"}`}
                         </td>
                         <td>{order.guestName}</td>
-                        <td>{order.paymentMethod}</td>
+                        <td>{paymentLabel(order)}</td>
                         <td>
                           {new Date(order.completedAt).toLocaleTimeString(
                             "en-IN",
@@ -5063,8 +5104,29 @@ function SettingsPanel({ data, refresh, toast }) {
 }
 
 function Waiter({ data, refresh, user, logout, toast }) {
+  const billLock = useRef(false);
+  async function markCleanFromFloor(table) {
+    try { const message = await markTableClean(table); await refresh(); toast(message); }
+    catch (e) { toast(e.message, "error"); await refresh().catch(() => {}); }
+  }
+  async function waiterActionFromFloor(order, kind) {
+    if (billLock.current) return;
+    billLock.current = true;
+    const number = data.tables.find((t) => t.id === order.tableId)?.number ?? "";
+    try {
+      if (kind === "deliver") await markDelivered(order); else await requestBillFor(order);
+      await refresh();
+      toast(kind === "deliver" ? `Order delivered to Table ${number}` : `Bill for Table ${number} sent to Admin`);
+    } catch (e) {
+      toast(e.message, "error");
+      await refresh().catch(() => {});
+    } finally {
+      billLock.current = false;
+    }
+  }
   const [page, setPage] = useState("overview"),
     [selected, setSelected] = useState(null),
+    [startNewGroup, setStartNewGroup] = useState(false),
     [statusFilter, setStatusFilter] = useState("all"),
     [tableQuery, setTableQuery] = useState(""),
     [dismissedAlerts, setDismissedAlerts] = useState([]);
@@ -5114,7 +5176,7 @@ function Waiter({ data, refresh, user, logout, toast }) {
       setPage={setPage}
       logout={logout}
     >
-      {page === "overview" && <StationDashboard role="waiter" data={data} user={user} setPage={setPage} />}{" "}
+      {page === "overview" && <StationDashboard role="waiter" data={data} user={user} setPage={setPage} openTable={(id) => { setPage("floor"); setSelected(id); }} rowAction={(order) => { const next = activeTableSessions(data, order.tableId).length === 1 ? waiterNextAction(order) : null; return next ? <button type="button" className={`dash-row-action ${next.kind}`} onClick={() => waiterActionFromFloor(order, next.kind)}>{next.kind === "deliver" ? <CheckCircle2 size={14}/> : <ReceiptText size={14}/>} {next.label}</button> : null; }} />}{" "}
       {/* Temporarily disabled; retain for later:
       {page === "attendance" && <AttendancePanel user={user} toast={toast} />}
       */}{" "}
@@ -5168,7 +5230,10 @@ function Waiter({ data, refresh, user, logout, toast }) {
                 table={t}
                 data={data}
                 order={data.orders.find((o) => o.id === t.orderId)}
-                onClick={() => setSelected(t.id)}
+                onClick={() => { setStartNewGroup(false); setSelected(t.id); }}
+                onWaiterAction={waiterActionFromFloor}
+                onSeatGuests={(tbl) => { setStartNewGroup(true); setSelected(tbl.id); }}
+                onMarkClean={markCleanFromFloor}
               />
             ))}
           </div>
@@ -5177,10 +5242,12 @@ function Waiter({ data, refresh, user, logout, toast }) {
       {page === "orders" && <WaiterOrders data={data} user={user} />}{" "}
       {table && (
         <TableDrawer
+          key={`${table.id}-${startNewGroup}`}
+          startNew={startNewGroup}
           table={table}
           data={data}
           user={user}
-          close={() => setSelected(null)}
+          close={() => { setStartNewGroup(false); setSelected(null); }}
           refresh={refresh}
           toast={toast}
         />
@@ -5282,10 +5349,15 @@ function BookingModal({ data, close, refresh, toast, initialDate }) {
     [error, setError] = useState(""), [busy, setBusy] = useState(false),
     bookings = data.bookings || [],
     requestedStart = bookingMinutes(form.bookingTime), requestedEnd = requestedStart + Number(form.durationMinutes),
-    tableOptions = data.tables.map((table) => {
+    guests = Number(form.guestCount) || 0,
+    // Mirrors the server: an occupied table cannot take a booking that starts within the next hour.
+    startsSoon = new Date(`${form.bookingDate}T${form.bookingTime || "00:00"}:00`).getTime() - Date.now() < 60 * 60000,
+    tableOptions = [...data.tables].sort((a, b) => a.number - b.number).map((table) => {
       const conflicts = bookings.filter((booking) => booking.tableId === table.id && booking.bookingDate === form.bookingDate && bookingMinutes(booking.bookingTime) < requestedEnd && bookingMinutes(booking.bookingTime) + Number(booking.durationMinutes) > requestedStart);
-      return { value: table.id, label: `Table ${table.number} · ${table.seats} seats`, note: conflicts.length ? `Locked ${conflicts.map((booking) => bookingTimeLabel(booking.bookingTime)).join(", ")}` : table.area, disabled: conflicts.length > 0 };
-    });
+      const occupied = startsSoon && (activeTableSessions(data, table.id).length > 0 || !!table.activeBookingId), small = guests > Number(table.seats);
+      return { value: table.id, number: table.number, seats: table.seats, note: conflicts.length ? `Booked ${conflicts.map((booking) => bookingTimeLabel(booking.bookingTime)).join(", ")}` : occupied ? "Occupied now" : small ? `Only ${table.seats} seats` : table.area, disabled: conflicts.length > 0 || occupied || small };
+    }),
+    freeCount = tableOptions.filter((option) => !option.disabled).length;
   async function submit(e) {
     e.preventDefault();
     setBusy(true); setError("");
@@ -5305,7 +5377,7 @@ function BookingModal({ data, close, refresh, toast, initialDate }) {
       <p>The selected table and overlapping time are locked across Admin and Waiter.</p>
       <form className="modal-form" onSubmit={submit}>
         <label>Customer name<input required maxLength={120} value={form.guestName} onChange={e=>setForm({...form,guestName:e.target.value})}/></label>
-        <label>Number of guests (optional)<input type="number" min="1" max={data.tables.find(t=>String(t.id)===String(form.tableId))?.seats||undefined} value={form.guestCount} onChange={e=>setForm({...form,guestCount:e.target.value})}/></label>
+        <fieldset className="booking-guests"><legend>Number of guests (optional)</legend><div className="guest-chips">{[1,2,3,4,5,6,7,8].map((n) => <button type="button" key={n} className={`guest-chip${String(form.guestCount) === String(n) ? " active" : ""}`} aria-pressed={String(form.guestCount) === String(n)} aria-label={`${n} guest${n === 1 ? "" : "s"}`} onClick={() => setForm({ ...form, guestCount: String(form.guestCount) === String(n) ? "" : String(n), tableId: "" })}>{n}</button>)}<input type="number" min="1" max="200" aria-label="Other guest count" placeholder="9+" value={Number(form.guestCount) > 8 ? form.guestCount : ""} onChange={e=>setForm({...form,guestCount:e.target.value,tableId:""})}/></div></fieldset>
         <label>Reservation notes (optional)<textarea maxLength={1000} value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/></label>
         <label>Customer mobile number<input type="tel" required placeholder="Example: +91 7904951736" value={form.customerPhone} onChange={(e) => setForm({ ...form, customerPhone: e.target.value })}/></label>
         <div className="booking-form-grid">
@@ -5313,10 +5385,10 @@ function BookingModal({ data, close, refresh, toast, initialDate }) {
           <label>Booking time<input type="time" required value={form.bookingTime} onChange={(e) => setForm({ ...form, bookingTime: e.target.value, tableId: "" })}/></label>
         </div>
         <label>Reservation duration<ThemeSelect value={form.durationMinutes} onChange={(durationMinutes) => setForm({ ...form, durationMinutes: Number(durationMinutes), tableId: "" })} options={[60,90,120,150,180].map((minutes) => ({ value: minutes, label: `${minutes} minutes`, note: `Table locked until ${bookingTimeLabel(String(Math.floor((requestedStart+minutes)/60)%24).padStart(2,"0")+":"+String((requestedStart+minutes)%60).padStart(2,"0"))}` }))}/></label>
-        <label>
-          Available table for this time
-          <ThemeSelect value={form.tableId} onChange={(tableId) => setForm({ ...form, tableId })} placeholder="Choose an unlocked table" options={tableOptions}/>
-        </label>
+        <fieldset className="booking-tables"><legend>Table for this time · {freeCount} free</legend>
+          <div className="booking-table-chips">{tableOptions.map((option) => <button type="button" key={option.value} disabled={option.disabled} aria-pressed={String(form.tableId) === String(option.value)} className={`booking-table-chip${String(form.tableId) === String(option.value) ? " active" : ""}`} onClick={() => setForm({ ...form, tableId: option.value })}><b>T{String(option.number).padStart(2, "0")}</b><small>{option.seats} seats</small><em>{option.note}</em></button>)}</div>
+          {!freeCount ? <small className="form-error">No table fits this time and guest count. Change the time or guests.</small> : null}
+        </fieldset>
         {error && <div className="form-error">{error}</div>}
         <button className="primary wide" disabled={!form.tableId || !form.customerPhone || busy}>{busy ? "Locking table…" : "Confirm booking & send SMS"}</button>
       </form>
@@ -5381,38 +5453,90 @@ function Modal({ close, children, wide = false, hideClose = false, hideX = false
   );
   return typeof document !== "undefined" ? createPortal(content, document.body) : content;
 }
-function ReservationPanel({booking,table,user,refresh,toast}) {
+function ReservationPanel({booking,table,user,refresh,toast,onSeated}) {
   const [details,setDetails]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState("");
-  async function seat(){setBusy(true);setError("");try{await api(`/bookings/${booking.id}/check-in`,{method:"POST",body:"{}"});await refresh();toast("Guest seated. You can now take the order.")}catch(e){setError(e.message);await refresh().catch(()=>{})}finally{setBusy(false)}}
+  async function seat(){setBusy(true);setError("");try{await api(`/bookings/${booking.id}/check-in`,{method:"POST",body:"{}"});if(onSeated){setBusy(false);await onSeated(booking);return}await refresh();toast("Guest seated. You can now take the order.")}catch(e){setError(e.message);await refresh().catch(()=>{})}finally{setBusy(false)}}
   return <section className="reservation-arrival" aria-label="Reservation details">
     <span className="eyebrow">{booking.status==='seated'?'GUEST SEATED':'TABLE RESERVATION'}</span>
     <h3>{booking.guestName || 'Customer'} · Table {table.number}</h3>
     <p>{booking.bookingDate} at {bookingTimeLabel(booking.bookingTime)} · {booking.durationMinutes} minutes · {booking.status}</p>
     {details&&<dl><dt>Guests</dt><dd>{booking.guestCount||'Not provided'}</dd><dt>Contact</dt><dd>{booking.customerPhone||'Not provided'}</dd><dt>Notes</dt><dd>{booking.notes||'No notes provided'}</dd></dl>}
     <div className="reservation-actions"><button className="secondary" onClick={()=>setDetails(!details)}>{details?'Hide reservation':'View reservation'}</button>
-    {booking.status==='confirmed'&&<button className="primary" disabled={busy||!booking.checkInEligible||!!table.orderId||table.status==='cleaning'} onClick={seat}>{busy?'Seating guest…':'Check In / Seat Guest'}</button>}</div>
+    {booking.status==='confirmed'&&<button className="primary" disabled={busy||!booking.checkInEligible||!!table.orderId||table.status==='cleaning'} onClick={seat}>{busy?'Seating guest…':onSeated?'Check in & start order':'Check In / Seat Guest'}</button>}</div>
     {booking.status==='confirmed'&&<p>{booking.checkInEligible?'Confirm the arriving customer matches this reservation before seating.':'Check-in opens at the configured reservation time. This booking does not block service before its reserved period.'}</p>}
     {error&&<p className="form-error" role="alert">{error}</p>}
   </section>;
 }
+async function markTableClean(table){const result=await api(`/tables/${table.id}/status`,{method:'PATCH',body:JSON.stringify({status:'available'})});return result?.status==='reserved'?`Table ${table.number} cleaned · reserved for its upcoming booking`:`Table ${table.number} cleaned · ready for guests`}
+const tableSeats=(data,table)=>{const taken=activeTableSessions(data,table.id).reduce((sum,o)=>sum+(Number(o.guestCount)||1),0);return {taken,free:Math.max(0,(Number(table.seats)||0)-taken)}};
+const groupStatusLabel=(o)=>!o.items?.length?'No items yet':({new:'Order sent',preparing:'Preparing',ready:'Ready to serve',collected:'On the way',received:'Served',served:'Served',billing_requested:'Bill requested'})[o.status]||o.status;
+const seatedGuests=(data,tableId,order)=>{const groups=activeTableSessions(data,tableId),list=groups.length?groups:order?[order]:[];if(!list.length)return '';const n=list.reduce((sum,o)=>sum+(Number(o.guestCount)||1),0);return `${n} guest${n===1?'':'s'} · `;};
+// Next confirmed booking for this table within 3 hours; display only, it never locks the table early.
+function upcomingBooking(data,tableId){const now=Date.now();return (data.bookings||[]).filter(b=>b.tableId===tableId&&b.status==='confirmed'&&!b.activeNow).map(b=>({...b,start:new Date(`${b.bookingDate}T${String(b.bookingTime).slice(0,5)}:00`).getTime()})).filter(b=>b.start>now&&b.start-now<=3*3600000).sort((a,b)=>a.start-b.start)[0]||null}
 const activeTableSessions=(data,tableId)=>data.orders.filter(order=>order.tableId===tableId&&!['completed','cancelled'].includes(order.status));
-function TableSessionHub({table,data,user,close,refresh,toast,adminMode=false}){
- const sessions=activeTableSessions(data,table.id);
- const [selected,setSelected]=useState(()=>sessions.length===1?sessions[0].id:null),[guestCount,setGuestCount]=useState('1'),[guestName,setGuestName]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
+// Waiter bill shortcut: confirms delivery of rounds the Chef has handed over, then asks Admin for payment.
+// Waiter's next step for a dine-in group: confirm delivery of rounds the Chef handed over, then (separately) ask for the bill.
+const openForWaiter=(o)=>!!o&&o.orderType!=='parcel'&&o.items?.length>0&&o.paymentStatus!=='paid'&&!['billing_requested','completed','cancelled'].includes(o.status);
+const deliveryPending=(o)=>openForWaiter(o)&&o.items.some(i=>i.handoffStatus==='collected');
+const billReady=(o)=>openForWaiter(o)&&o.items.every(i=>i.handoffStatus==='received');
+const waiterNextAction=(o)=>deliveryPending(o)?{kind:'deliver',label:'Delivered'}:billReady(o)?{kind:'bill',label:'Request bill'}:null;
+async function markDelivered(order){
+  const pending=[...new Set(order.items.filter(i=>i.handoffStatus==='collected').map(i=>Number(i.batchNo)||1))];
+  for(const batchNo of pending)await api(`/orders/${order.id}/batches/${batchNo}/handoff`,{method:'PATCH',body:JSON.stringify({status:'received'})});
+}
+const requestBillFor=(order)=>api(`/orders/${order.id}/request-bill`,{method:'POST',body:'{}'});
+function TableSessionHub({table,data,user,close,refresh,toast,adminMode=false,startNew=false}){
+ const sessions=activeTableSessions(data,table.id),seats=tableSeats(data,table);
+ const [newFirst,setNewFirst]=useState(!!startNew);
+ const [selected,setSelected]=useState(()=>!startNew&&sessions.length===1?sessions[0].id:null),[guestCount,setGuestCount]=useState(''),[guestName,setGuestName]=useState(''),[custom,setCustom]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const requestKey=useRef(null),lock=useRef(false);
  const order=sessions.find(item=>item.id===selected);
  const reservation=(data.bookings||[]).find(b=>b.id===table.activeBookingId)||(data.bookings||[]).find(b=>b.tableId===table.id&&b.status==='confirmed');
- async function create(event){event.preventDefault();if(lock.current)return;lock.current=true;setBusy(true);setError('');requestKey.current ||= crypto.randomUUID();try{const result=await api(`/tables/${table.id}/sessions`,{method:'POST',body:JSON.stringify({guestCount:Number(guestCount),guestName,bookingId:table.activeBookingId||undefined,requestKey:requestKey.current})});if(!Number.isInteger(result?.id))throw new Error('Unable to read the group response. Refresh before retrying.');await refresh();setSelected(result.id);setGuestName('');setGuestCount('1');requestKey.current=null;toast('Customer group opened')}catch(e){setError(e.message)}finally{lock.current=false;setBusy(false)}}
- if(order)return adminMode?<AdminTableDetails key={order.id} table={table} order={order} data={data} user={user} close={()=>setSelected(null)} refresh={refresh} toast={toast}/>:<TableOrderDrawer key={order.id} table={{...table,orderId:order.id,guestName:order.guestName}} data={data} user={user} close={()=>setSelected(null)} refresh={refresh} toast={toast}/>;
- return <Modal close={close} wide hideClose={busy}><span className="eyebrow">CUSTOMER GROUPS</span><h2>Table {table.number} · {sessions.length} active group{sessions.length===1?'':'s'}</h2><p>Select a group before ordering or billing. Each group pays separately.</p>
- <div className="session-grid">{sessions.map(item=><button type="button" className="secondary session-card" key={item.id} onClick={()=>setSelected(item.id)}><strong>{item.guestName||'Walk-in Guest'} · Group #{item.id}</strong><span>{item.guestCount||1} guest{(item.guestCount||1)===1?'':'s'} · {item.items.reduce((n,i)=>n+Number(i.qty),0)} items</span><Status status={item.status}/><span>{item.paymentStatus}</span></button>)}</div>
- {!sessions.length&&reservation&&<ReservationPanel booking={reservation} table={table} user={user} refresh={refresh} toast={toast}/>}
- {!sessions.length&&!table.activeBookingId&&<TableStatusControls table={table} refresh={refresh} toast={toast}/>}
- {!adminMode&&<form className="modal-form" onSubmit={create}><h3>New customer / group</h3><label>Number of guests<input type="number" min="1" max="200" required value={guestCount} disabled={busy} onChange={e=>{setGuestCount(e.target.value);requestKey.current=null}}/></label><label>Group / customer name (optional)<input maxLength={120} value={guestName} disabled={busy} onChange={e=>{setGuestName(e.target.value);requestKey.current=null}}/></label>{error&&<p className="form-error" role="alert">{error}</p>}<button className="primary" disabled={busy||table.status==='cleaning'}>{busy?'Creating group…':'Create group'}</button></form>}
+ const seated=table.activeBookingId?(data.bookings||[]).find(b=>b.id===table.activeBookingId):null;
+ // One request key per guest count + name, so a retried tap never opens a second group.
+ async function openGroup(count,name='',bookingId){
+  if(lock.current)return;
+  const guests=Number(count);
+  if(!Number.isInteger(guests)||guests<1||guests>200){setError('Enter 1–200 guests.');return}
+  lock.current=true;setBusy(true);setError('');
+  const sig=`${guests}|${name.trim()}|${bookingId||''}`;
+  if(requestKey.current?.sig!==sig)requestKey.current={sig,key:crypto.randomUUID()};
+  try{
+   const result=await api(`/tables/${table.id}/sessions`,{method:'POST',body:JSON.stringify({guestCount:guests,guestName:name,bookingId:bookingId||table.activeBookingId||undefined,requestKey:requestKey.current.key})});
+   if(!Number.isInteger(result?.id))throw new Error('Unable to read the group response. Refresh before retrying.');
+   await refresh();setSelected(result.id);setGuestName('');setGuestCount('');setCustom(false);requestKey.current=null;
+   toast(`Group opened · ${guests} guest${guests===1?'':'s'}`);
+  }catch(e){setError(e.message);await refresh().catch(()=>{})}finally{lock.current=false;setBusy(false)}
+ }
+ if(order)return adminMode?<AdminTableDetails key={order.id} table={table} order={order} data={data} user={user} close={()=>setSelected(null)} refresh={refresh} toast={toast}/>:<TableOrderDrawer key={order.id} table={{...table,orderId:order.id,guestName:order.guestName}} data={data} user={user} close={()=>{setNewFirst(false);setSelected(null)}} exit={close} refresh={refresh} toast={toast} freeSeats={seats.free} onNewGroup={!table.activeBookingId&&table.status!=='cleaning'?()=>{setNewFirst(true);setSelected(null)}:null}/>;
+ const blockedByReservation=reservation?.status==='confirmed'&&reservation.checkInEligible;
+ const canOpen=!adminMode&&table.status!=='cleaning'&&!table.activeBookingId&&!blockedByReservation;
+ // With groups already seated, offer only the seats still free; "Other" covers extra chairs.
+ const chipCount=sessions.length?Math.min(seats.free,8):Math.min(Math.max(Number(table.seats)||4,2),8);
+ const chips=Array.from({length:chipCount},(_,i)=>i+1);
+ function renderNewGroup(){
+  if(!canOpen)return sessions.length&&table.activeBookingId&&!adminMode?<p className="quick-group-note">This table is held for its seated reservation. Seat new guests at another table.</p>:null;
+  return <section className="quick-group" aria-label="Open a customer group">
+  <h3>{sessions.length?'Seat a new group':'How many guests?'}</h3>{sessions.length?<small className="quick-group-note">Each group orders and pays separately.{seats.free?'':' All seats are taken — use Other to add chairs.'}</small>:null}
+  <div className="guest-chips" role="group" aria-label="Number of guests">{chips.map((n,index)=><button type="button" key={n} className="guest-chip" autoFocus={newFirst&&index===0} disabled={busy} aria-label={`${n} guest${n===1?'':'s'}`} onClick={()=>openGroup(n,guestName)}>{n}</button>)}<button type="button" className={`guest-chip more${custom?' active':''}`} disabled={busy} aria-expanded={custom} onClick={()=>setCustom(!custom)}>{chips.length?`${chips.length+1}+`:'Other'}</button></div>
+  {custom&&<form className="quick-group-custom" onSubmit={e=>{e.preventDefault();openGroup(guestCount,guestName)}}><label>Number of guests<input type="number" min="1" max="200" required autoFocus value={guestCount} disabled={busy} onChange={e=>setGuestCount(e.target.value)}/></label><button className="primary" disabled={busy}>{busy?'Opening…':'Open group'}</button></form>}
+  <label className="quick-group-name">Group / customer name (optional)<input maxLength={120} value={guestName} disabled={busy} onChange={e=>setGuestName(e.target.value)}/></label>
+  <small>{busy?'Opening group…':'Tap the guest count to open the menu.'}</small>
+ </section>;
+ }
+ return <Modal close={close} wide hideClose={busy}><span className="eyebrow">{sessions.length?'CUSTOMER GROUPS':'TABLE SERVICE'}</span><h2>Table {table.number}{sessions.length?` · ${sessions.length} active group${sessions.length===1?'':'s'}`:''}</h2><p>{sessions.length?'Select a group before ordering or billing. Each group pays separately.':`${table.seats} seats · ${table.area}`}</p>
+ {sessions.length>0&&<p className="session-capacity" role="status"><Users size={15}/> {seats.taken} of {table.seats} seats taken · {seats.free?`${seats.free} free`:'no seats free'}</p>}
+ {(()=>{const list=sessions.length>0&&<section className="session-list" aria-label="Groups at this table"><h3>Groups at this table</h3><div className="session-grid">{sessions.map(item=>{const bill=calculateBill(item,data);return <button type="button" className="secondary session-card" key={item.id} onClick={()=>setSelected(item.id)}><strong>{item.guestName||'Walk-in Guest'} · Group #{item.id}</strong><span>{item.guestCount||1} guest{(item.guestCount||1)===1?'':'s'} · {item.items.reduce((n,i)=>n+Number(i.qty),0)} items{item.items.length?` · ${money(bill.total)}`:''}</span><em className={`session-state ${item.status}`}>{groupStatusLabel(item)}</em><small>{item.paymentStatus==='paid'?'Paid':'Tap to open'}</small></button>})}</div></section>;
+  const fresh=renderNewGroup();return newFirst?<>{fresh}{list}</>:<>{list}{fresh}</>})()}
+ {!sessions.length&&reservation&&<ReservationPanel booking={reservation} table={table} user={user} refresh={refresh} toast={toast} onSeated={adminMode?null:(booking)=>openGroup(booking.guestCount||1,booking.guestName||'',booking.id)}/>}
+ {!adminMode&&!sessions.length&&seated&&<button type="button" className="primary wide quick-start-reserved" disabled={busy} onClick={()=>openGroup(seated.guestCount||1,seated.guestName||'',seated.id)}>{busy?'Opening order…':`Start order · ${seated.guestName||'Reserved guest'} · ${seated.guestCount||1} guest${(seated.guestCount||1)===1?'':'s'}`}</button>}
+  {error&&<p className="form-error" role="alert">{error}</p>}
+ {!sessions.length&&!table.activeBookingId&&(table.status==='cleaning'||adminMode?<TableStatusControls table={table} refresh={refresh} toast={toast}/>:<details className="table-more"><summary>Table status</summary><TableStatusControls table={table} refresh={refresh} toast={toast}/></details>)}
  </Modal>;
 }
 function TableDrawer(props){return <TableSessionHub {...props}/>}
-function TableOrderDrawer({ table, data, user, close, refresh, toast }) {
+function TableOrderDrawer({ table, data, user, close, exit, refresh, toast, onNewGroup, freeSeats = 0 }) {
+  const leave = exit || close;
   const reservations=(data.bookings||[]).filter(b=>b.tableId===table.id);
   const reservation=reservations.find(b=>b.id===table.activeBookingId)||reservations.find(b=>b.status==='confirmed'&&b.checkInEligible)||reservations.find(b=>b.status==='confirmed');
   const order = data.orders.find((o) => o.id === table.orderId && !["cancelled","completed"].includes(o.status)),
@@ -5434,9 +5558,9 @@ function TableOrderDrawer({ table, data, user, close, refresh, toast }) {
       const {orderId,item,batchNo,reason,emptyGroup}=cancellation;
       const result=await api(item?`/orders/${orderId}/items/${item.menuId}?batchNo=${batchNo||item.batchNo||1}`:`/orders/${orderId}/cancel`,{method:item?"DELETE":"POST",body:JSON.stringify({reason,...(emptyGroup?{emptyOnly:true}:{})})});
       if(result?.ok!==true||result.orderId!==orderId||!Number.isInteger(result.remainingCount))throw new Error("Cancellation response was invalid. Refresh the table to check its status before retrying.");
-      setCancellation(null);
-      if(result.remainingCount===0)close();
       await refresh();
+      setCancellation(null);
+      if(result.remainingCount===0)leave();
       toast(result.remainingCount===0?`${emptyGroup?"Group":"Order"} #${orderId} cancelled`:`Item cancelled from Order #${orderId}`);
     }catch(error){setCancelError(error.message||"Unable to cancel. Please try again.")}
     finally{cancelLock.current=false;setCancelBusy(false)}
@@ -5456,11 +5580,26 @@ function TableOrderDrawer({ table, data, user, close, refresh, toast }) {
       setHandoffBusy("");
     }
   }
+  async function requestBillNow() {
+    if (handoffBusy) return;
+    setHandoffBusy("bill");
+    try {
+      await requestBillFor(order);
+      await refresh();
+      toast(`Bill for Table ${table.number} sent to Admin`);
+      leave();
+    } catch (e) {
+      toast(e.message, "error");
+      await refresh().catch(() => {});
+    } finally {
+      setHandoffBusy("");
+    }
+  }
   return (
     <Modal close={close} wide>
       <div className="drawer-head">
         <div>
-          <span className="eyebrow">TABLE SERVICE</span><button type="button" className="secondary" onClick={close}>All groups</button>
+          <span className="eyebrow">TABLE SERVICE</span><button type="button" className="secondary" onClick={close}>All groups</button>{onNewGroup ? <button type="button" className="secondary new-group-btn" onClick={onNewGroup}><Plus size={15}/> New group{freeSeats ? ` · ${freeSeats} free` : ""}</button> : null}
           <h2>Table {table.number}</h2>{order&&<p>{order.guestName||'Walk-in Guest'} · Group #{order.id} · {order.guestCount||1} guests</p>}
           <p>
             {table.area} · {table.seats} seats ·{" "}
@@ -5469,12 +5608,12 @@ function TableOrderDrawer({ table, data, user, close, refresh, toast }) {
         </div>
         {order && !["billing_requested", "completed"].includes(order.status) ? (
           <div className="drawer-tabs">
-            <button
+            {order.items.length ? <button
               className={mode === "history" ? "active" : ""}
               onClick={() => setMode("history")}
             >
               View orders
-            </button>
+            </button> : null}
             <button
               className={mode === "order" ? "active" : ""}
               onClick={() => { setTargetBatch(null); setMode("order"); }}
@@ -5492,11 +5631,17 @@ function TableOrderDrawer({ table, data, user, close, refresh, toast }) {
           </div>
         ) : null}
       </div>
-      {order && order.status==='new' && order.paymentStatus!=='paid' && order.items.every(item=>(item.itemStatus||'new')==='new'&&(item.handoffStatus||'pending')==='pending') && <button type="button" className="secondary" onClick={()=>requestCancellation()}>{order.items.length===0?"Cancel empty group":"Cancel Order"}</button>}
+      {(() => {
+        const canCancel = order && order.status==='new' && order.paymentStatus!=='paid' && order.items.every(item=>(item.itemStatus||'new')==='new'&&(item.handoffStatus||'pending')==='pending');
+        if (!canCancel && !reservation && order) return null;
+        return <details className="table-more"><summary>More options</summary>
+      {canCancel && <button type="button" className="secondary" onClick={()=>requestCancellation()}>{order.items.length===0?"Cancel empty group":"Cancel Order"}</button>}
       {order?.items.length===0&&<p>No food has been ordered for this group. Created it by mistake? Cancel the empty group. The table becomes available when no other active groups or reservations remain.</p>}
-      {cancellation&&<Modal close={()=>!cancelBusy&&setCancellation(null)} hideClose={cancelBusy}><h2>{cancellation.item?'Cancel food item?':cancellation.emptyGroup?'Cancel empty group?':`Cancel Order #${cancellation.orderId}?`}</h2><p>{cancellation.emptyGroup?'This closes only this empty group. Other groups and reservations will remain unchanged.':cancellation.item?'This removes the selected item from this round.':'This cancels all items in this order.'} Preparation must not have started. Cancellation history will be retained.</p><label>Reason (optional)<textarea maxLength={500} value={cancellation.reason} disabled={cancelBusy} onChange={e=>setCancellation({...cancellation,reason:e.target.value})}/></label>{cancelError&&<p className="form-error" role="alert">{cancelError}</p>}<div className="service-handoff-actions"><button type="button" className="secondary" disabled={cancelBusy} onClick={()=>setCancellation(null)}>{cancellation.emptyGroup?"Keep group":"Keep order"}</button><button type="button" className="primary" disabled={cancelBusy} onClick={confirmCancellation}>{cancelBusy?'Cancelling…':'Confirm cancellation'}</button></div></Modal>}
       {reservation&&<ReservationPanel booking={reservation} table={table} user={user} refresh={refresh} toast={toast}/>}
-      {!table.activeBookingId&&!(reservation?.status==='confirmed'&&reservation.checkInEligible)&&<TableStatusControls table={table} refresh={refresh} toast={toast} />}
+      {!order&&!table.activeBookingId&&!(reservation?.status==='confirmed'&&reservation.checkInEligible)&&<TableStatusControls table={table} refresh={refresh} toast={toast} />}
+        </details>;
+      })()}
+      {cancellation&&<Modal close={()=>!cancelBusy&&setCancellation(null)} hideClose={cancelBusy}><h2>{cancellation.item?'Cancel food item?':cancellation.emptyGroup?'Cancel empty group?':`Cancel Order #${cancellation.orderId}?`}</h2><p>{cancellation.emptyGroup?'This closes only this empty group. Other groups and reservations will remain unchanged.':cancellation.item?'This removes the selected item from this round.':'This cancels all items in this order.'} Preparation must not have started. Cancellation history will be retained.</p><label>Reason (optional)<textarea maxLength={500} value={cancellation.reason} disabled={cancelBusy} onChange={e=>setCancellation({...cancellation,reason:e.target.value})}/></label>{cancelError&&<p className="form-error" role="alert">{cancelError}</p>}<div className="service-handoff-actions"><button type="button" className="secondary" disabled={cancelBusy} onClick={()=>setCancellation(null)}>{cancellation.emptyGroup?"Keep group":"Keep order"}</button><button type="button" className="primary" disabled={cancelBusy} onClick={confirmCancellation}>{cancelBusy?'Cancelling…':'Confirm cancellation'}</button></div></Modal>}
       {(() => {
         const isNewOrder = (order?.status || "new") === "new";
         if (!isNewOrder) return null;
@@ -5549,10 +5694,10 @@ function TableOrderDrawer({ table, data, user, close, refresh, toast }) {
             targetBatchNo={targetBatch}
             refresh={refresh}
             toast={toast}
-            close={close}
+            close={leave}
           />
       ) : visibleMode === "history" ? (
-        <WaiterOrderRounds requestCancellation={requestCancellation} order={order} data={data} table={table} busy={handoffBusy} confirmRoundReceived={(batchNo) => updateRoundHandoff(batchNo, "received")} addOrder={(b) => { setTargetBatch(b || 1); setMode("order"); }} openBill={() => setMode("bill")} refresh={refresh} toast={toast} />
+        <WaiterOrderRounds requestCancellation={requestCancellation} order={order} data={data} table={table} busy={handoffBusy} confirmRoundReceived={(batchNo) => updateRoundHandoff(batchNo, "received")} requestBill={requestBillNow} addOrder={(b) => { setTargetBatch(b || 1); setMode("order"); }} openBill={() => setMode("bill")} refresh={refresh} toast={toast} />
       ) : visibleMode === "bill" ? (
         <Bill
           table={table}
@@ -5560,7 +5705,7 @@ function TableOrderDrawer({ table, data, user, close, refresh, toast }) {
           data={data}
           refresh={refresh}
           toast={toast}
-          close={close}
+          close={leave}
         />
       ) : (
         <div className="service-handoff">
@@ -5602,7 +5747,7 @@ function TableOrderDrawer({ table, data, user, close, refresh, toast }) {
     </Modal>
   );
 }
-function WaiterOrderRounds({ order, data, table, busy, confirmRoundReceived, addOrder, openBill, requestCancellation }) {
+function WaiterOrderRounds({ order, data, table, busy, confirmRoundReceived, addOrder, openBill, requestBill, requestCancellation }) {
   if(!order)return <p role="status">This order is no longer active. Return to Tables to continue.</p>;
   const batches = [...new Set(order.items.map((item) => Number(item.batchNo) || 1))]
     .sort((a, b) => b - a)
@@ -5650,9 +5795,14 @@ function WaiterOrderRounds({ order, data, table, busy, confirmRoundReceived, add
             <Plus size={16} /> Add items to Round {batches[0]?.batchNo || 1}
           </button>
         ) : null}
+        {billReady(order) ? (
+          <button type="button" className="primary waiter-request-bill" disabled={!!busy} onClick={requestBill}>
+            <ReceiptText size={16} /> {busy === "bill" ? "Sending bill…" : "Request bill"}
+          </button>
+        ) : null}
         {allReceived ? (
-          <button type="button" className="primary" onClick={openBill}>
-            <ReceiptText size={16} /> Complete & billing
+          <button type="button" className="secondary" onClick={openBill}>
+            <Printer size={16} /> View bill
           </button>
         ) : null}
       </div>
@@ -5702,7 +5852,7 @@ function WaiterOrderRounds({ order, data, table, busy, confirmRoundReceived, add
                 </button>
               </div>
             ) : null}
-            {batch.handoffStatus === "collected" ? <button className="primary waiter-received-action" disabled={!!busy} onClick={() => confirmRoundReceived(batch.batchNo)}><CheckCircle2 size={16}/>{busy === `${batch.batchNo}-received` ? "Updating…" : `Confirm Round ${batch.batchNo} received`}</button> : null}
+            {batch.handoffStatus === "collected" ? <button className="primary waiter-received-action" disabled={!!busy} onClick={() => confirmRoundReceived(batch.batchNo)}><CheckCircle2 size={16}/>{busy === `${batch.batchNo}-received` ? "Updating…" : `Delivered · Round ${batch.batchNo}`}</button> : null}
           </article>
         ))}
       </div>
@@ -5714,18 +5864,27 @@ function TableStatusControls({ table, refresh, toast }) {
   async function update(status) {
     setBusy(status);
     try {
-      await api(`/tables/${table.id}/status`, {
+      const message = status === "available" && table.status === "cleaning" ? await markTableClean(table) : (await api(`/tables/${table.id}/status`, {
         method: "PATCH",
         body: JSON.stringify({ status }),
-      });
+      }), `Table ${table.number} marked ${status}`);
       await refresh();
-      toast(`Table ${table.number} marked ${status}`);
+      toast(message);
     } catch (e) {
       toast(e.message, "error");
     } finally {
       setBusy("");
     }
   }
+  if (table.status === "cleaning" && !table.orderId) return (
+    <div className="cleaning-panel" role="status">
+      <span className="eyebrow">NEEDS CLEANING</span>
+      <h3>Table {table.number} is being cleaned</h3>
+      <p>Guests finished and paid. Mark it clean once the table is reset; it then shows Available, or Reserved if a booking is due.</p>
+      <button type="button" className="primary wide" disabled={!!busy} onClick={() => update("available")}><CheckCircle2 size={16}/> {busy === "available" ? "Updating…" : "Cleaning done · Mark clean"}</button>
+      <button type="button" className="secondary wide" disabled={!!busy} onClick={() => update("reserved")}>{busy === "reserved" ? "Updating…" : "Cleaned · Hold as reserved"}</button>
+    </div>
+  );
   return (
     <div className="table-status-controls">
 
@@ -5761,6 +5920,7 @@ function OrderBuilder({ table, data, user, existing, targetBatchNo = null, refre
   const latestBatch = existingBatches[existingBatches.length - 1] || 1;
   const nextNewBatch = latestBatch + 1;
   const latestBatchItems = existing?.items?.filter((i) => (Number(i.batchNo) || 1) === latestBatch) || [];
+  const hasItems = existing?.items?.length > 0;
   const latestBatchIsNew = latestBatchItems.length > 0 && latestBatchItems.every((i) => (i.itemStatus || "new") === "new");
   const defaultBatch = targetBatchNo || (!existing?.items?.length ? 1 : latestBatchIsNew ? latestBatch : nextNewBatch);
   const [chosenBatch, setChosenBatch] = useState(defaultBatch);
@@ -5821,7 +5981,7 @@ function OrderBuilder({ table, data, user, existing, targetBatchNo = null, refre
       setCart([]);
       await refresh();
       toast(
-        existing ? `Items added to Round ${chosenBatch} for Table ${table.number}` : "Order sent to kitchen",
+        hasItems ? `Round ${chosenBatch} sent to kitchen · Table ${table.number}` : `Order sent to kitchen · Table ${table.number}`,
       );
       close();
     } catch (e) {
@@ -5899,14 +6059,14 @@ function OrderBuilder({ table, data, user, existing, targetBatchNo = null, refre
         </div>
       </div>
       <aside className="order-cart" ref={cartPanel}>
-        <h3>{existing ? `Add items to Round ${chosenBatch}` : "New order"}</h3>
+        <h3>{hasItems ? `Add items to Round ${chosenBatch}` : "New order"}</h3>
         {roundLocked ? <p role="status">Preparation has started. Select a new round to add items.</p> : null}
         <p>
-          {existing
+          {hasItems
             ? `Table ${table.number} · Adding items to Round ${chosenBatch}`
-            : "Add menu items for this table"}
+            : `Table ${table.number} · tap a dish to add it`}
         </p>
-        {existing ? (
+        {hasItems ? (
           <div className="order-round-picker">
             <span>Add to kitchen round:</span>
             <div className="order-round-tabs">
@@ -5935,7 +6095,7 @@ function OrderBuilder({ table, data, user, existing, targetBatchNo = null, refre
             </div>
           </div>
         ) : null}
-        {existing ? (
+        {hasItems ? (
           <div className="existing-order-summary">
             <b>Already ordered</b>
             <span>
@@ -5977,15 +6137,15 @@ function OrderBuilder({ table, data, user, existing, targetBatchNo = null, refre
             <div className="cart-empty">
               <UtensilsCrossed />
               <p>
-                {existing
-                  ? "Tap + on a dish to add extra items"
+                {hasItems
+                  ? "Tap a dish to add extra items"
                   : "No items added yet"}
               </p>
             </div>
           )}
         </div>
         <div className="cart-total">
-          <span>{existing ? "Additional subtotal" : "Estimated subtotal"}</span>
+          <span>{hasItems ? "Additional subtotal" : "Estimated subtotal"}</span>
           <b className="bill-amount">
             {money(
               cart.reduce(
@@ -6003,9 +6163,7 @@ function OrderBuilder({ table, data, user, existing, targetBatchNo = null, refre
         >
           {sending
             ? "Sending…"
-            : existing
-              ? "Send additional order"
-              : "Send to kitchen"}{" "}
+            : "Send to kitchen"}{" "}
           <ChefHat size={16} />
         </button>
       </aside>
@@ -6118,10 +6276,10 @@ function AdminBillPopup({ order, table, data, refresh, toast, close }) {
     try {
       await api(`/orders/${order.id}/finalize`, {
         method: "POST",
-        body: JSON.stringify({ paymentMethod: method }),
+        body: JSON.stringify(Array.isArray(method) ? { payments: method } : { paymentMethod: method }),
       });
       await refresh();
-      toast(`Group #${order.id} payment completed by ${method}`);
+      toast(`Group #${order.id} payment completed by ${Array.isArray(method) ? paymentLabel({ paymentMethod: "Split", paymentSplit: method }) : method}`);
       close();
     } catch (e) {
       toast(e.message, "error");
@@ -6176,6 +6334,7 @@ function AdminBillPopup({ order, table, data, refresh, toast, close }) {
             </span>
             <ArrowRight />
           </button>
+          <SplitPayment total={bill.total} disabled={paying} busy={paying} onPay={finish} />
         </div>
       </div>
     </Modal>

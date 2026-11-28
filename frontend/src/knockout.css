@@ -1486,3 +1486,68 @@ button:not(:disabled):active,.primary:not(:disabled):active{transform:translateY
 @media screen { .parcel-charge-field { display:grid; gap:6px; margin:0 0 16px; } .parcel-charge-field>span { font:600 13px/1.4 var(--font-sans); color:var(--color-label); } .parcel-charge-field input { min-height:46px; width:100%; font-variant-numeric:tabular-nums; } .parcel-charge-field small { color:var(--color-text-secondary); font-size:12.5px; } .parcel-charge-field small.form-error { color:var(--color-error-text); } }
 /* On-screen receipt preview is paper in every template. Printing uses its own isolated styles (thermal-base.css). */
 @media screen { html[data-template] .thermal-receipt { background:#fff; color:#111; } html[data-template] .thermal-receipt :is(h2,p,th,td,b,span,strong,.thermal-title) { color:#111!important; } html[data-template] .thermal-receipt th { background:transparent!important; } html[data-template] .thermal-receipt small { color:#444!important; } }
+
+.table-card-main p>.table-card-capacity{flex:1 1 0;min-width:0}
+
+/* Fewer-taps service flow (shared tokens, so every template themes it) */
+.quick-group{display:grid;gap:10px;margin:14px 0 4px}
+.quick-group h3{margin:0;font-size:16px}
+.quick-group>small{color:var(--color-text-secondary);font-size:12px}
+.guest-chips{display:flex;flex-wrap:wrap;gap:8px}
+.guest-chip{min-width:48px;min-height:48px;border-radius:12px;border:1px solid var(--color-border);background:var(--color-surface);color:var(--color-text-primary);font-weight:700;font-size:17px;cursor:pointer}
+.guest-chip:hover:not(:disabled),.guest-chip.active{border-color:var(--color-primary);background:var(--color-primary-soft,var(--color-surface));color:var(--color-primary-text)}
+.guest-chip:focus-visible,.booking-table-chip:focus-visible,.dash-row-action:focus-visible{outline:2px solid var(--color-primary);outline-offset:2px}
+.guest-chip:disabled{opacity:.5;cursor:not-allowed}
+.guest-chips input{width:84px;min-height:48px;border-radius:12px;border:1px solid var(--color-border);background:var(--color-surface);color:var(--color-text-primary);padding:0 10px;font:inherit}
+.quick-group-custom{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
+.quick-group-custom label,.quick-group-name{display:grid;gap:6px;font-size:12px;color:var(--color-text-secondary);font-weight:600}
+.quick-group-custom input,.quick-group-name input{min-height:44px;border-radius:10px;border:1px solid var(--color-border);background:var(--color-surface);color:var(--color-text-primary);padding:0 12px;font:inherit}
+.quick-start-reserved{margin:12px 0;min-height:48px}
+.table-more{margin:10px 0;border:1px solid var(--color-border);border-radius:12px;padding:0 12px;background:var(--color-surface)}
+.table-more>summary{min-height:44px;display:flex;align-items:center;cursor:pointer;font-weight:600;font-size:13px;color:var(--color-text-secondary)}
+.table-more[open]{padding-bottom:12px}
+.table-more>p{font-size:12px;color:var(--color-text-secondary)}
+.table-empty-group{display:flex;align-items:center;gap:6px;margin:10px 0 0;padding:10px;border:1px dashed var(--color-border);border-radius:10px;font-size:12px;color:var(--color-text-secondary)}
+.table-card-main p.table-card-upcoming{color:var(--color-primary-text);font-weight:600}
+.table-card-main p.table-card-upcoming>span{flex:1 1 0;min-width:0}
+.waiter-request-bill{min-height:44px}
+.dash-orders li{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.dash-orders li>button:first-child{flex:1 1 260px;min-width:0}
+.dash-row-action{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 12px;border-radius:10px;border:1px solid var(--color-primary);background:var(--color-primary);color:var(--color-on-primary,#fff);font-weight:700;font-size:12px;cursor:pointer}
+.booking-guests,.booking-tables{border:0;padding:0;margin:0;display:grid;gap:8px;min-width:0}
+.booking-guests legend,.booking-tables legend{font-size:12px;font-weight:700;color:var(--color-text-secondary);padding:0;margin-bottom:6px}
+.booking-table-chips{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px}
+.booking-table-chip{display:grid;gap:2px;text-align:left;min-height:64px;padding:8px 10px;border-radius:12px;border:1px solid var(--color-border);background:var(--color-surface);color:var(--color-text-primary);cursor:pointer}
+.booking-table-chip small,.booking-table-chip em{font-size:11px;font-style:normal;color:var(--color-text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.booking-table-chip.active{border-color:var(--color-primary);box-shadow:0 0 0 1px var(--color-primary)}
+.booking-table-chip:disabled{opacity:.5;cursor:not-allowed}
+.parcel-pay-hint{font-size:12px;color:var(--color-text-secondary);margin:4px 0}
+.parcel-pay-now{min-height:56px}
+.parcel-pay-now:disabled{opacity:.55;cursor:not-allowed}
+
+/* Shared tables: several groups at one table */
+.table-card-groups{display:grid;gap:6px;margin:10px 0 2px}
+.table-card-group{display:grid;gap:1px;padding:7px 10px;border-radius:10px;border:1px solid var(--color-border);background:var(--color-surface);text-align:left}
+.table-card-group b{font-size:12.5px;color:var(--color-text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.table-card-group small{font-size:11.5px;color:var(--color-text-secondary)}
+.table-card-group.ready,.table-card-group.collected{border-color:var(--color-success,#2f9e6b)}
+.table-card-group.billing_requested{border-color:var(--color-warning,#c98a14)}
+.table-card-actions .seat-more{border-style:dashed}
+.new-group-btn{margin-left:8px}
+.session-capacity{display:flex;align-items:center;gap:6px;margin:6px 0 12px;font-weight:600;font-size:13px;color:var(--color-text-secondary)}
+.session-list h3{margin:6px 0 8px;font-size:15px}
+.session-card .session-state{font-style:normal;font-size:12px;font-weight:700;color:var(--color-primary-text)}
+.session-card small{font-size:11.5px;color:var(--color-text-secondary)}
+.quick-group-note{display:block;font-size:12px;color:var(--color-text-secondary)}
+
+/* After dining: table waits in Cleaning until staff mark it clean */
+.cleaning-panel{display:grid;gap:10px;margin:12px 0;padding:16px;border:1px dashed var(--color-border);border-radius:14px;background:var(--color-surface)}
+.cleaning-panel h3{margin:0;font-size:16px}
+.cleaning-panel p{margin:0;font-size:13px;color:var(--color-text-secondary)}
+.table-card-actions .mark-clean{font-weight:700}
+
+/* Waiter next step on a table: Delivered first, Request bill afterwards */
+.table-card-actions .deliver{background:var(--color-primary)!important;color:var(--color-on-primary,#fff)!important;border-color:var(--color-primary)!important;font-weight:700}
+.dash-row-action.deliver{background:var(--color-primary);border-color:var(--color-primary)}
+.dash-row-action.bill{background:var(--color-success,#2f9e6b);border-color:var(--color-success,#2f9e6b)}
+@media screen { .split-pay-box { display:grid; gap:10px; margin-top:10px; padding:14px; border:1px solid var(--color-border, rgba(0,0,0,.12)); border-radius:14px; background:var(--color-surface-raised, rgba(127,127,127,.06)); } .split-pay-head { display:flex; justify-content:space-between; align-items:baseline; gap:8px; } .split-pay-head small { color:var(--color-text-secondary); } .split-pay-fields { display:grid; grid-template-columns:1fr 1fr; gap:10px; } .split-pay-fields label { display:grid; gap:4px; } .split-pay-fields span { font:600 13px/1.4 var(--font-sans); color:var(--color-label); } .split-pay-fields input { min-height:46px; width:100%; font-variant-numeric:tabular-nums; } .split-pay-box .form-error { margin:0; color:var(--color-error-text); font-size:12.5px; } @media (max-width:360px) { .split-pay-fields { grid-template-columns:1fr; } } }

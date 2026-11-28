@@ -2,13 +2,15 @@ import {pool} from './database.js';
 import {actor} from './staff-approval.js';
 import {currentReservation} from './reservations.js';
 const fail=(message,status=409)=>{throw Object.assign(new Error(message),{status})};
-export async function syncTableSessions(conn,tableId,{releaseReservation=false,emptyStatus='available'}={}) {
+// afterDining: the last group just paid, so the table must be cleaned before anyone is seated,
+// even when a reservation is due; marking it clean later restores Available or Reserved.
+export async function syncTableSessions(conn,tableId,{releaseReservation=false,emptyStatus='available',afterDining=false}={}) {
  const [[table]]=await conn.query('SELECT * FROM restaurant_tables WHERE id=? FOR UPDATE',[tableId]);
  const [active]=await conn.query("SELECT id,guest_name FROM orders WHERE table_id=? AND status NOT IN ('completed','cancelled') ORDER BY id",[tableId]);
  if(active.length){await conn.query("UPDATE restaurant_tables SET status='occupied',order_id=?,guest_name=? WHERE id=?",[active[0].id,active[0].guest_name,tableId]);return}
  if(table.active_booking_id&&!releaseReservation){await conn.query("UPDATE restaurant_tables SET status='occupied',order_id=NULL WHERE id=?",[tableId]);return}
  const reservation=await currentReservation(conn,tableId);
- await conn.query("UPDATE restaurant_tables SET status=?,order_id=NULL,guest_name='',booking_time=?,active_booking_id=NULL WHERE id=?",[reservation?'reserved':emptyStatus,reservation?.booking_time||'',tableId]);
+ await conn.query("UPDATE restaurant_tables SET status=?,order_id=NULL,guest_name='',booking_time=?,active_booking_id=NULL WHERE id=?",[afterDining?'cleaning':reservation?'reserved':emptyStatus,reservation?.booking_time||'',tableId]);
 }
 export async function createTableSession(req,res){
  if(req.portalSession.role!=='waiter')return res.status(403).json({message:'Waiter access required'});

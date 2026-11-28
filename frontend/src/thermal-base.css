@@ -20,4 +20,27 @@
 .thermal-footer{text-align:center;border-top:1px dashed #000;margin-top:1mm;padding-top:1mm;padding-bottom:var(--trailing-feed,20mm);font-size:11px}
 .thermal-footer p{margin:0}.thermal-items tr,.thermal-meta,.thermal-totals,.thermal-footer{break-inside:avoid}
 .thermal-items thead{display:table-row-group}
+.thermal-receipt{position:relative}
+.thermal-receipt>:not(.thermal-watermark){position:relative;z-index:1}
+.thermal-receipt .thermal-watermark{position:absolute;z-index:0;left:50%;top:50%;width:62%;max-height:60%;aspect-ratio:auto;transform:translate(-50%,-50%);object-fit:contain;border-radius:0;opacity:.1;filter:grayscale(1);pointer-events:none;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 @media print{.thermal-receipt{break-inside:auto}}
+
+/* Paper-width layouts. Narrow rolls (printable < 56 mm, e.g. 58 mm paper) stack quantity × price under the item. */
+.thermal-qty-inline{display:none}
+.thermal-receipt[data-layout=narrow]{font-size:11px}
+.thermal-receipt[data-layout=narrow] h2{font-size:14px}
+.thermal-receipt[data-layout=narrow] .thermal-logo{max-width:22mm;max-height:10mm}
+.thermal-receipt[data-layout=narrow] .thermal-items,.thermal-receipt[data-layout=narrow] .thermal-items :is(thead,tbody){display:block;width:100%}
+.thermal-receipt[data-layout=narrow] .thermal-items colgroup,.thermal-receipt[data-layout=narrow] .thermal-items .quantity{display:none}
+.thermal-receipt[data-layout=narrow] .thermal-items tr{display:flex;align-items:flex-start;justify-content:space-between;gap:2mm}
+.thermal-receipt[data-layout=narrow] .thermal-items :is(th,td):first-child{flex:1 1 auto;min-width:0}
+.thermal-receipt[data-layout=narrow] .thermal-items .amount{flex:none;width:auto}
+.thermal-receipt[data-layout=narrow] .thermal-items th{display:block}
+.thermal-receipt[data-layout=narrow] .thermal-items th:first-child{flex:1 1 auto}
+.thermal-receipt[data-layout=narrow] .thermal-qty-inline{display:inline}
+.thermal-receipt[data-layout=narrow] .thermal-totals .thermal-total{font-size:13px}
+.thermal-receipt[data-layout=wide]{font-size:13px}
+.thermal-receipt[data-layout=wide] h2{font-size:18px}
+.thermal-receipt[data-layout=wide] .thermal-totals .thermal-total{font-size:17px}
+.thermal-receipt[data-layout=narrow] .thermal-items th{border-bottom:0}
+.thermal-receipt[data-layout=narrow] .thermal-items thead tr{border-bottom:1px dashed #000}
